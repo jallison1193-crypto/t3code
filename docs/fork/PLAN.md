@@ -73,4 +73,5 @@ Model roles per project (who plans, builds, reviews) and cross-provider review n
 
 - Toolchain solved: Vite+ `vp` provides Node 26.13.1 and pnpm 12.14.0.
 - Fork: `jallison1193-crypto/t3code`, remote `myfork`. Integration branch `fork/main`, synced daily from upstream by `scripts/fork/sync-upstream.ps1`.
-- M1 done (`fork/m1-project-instructions`). M2 server done (`fork/m2-project-memory`); M2 UI in progress.
+- M1 and M2 done and merged into `fork/main`. Next: M3.
+- Working name: **T3ther** (unofficial fork of T3 Code). Repo rename and README disclaimer come when the fork goes public.
