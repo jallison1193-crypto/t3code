@@ -1,0 +1,53 @@
+# Fork plan: Claude-style Projects + Mods
+
+Base: upstream `pingdotgg/t3code` @ `ecb295516f` (2026-11-17). Research by two Gemini 4 Hydrogen xhigh agents, key paths spot-checked by Opus.
+
+## Ground rules
+
+- Upstream moves ~200 commits/day. Keep new logic in **new files**; touch hot files (`Orchestrator.ts`, `ClaudeAdapterV2.ts`, `CodexAdapterV2.ts`, `Sidebar.tsx`, `settings.ts`, `orchestrationV2.ts`) with 1-5 line hooks only.
+- Additive, optional schema fields only, so older clients and servers still decode.
+- Hit every surface (repo `AGENTS.md`): web, desktop, mobile, MCP tools for agents, contracts, i18n, reverse states.
+- Check: `vp run check:changed` plus focused `vp test run <files>`. No repo-wide checks.
+
+## Milestone 1: Project Instructions (no DB migration)
+
+Text delivered to every thread in a project, any provider.
+
+1. Add `projectInstructions` to `ProjectScopedServerSettingKey` (`packages/contracts/src/settings.ts`). Gets project override and `t3.json` resolution for free via `packages/shared/src/projectSettings.ts`.
+2. Resolve it in `apps/server/src/orchestration-v2/ProviderTurnStartService.ts`; add optional `projectInstructions` to `ProviderAdapterV2TurnInput` (`packages/provider-core/src/server/ProviderAdapter.ts`).
+3. One shared formatter in a new `packages/provider-core/src/server/projectInstructions.ts` (wraps in `<project_instructions>`, size cap).
+4. Per-adapter delivery, piggybacking where each adapter already places runtime instructions:
+   - Claude: `systemPrompt.append` (session-start only; edits apply to new sessions).
+   - Codex: `additionalContext`, chunked under the 4 KB per-entry cap.
+   - OpenCode: `session.instructions.entry.put`.
+   - Pi: `before_agent_start`.
+   - Antigravity: `sessionSystemPromptAppend`.
+   - ACP (Grok, Kiro, fx, registry), Cursor, Muse: existing `<t3_code_instructions>` prepend path; skip `/` commands; no double inject after compaction.
+5. UI: textarea in `ProjectSettingsPanel.tsx` (web) and mobile project settings; i18n keys.
+6. Tests: formatter unit test; one adapter delivery test per delivery style.
+
+## Milestone 2: Project Memory
+
+- File at `<T3 home>/userdata/projects/<projectId>/MEMORY.md` (shared across worktrees, never dirties git).
+- New MCP toolkit `project_memory` (`read`, `append`, `replace_section`) registered in `McpHttpServer.ts`; HTTP/RPC route for UI editing.
+- Inject a short pointer plus capped head of memory alongside project instructions.
+
+## Milestone 3: Coordinator thread
+
+- Optional `coordinatorThreadId` on the project (contracts, `ProjectCommands.ts`, `ProjectStore.ts`, new migration).
+- Pinned and badged in the sidebar; coordinator-only instruction block.
+- `t3_thread_launch` gains optional `notifyThreadId`; a new completion-wake reactor (new file) uses `continuationRequests.offer`, like `delegate_task` already does.
+
+## Milestone 4: Project home view
+
+- Replace the redirect in `apps/web/src/routes/projects.$projectKey.tsx` with `ProjectHomeView.tsx`: coordinator, threads, instructions, memory, files. Mobile equivalent.
+
+## Milestone 5+: Mods
+
+Phase 1 declarative `t3mod.json`: themes, skills, slash commands, instructions, MCP servers (approval-gated, proxied through T3's `/mcp`), hooks (approval-gated), panels rendered in the existing MCP Apps sandbox (`McpAppFrame.tsx` / `McpAppWebView.tsx`). User mods in T3 home; repo mods in `.t3/mods/`, disabled until approved. Share as folder or git repo.
+Phase 2: code mods in an isolated worker process; persistent panels.
+
+## Blockers
+
+- Toolchain: repo needs Node 26.13.1, pnpm 12.14.0 and `vp`. Machine has Node 24.21.0, no pnpm, no vp.
+- GitHub fork not created yet (local clone only).
