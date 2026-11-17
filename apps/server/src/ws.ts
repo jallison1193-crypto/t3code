@@ -79,6 +79,8 @@ import {
   ProjectSearchEntriesError,
   ProjectWriteFileError,
   ProjectMutationError,
+  ProjectMemoryRpcError,
+  type ProjectId,
   ProviderUploadFeedbackError,
   ProviderSetupError,
   RelayClientInstallFailedError,
@@ -115,6 +117,7 @@ import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as NativeChildWorkQuery from "./orchestration-v2/NativeChildWorkQuery.ts";
 import * as ServerConfig from "./config.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
+import * as ProjectMemoryStore from "./projectMemory/ProjectMemoryStore.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import * as ThreadManagementService from "./orchestration-v2/ThreadManagementService.ts";
@@ -1427,6 +1430,71 @@ export const subscribeOrchestrationV2Shell = Effect.fn("ws.orchestrationV2.subsc
   },
 );
 
+function mapProjectMemoryError(
+  projectId: ProjectId,
+  name: string | undefined,
+  error: ProjectMemoryStore.ProjectMemoryError,
+): ProjectMemoryRpcError {
+  switch (error._tag) {
+    case "ProjectMemoryValidationError":
+      return new ProjectMemoryRpcError({
+        projectId,
+        ...(name === undefined ? {} : { fileName: name }),
+        failure: error.reason === "invalid_line_range" ? "invalid_line_range" : "invalid_file_name",
+        message: error.message,
+      });
+    case "ProjectMemoryLimitError":
+      return new ProjectMemoryRpcError({
+        projectId,
+        ...(name === undefined ? {} : { fileName: name }),
+        failure: error.reason,
+        message: error.message,
+      });
+    case "ProjectMemoryNotFoundError":
+      return new ProjectMemoryRpcError({
+        projectId,
+        ...(name === undefined ? {} : { fileName: name }),
+        failure: "knowledge_file_not_found",
+        message: error.message,
+      });
+    case "ProjectMemoryStorageError":
+      return new ProjectMemoryRpcError({
+        projectId,
+        ...(name === undefined ? {} : { fileName: name }),
+        failure: "operation_failed",
+        message: error.message,
+        cause: error,
+      });
+  }
+}
+
+const requireProjectForMemory = (
+  projectService: ProjectService.ProjectService["Service"],
+  projectId: ProjectId,
+) =>
+  projectService.getById(projectId).pipe(
+    Effect.mapError(
+      (cause) =>
+        new ProjectMemoryRpcError({
+          projectId,
+          failure: "operation_failed",
+          message: "Failed to verify project.",
+          cause,
+        }),
+    ),
+    Effect.flatMap((project) =>
+      Option.isSome(project)
+        ? Effect.void
+        : Effect.fail(
+            new ProjectMemoryRpcError({
+              projectId,
+              failure: "project_not_found",
+              message: "The project was not found.",
+            }),
+          ),
+    ),
+  );
+
 export const layerWsRpc = (
   currentSession: EnvironmentAuth.AuthenticatedSession,
   clientAnalyticsProps: Readonly<Record<string, unknown>>,
@@ -1523,6 +1591,7 @@ export const layerWsRpc = (
       const nativeChildWork = yield* NativeChildWorkQuery.NativeChildWorkQuery;
       const keybindings = yield* Keybindings.Keybindings;
       const environmentTheme = yield* EnvironmentTheme.EnvironmentThemeService;
+      const projectMemoryStore = yield* ProjectMemoryStore.ProjectMemoryStore;
       const externalLauncher = yield* ExternalLauncher.ExternalLauncher;
       const remoteOpenTargets = yield* RemoteOpenTargets.RemoteOpenTargets;
       const directEndpoints = yield* DirectEndpoints.DirectEndpoints;
@@ -3021,6 +3090,80 @@ export const layerWsRpc = (
                   ...projectFileFailureContext(cause),
                   cause,
                 }),
+            ),
+          ),
+        [WS_METHODS.projectsMemoryGet]: (input) =>
+          requireProjectForMemory(projectService, input.projectId).pipe(
+            Effect.andThen(
+              projectMemoryStore
+                .readMemory(input.projectId)
+                .pipe(
+                  Effect.mapError((error) =>
+                    mapProjectMemoryError(input.projectId, undefined, error),
+                  ),
+                ),
+            ),
+          ),
+        [WS_METHODS.projectsMemorySet]: (input) =>
+          requireProjectForMemory(projectService, input.projectId).pipe(
+            Effect.andThen(
+              projectMemoryStore
+                .writeMemory(input.projectId, input.content)
+                .pipe(
+                  Effect.mapError((error) =>
+                    mapProjectMemoryError(input.projectId, undefined, error),
+                  ),
+                ),
+            ),
+          ),
+        [WS_METHODS.projectsKnowledgeList]: (input) =>
+          requireProjectForMemory(projectService, input.projectId).pipe(
+            Effect.andThen(
+              projectMemoryStore.listKnowledge(input.projectId).pipe(
+                Effect.map((files) => ({ projectId: input.projectId, files })),
+                Effect.mapError((error) =>
+                  mapProjectMemoryError(input.projectId, undefined, error),
+                ),
+              ),
+            ),
+          ),
+        [WS_METHODS.projectsKnowledgeGet]: (input) =>
+          requireProjectForMemory(projectService, input.projectId).pipe(
+            Effect.andThen(
+              projectMemoryStore
+                .readKnowledge(input.projectId, input.name, {
+                  startLine: input.startLine,
+                  endLine: input.endLine,
+                })
+                .pipe(
+                  Effect.mapError((error) =>
+                    mapProjectMemoryError(input.projectId, input.name, error),
+                  ),
+                ),
+            ),
+          ),
+        [WS_METHODS.projectsKnowledgeAdd]: (input) =>
+          requireProjectForMemory(projectService, input.projectId).pipe(
+            Effect.andThen(
+              projectMemoryStore
+                .addKnowledge(input.projectId, input.name, input.content)
+                .pipe(
+                  Effect.mapError((error) =>
+                    mapProjectMemoryError(input.projectId, input.name, error),
+                  ),
+                ),
+            ),
+          ),
+        [WS_METHODS.projectsKnowledgeDelete]: (input) =>
+          requireProjectForMemory(projectService, input.projectId).pipe(
+            Effect.andThen(
+              projectMemoryStore
+                .deleteKnowledge(input.projectId, input.name)
+                .pipe(
+                  Effect.mapError((error) =>
+                    mapProjectMemoryError(input.projectId, input.name, error),
+                  ),
+                ),
             ),
           ),
         [WS_METHODS.projectsMutate]: (mutation) =>

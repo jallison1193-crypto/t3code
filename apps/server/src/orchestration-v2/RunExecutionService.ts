@@ -32,6 +32,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
@@ -47,7 +48,8 @@ import * as EventSink from "./EventSink.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import { PROVIDER_STOP_REASON_SIGNAL } from "@t3tools/provider-core/server/subagentProjection";
-import { formatProjectInstructions } from "@t3tools/provider-core/server/projectInstructions";
+import { formatProjectContext } from "@t3tools/provider-core/server/projectInstructions";
+import * as ProjectMemoryStore from "../projectMemory/ProjectMemoryStore.ts";
 import * as ProviderEventIngestor from "./ProviderEventIngestor.ts";
 import * as ProviderUsageAnalytics from "../telemetry/ProviderUsageAnalytics.ts";
 import type { ProjectionStoreV2Error } from "./ProjectionStore.ts";
@@ -719,6 +721,7 @@ export const layer: Layer.Layer<
     const finalizationObserver = yield* RunFinalizationService.RunFinalizationObserver;
     const turnAnalytics = yield* ProviderUsageAnalytics.ProviderTurnAnalytics;
     const threadCommands = yield* ThreadCommandExecutor.ThreadCommandExecutor;
+    const projectMemoryStore = yield* Effect.serviceOption(ProjectMemoryStore.ProjectMemoryStore);
 
     const writeFinalRunEvents = Effect.fn("RunExecutionService.writeFinalRunEvents")(
       function* (input: {
@@ -2216,12 +2219,11 @@ export const layer: Layer.Layer<
           key: `mcp_app_${entry.itemId.replace(/[^\w.-]/g, "_")}`,
           text: entry.text,
         }));
-        const projectInstructions = yield* serverSettings.getSettings.pipe(
-          Effect.map((settings) =>
-            formatProjectInstructions(
+        const rawProjectInstructions = yield* serverSettings.getSettings.pipe(
+          Effect.map(
+            (settings) =>
               resolveProjectSettings(settings, input.appThread.projectId).settings
                 .projectInstructions,
-            ),
           ),
           Effect.catch((cause) =>
             Effect.logWarning("Failed to read project instructions.", { cause }).pipe(
@@ -2229,6 +2231,31 @@ export const layer: Layer.Layer<
             ),
           ),
         );
+        const memoryHead = Option.isSome(projectMemoryStore)
+          ? yield* projectMemoryStore.value.readMemory(input.appThread.projectId).pipe(
+              Effect.map((memory) => (memory.exists ? memory.content : undefined)),
+              Effect.catch((cause) =>
+                Effect.logWarning("Failed to read project memory.", { cause }).pipe(
+                  Effect.as(undefined),
+                ),
+              ),
+            )
+          : undefined;
+        const knowledgeFiles = Option.isSome(projectMemoryStore)
+          ? yield* projectMemoryStore.value.listKnowledge(input.appThread.projectId).pipe(
+              Effect.map((files) => files.map((file) => file.name)),
+              Effect.catch((cause) =>
+                Effect.logWarning("Failed to list project knowledge.", { cause }).pipe(
+                  Effect.as(undefined),
+                ),
+              ),
+            )
+          : undefined;
+        const projectInstructions = formatProjectContext({
+          instructions: rawProjectInstructions,
+          memoryHead,
+          knowledgeFiles,
+        });
         const turnInput = {
           appThread: input.appThread,
           threadId: input.run.threadId,

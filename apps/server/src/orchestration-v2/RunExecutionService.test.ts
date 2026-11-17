@@ -54,7 +54,11 @@ import type { PendingOrchestrationEffectV2 } from "./EffectOutbox.ts";
 import * as EventSink from "./EventSink.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
-import { formatProjectInstructions } from "@t3tools/provider-core/server/projectInstructions";
+import {
+  formatProjectContext,
+  formatProjectInstructions,
+} from "@t3tools/provider-core/server/projectInstructions";
+import * as ProjectMemoryStore from "../projectMemory/ProjectMemoryStore.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProviderCommitBatch from "./ProviderCommitBatch.ts";
 import * as ProviderEventIngestor from "./ProviderEventIngestor.ts";
@@ -1062,6 +1066,185 @@ it.effect("passes the thread's MCP app context to the provider under a safe key"
       ),
     ),
   ),
+);
+
+it.effect(
+  "injects project memory and knowledge file list into projectInstructions and tolerates store errors",
+  () =>
+    Effect.gen(function* () {
+      const runExecution = yield* RunExecutionService.RunExecutionServiceV2;
+      const started = yield* Deferred.make<ProviderAdapter.ProviderAdapterV2TurnInput>();
+      const threadId = ThreadId.make("thread:run-execution-project-memory");
+      const projectId = ProjectId.make("project:run-execution-memory");
+      const failingProjectId = ProjectId.make("project:run-execution-memory-failing");
+      const providerInstanceId = ProviderInstanceId.make("codex");
+      const attemptId = RunAttemptId.make("attempt:run-execution-project-memory");
+      const session = {
+        events: Stream.never,
+        startTurn: (input: ProviderAdapter.ProviderAdapterV2TurnInput) =>
+          Deferred.succeed(started, input),
+      } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime;
+
+      yield* runExecution.startRootRun({
+        commandId: CommandId.make("command:run-execution-project-memory"),
+        appThread: { ...rootAppThread(threadId), projectId },
+        providerSessionId: ProviderSessionId.make("session:run-execution-project-memory"),
+        session,
+        run: {
+          id: RunId.make("run:run-execution-project-memory"),
+          threadId,
+          ordinal: 1,
+          providerInstanceId,
+        } as OrchestrationV2Run,
+        rootNode: {
+          id: NodeId.make("node:run-execution-project-memory"),
+        } as OrchestrationV2ExecutionNode,
+        checkpointScope: {
+          id: CheckpointScopeId.make("checkpoint-scope:run-execution-project-memory"),
+        } as OrchestrationV2CheckpointScope,
+        providerThread: {
+          id: ProviderThreadId.make("provider-thread:run-execution-project-memory"),
+          driver,
+        } as OrchestrationV2ProviderThread,
+        attempt: { id: attemptId, providerTurnId: null } as OrchestrationV2RunAttempt,
+        attemptId,
+        providerTurnOrdinal: 1,
+        message: {
+          messageId: MessageId.make("message:run-execution-project-memory"),
+          text: "Check project memory",
+          attachments: [],
+          createdBy: "user",
+          creationSource: "web",
+        },
+        modelSelection: { instanceId: providerInstanceId, model: "gpt-5.4" },
+        runtimePolicy: {
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          cwd: process.cwd(),
+        },
+      });
+
+      const input = yield* Deferred.await(started);
+      assert.equal(
+        input.projectInstructions,
+        formatProjectContext({
+          instructions: "Use strict types.",
+          memoryHead: "## Decisions\nEffect v4",
+          knowledgeFiles: ["architecture.md"],
+        }),
+      );
+
+      const failingStarted = yield* Deferred.make<ProviderAdapter.ProviderAdapterV2TurnInput>();
+      const failingThreadId = ThreadId.make("thread:run-execution-project-memory-failing");
+      const failingAttemptId = RunAttemptId.make("attempt:run-execution-project-memory-failing");
+      yield* runExecution.startRootRun({
+        commandId: CommandId.make("command:run-execution-project-memory-failing"),
+        appThread: { ...rootAppThread(failingThreadId), projectId: failingProjectId },
+        providerSessionId: ProviderSessionId.make("session:run-execution-project-memory-failing"),
+        session: {
+          events: Stream.never,
+          startTurn: (turnInput: ProviderAdapter.ProviderAdapterV2TurnInput) =>
+            Deferred.succeed(failingStarted, turnInput),
+        } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime,
+        run: {
+          id: RunId.make("run:run-execution-project-memory-failing"),
+          threadId: failingThreadId,
+          ordinal: 1,
+          providerInstanceId,
+        } as OrchestrationV2Run,
+        rootNode: {
+          id: NodeId.make("node:run-execution-project-memory-failing"),
+        } as OrchestrationV2ExecutionNode,
+        checkpointScope: {
+          id: CheckpointScopeId.make("checkpoint-scope:run-execution-project-memory-failing"),
+        } as OrchestrationV2CheckpointScope,
+        providerThread: {
+          id: ProviderThreadId.make("provider-thread:run-execution-project-memory-failing"),
+          driver,
+        } as OrchestrationV2ProviderThread,
+        attempt: { id: failingAttemptId, providerTurnId: null } as OrchestrationV2RunAttempt,
+        attemptId: failingAttemptId,
+        providerTurnOrdinal: 1,
+        message: {
+          messageId: MessageId.make("message:run-execution-project-memory-failing"),
+          text: "Still runs",
+          attachments: [],
+          createdBy: "user",
+          creationSource: "web",
+        },
+        modelSelection: { instanceId: providerInstanceId, model: "gpt-5.4" },
+        runtimePolicy: {
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          cwd: process.cwd(),
+        },
+      });
+
+      const failingInput = yield* Deferred.await(failingStarted);
+      assert.isUndefined(failingInput.projectInstructions);
+    }).pipe(
+      Effect.provide(
+        RunExecutionService.layer.pipe(
+          Layer.provide(
+            Layer.mergeAll(
+              PreviewAgentActivity.layer,
+              Layer.mock(McpAppModelContext.McpAppModelContext)({
+                forThread: () => Effect.succeed([]),
+              }),
+              Layer.mock(CheckpointService.CheckpointServiceV2)({
+                captureBaseline: () => Effect.void,
+              }),
+              layerTurnItemPositionsTest,
+              mockEventSink({}),
+              IdAllocator.layer,
+              ThreadCommandExecutor.layer,
+              Layer.mock(ProviderEventIngestor.ProviderEventIngestorV2)({
+                ingestNormalized: () => Effect.succeed([]),
+              }),
+              ServerSettings.layerTest({
+                projectSettingsOverrides: {
+                  [ProjectId.make("project:run-execution-memory")]: {
+                    projectInstructions: "Use strict types.",
+                  },
+                },
+              }),
+              Layer.mock(ProjectMemoryStore.ProjectMemoryStore)({
+                readMemory: (projectId) =>
+                  projectId === ProjectId.make("project:run-execution-memory-failing")
+                    ? Effect.fail(
+                        new ProjectMemoryStore.ProjectMemoryStorageError({
+                          operation: "readMemory",
+                          message: "disk unreadable",
+                        }),
+                      )
+                    : Effect.succeed({
+                        projectId,
+                        exists: true,
+                        content: "## Decisions\nEffect v4",
+                        sizeBytes: 22 as never,
+                        updatedAt: "2026-10-23T00:00:00.000Z" as never,
+                      }),
+                listKnowledge: (projectId) =>
+                  projectId === ProjectId.make("project:run-execution-memory-failing")
+                    ? Effect.fail(
+                        new ProjectMemoryStore.ProjectMemoryStorageError({
+                          operation: "listKnowledge",
+                          message: "disk unreadable",
+                        }),
+                      )
+                    : Effect.succeed([
+                        {
+                          name: "architecture.md" as never,
+                          sizeBytes: 120 as never,
+                          updatedAt: "2026-10-23T00:00:00.000Z" as never,
+                        },
+                      ]),
+              }),
+            ),
+          ),
+        ),
+      ),
+    ),
 );
 
 it.effect("fails the run when its ownership check cannot be read before calling the provider", () =>

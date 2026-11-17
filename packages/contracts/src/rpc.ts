@@ -80,6 +80,21 @@ import {
 } from "./acpRegistry.ts";
 import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
 import {
+  ProjectKnowledgeAddInput,
+  ProjectKnowledgeAddResult,
+  ProjectKnowledgeDeleteInput,
+  ProjectKnowledgeDeleteResult,
+  ProjectKnowledgeGetInput,
+  ProjectKnowledgeGetResult,
+  ProjectKnowledgeListInput,
+  ProjectKnowledgeListResult,
+  ProjectMemoryGetInput,
+  ProjectMemoryGetResult,
+  ProjectMemoryRpcError,
+  ProjectMemorySetInput,
+  ProjectMemorySetResult,
+} from "./projectMemory.ts";
+import {
   AuthAccessStreamError,
   AuthAccessStreamEvent,
   EnvironmentAuthorizationError,
@@ -449,6 +464,12 @@ export const WS_METHODS = {
   projectsEnsureScratch: "projects.ensureScratch",
   projectsCreateNew: "projects.createNew",
   projectsCreateFromThread: "projects.createFromThread",
+  projectsMemoryGet: "projects.memory.get",
+  projectsMemorySet: "projects.memory.set",
+  projectsKnowledgeList: "projects.knowledge.list",
+  projectsKnowledgeGet: "projects.knowledge.get",
+  projectsKnowledgeAdd: "projects.knowledge.add",
+  projectsKnowledgeDelete: "projects.knowledge.delete",
 
   shellOpenInEditor: "shell.openInEditor",
 
@@ -1567,6 +1588,42 @@ const WsProjectsCreateFromThreadRpc = Rpc.make(WS_METHODS.projectsCreateFromThre
   error: Schema.Union([OrchestrationDispatchCommandError, EnvironmentAuthorizationError]),
 });
 
+const WsProjectsMemoryGetRpc = Rpc.make(WS_METHODS.projectsMemoryGet, {
+  payload: ProjectMemoryGetInput,
+  success: ProjectMemoryGetResult,
+  error: Schema.Union([ProjectMemoryRpcError, EnvironmentAuthorizationError]),
+});
+
+const WsProjectsMemorySetRpc = Rpc.make(WS_METHODS.projectsMemorySet, {
+  payload: ProjectMemorySetInput,
+  success: ProjectMemorySetResult,
+  error: Schema.Union([ProjectMemoryRpcError, EnvironmentAuthorizationError]),
+});
+
+const WsProjectsKnowledgeListRpc = Rpc.make(WS_METHODS.projectsKnowledgeList, {
+  payload: ProjectKnowledgeListInput,
+  success: ProjectKnowledgeListResult,
+  error: Schema.Union([ProjectMemoryRpcError, EnvironmentAuthorizationError]),
+});
+
+const WsProjectsKnowledgeGetRpc = Rpc.make(WS_METHODS.projectsKnowledgeGet, {
+  payload: ProjectKnowledgeGetInput,
+  success: ProjectKnowledgeGetResult,
+  error: Schema.Union([ProjectMemoryRpcError, EnvironmentAuthorizationError]),
+});
+
+const WsProjectsKnowledgeAddRpc = Rpc.make(WS_METHODS.projectsKnowledgeAdd, {
+  payload: ProjectKnowledgeAddInput,
+  success: ProjectKnowledgeAddResult,
+  error: Schema.Union([ProjectMemoryRpcError, EnvironmentAuthorizationError]),
+});
+
+const WsProjectsKnowledgeDeleteRpc = Rpc.make(WS_METHODS.projectsKnowledgeDelete, {
+  payload: ProjectKnowledgeDeleteInput,
+  success: ProjectKnowledgeDeleteResult,
+  error: Schema.Union([ProjectMemoryRpcError, EnvironmentAuthorizationError]),
+});
+
 const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: LaunchEditorInput,
   error: Schema.Union([ExternalLauncherError, EnvironmentAuthorizationError]),
@@ -2390,6 +2447,12 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectsCreateFromThreadRpc,
   WsProjectsWriteFileRpc,
   WsProjectsMutateRpc,
+  WsProjectsMemoryGetRpc,
+  WsProjectsMemorySetRpc,
+  WsProjectsKnowledgeListRpc,
+  WsProjectsKnowledgeGetRpc,
+  WsProjectsKnowledgeAddRpc,
+  WsProjectsKnowledgeDeleteRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsFilesystemGetMetadataRpc,

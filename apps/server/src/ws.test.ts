@@ -88,6 +88,7 @@ import * as DocumentText from "./provider/DocumentText.ts";
 import * as DirectEndpoints from "./environment/DirectEndpoints.ts";
 import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
+import * as ProjectMemoryStore from "./projectMemory/ProjectMemoryStore.ts";
 import * as GitWorkflowService from "./git/GitWorkflowService.ts";
 import * as HostResources from "./resourceTelemetry/HostResources.ts";
 import * as ManagedProjectFolders from "./project/ManagedProjectFolders.ts";
@@ -834,6 +835,7 @@ const layerUnusedConfigRpcServices = Layer.mergeAll(
   Layer.mock(CodexInstallation.CodexInstallation)({ managedDirectory: "/unused" }),
   Layer.mock(DeviceService.DeviceService)({}),
   Layer.mock(EnvironmentTheme.EnvironmentThemeService)({}),
+  Layer.mock(ProjectMemoryStore.ProjectMemoryStore)({}),
   Layer.mock(GitWorkflowService.GitWorkflowService)({}),
   Layer.mock(HostResources.HostResources)({}),
   Layer.mock(McpAppRequests.McpAppRequests)({}),
@@ -2624,4 +2626,146 @@ it.effect("ACP session RPCs list a thread missing its history and repair it on i
       ),
     ),
   ),
+);
+
+const projectMemoryTags = [
+  WS_METHODS.projectsMemoryGet,
+  WS_METHODS.projectsMemorySet,
+  WS_METHODS.projectsKnowledgeList,
+  WS_METHODS.projectsKnowledgeGet,
+  WS_METHODS.projectsKnowledgeAdd,
+  WS_METHODS.projectsKnowledgeDelete,
+] as const;
+const projectMemoryRpcs = WsRpcGroup.omit(
+  ...[...WsRpcGroup.requests.keys()].filter(
+    (
+      tag,
+    ): tag is Exclude<
+      keyof typeof RpcAuthorization.RPC_REQUIRED_SCOPES,
+      (typeof projectMemoryTags)[number]
+    > => !(projectMemoryTags as ReadonlyArray<string>).includes(tag),
+  ),
+);
+
+it.effect(
+  "project memory and knowledge RPCs read, write, list, and validate project existence",
+  () =>
+    Effect.gen(function* () {
+      const existingProjectId = ProjectId.make("project:ws-memory");
+      const missingProjectId = ProjectId.make("project:ws-memory-missing");
+      const dependencies = Layer.mergeAll(
+        layerUnusedConfigRpcServices,
+        Layer.fresh(layerConfigSources),
+        Layer.mock(ExternalLauncher.ExternalLauncher)({}),
+        Layer.mock(ProviderRegistry.ProviderRegistry)({}),
+        Layer.mock(UsageLimitSources.UsageLimitSources)({}),
+        Layer.mock(RemoteOpenTargets.RemoteOpenTargets)({}),
+        Layer.mock(DirectEndpoints.DirectEndpoints)({}),
+        Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({ namedProjectsRoot: "/unused" }),
+        Layer.mock(ScratchThreadPromotion.ScratchThreadPromotion)({}),
+        Layer.mock(ServerEnvironment.ServerEnvironment)({}),
+        Layer.mock(EnvironmentAuth.EnvironmentAuth)({}),
+        Layer.mock(ProviderInstanceRegistry.ProviderInstanceRegistry)({}),
+        Layer.mock(AcpRegistryRuntimeCoordinator.AcpRegistryRuntimeCoordinator)({}),
+        Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
+        Layer.mock(ProjectService.ProjectService)({
+          getById: (id) =>
+            id === existingProjectId
+              ? Effect.succeedSome({
+                  id: existingProjectId,
+                  title: "WS Memory",
+                  workspaceRoot: "/workspace/memory",
+                  defaultModelSelection: null,
+                  scripts: [],
+                  createdAt: "2026-10-23T00:00:00.000Z",
+                  updatedAt: "2026-10-23T00:00:00.000Z",
+                  deletedAt: null,
+                })
+              : Effect.succeedNone,
+        }),
+        ProjectMemoryStore.layer.pipe(
+          Layer.provideMerge(
+            ServerConfigModule.layerTest(process.cwd(), { prefix: "t3-ws-memory-" }),
+          ),
+          Layer.provideMerge(NodeServices.layer),
+        ),
+      );
+
+      const client = yield* RpcTest.makeClient(projectMemoryRpcs).pipe(
+        Effect.provide(
+          layerWsRpc(
+            {
+              sessionId: AuthSessionId.make("memory-test"),
+              subject: "memory-test",
+              method: "browser-session-cookie",
+              scopes: [],
+            },
+            {},
+            yield* ServerBrowser.ServerBrowser,
+            () => Effect.void,
+            { secretReferences: true },
+          ).pipe(
+            Layer.provide(dependencies),
+            Layer.merge(
+              RpcAuthorization.layer([AuthOrchestrationReadScope, AuthOrchestrationOperateScope]),
+            ),
+          ),
+        ),
+      );
+
+      const initial = yield* client[WS_METHODS.projectsMemoryGet]({
+        projectId: existingProjectId,
+      });
+      assert.isFalse(initial.exists);
+
+      yield* client[WS_METHODS.projectsMemorySet]({
+        projectId: existingProjectId,
+        content: "## Decisions\nKeep RPCs thin",
+      });
+      const updated = yield* client[WS_METHODS.projectsMemoryGet]({
+        projectId: existingProjectId,
+      });
+      assert.isTrue(updated.exists);
+      assert.equal(updated.content, "## Decisions\nKeep RPCs thin");
+
+      yield* client[WS_METHODS.projectsKnowledgeAdd]({
+        projectId: existingProjectId,
+        name: "notes.md",
+        content: "line 1\nline 2",
+      });
+      const listed = yield* client[WS_METHODS.projectsKnowledgeList]({
+        projectId: existingProjectId,
+      });
+      assert.deepEqual(
+        listed.files.map((file) => file.name),
+        ["notes.md"],
+      );
+
+      const file = yield* client[WS_METHODS.projectsKnowledgeGet]({
+        projectId: existingProjectId,
+        name: "notes.md",
+        startLine: 2,
+        endLine: 2,
+      });
+      assert.equal(file.content, "line 2");
+
+      const deleted = yield* client[WS_METHODS.projectsKnowledgeDelete]({
+        projectId: existingProjectId,
+        name: "notes.md",
+      });
+      assert.isTrue(deleted.deleted);
+
+      const missingExit = yield* client[WS_METHODS.projectsMemoryGet]({
+        projectId: missingProjectId,
+      }).pipe(Effect.exit);
+      assert.isTrue(Exit.isFailure(missingExit));
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          EventSink.layer.pipe(Layer.provideMerge(acpStores)),
+          Layer.mock(PreviewAutomationBroker.PreviewAutomationBroker)({}),
+          Layer.mock(ServerBrowser.ServerBrowser)({}),
+        ),
+      ),
+    ),
 );

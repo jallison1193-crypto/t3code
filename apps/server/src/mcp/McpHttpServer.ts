@@ -57,6 +57,8 @@ import { ThemeToolkit } from "./toolkits/theme/tools.ts";
 import * as ThemeHandlers from "./toolkits/theme/handlers.ts";
 import { ProjectToolkit } from "./toolkits/project/tools.ts";
 import * as ProjectHandlers from "./toolkits/project/handlers.ts";
+import { ProjectMemoryToolkit } from "./toolkits/projectMemory/tools.ts";
+import * as ProjectMemoryHandlers from "./toolkits/projectMemory/handlers.ts";
 import { AttachmentToolkit } from "./toolkits/attachment/tools.ts";
 import * as AttachmentHandlers from "./toolkits/attachment/handlers.ts";
 import { ThreadToolkit } from "./toolkits/thread/tools.ts";
@@ -1296,6 +1298,10 @@ export const layerPullRequestsToolkit = toolkitRegistration(
 ).pipe(Layer.provide(PullRequestWatchService.layer));
 
 const layerIssuesToolkit = toolkitRegistration(IssuesToolkit, IssuesHandlers.layer);
+const layerProjectMemoryToolkit = toolkitRegistration(
+  ProjectMemoryToolkit,
+  ProjectMemoryHandlers.layer,
+);
 
 const layerDeviceStandardToolkitRegistration = toolkitRegistration(
   DeviceStandardToolkit,
@@ -1355,6 +1361,7 @@ export const layerTools = Layer.mergeAll(
   layerWorktreeToolkitRegistration,
   layerPullRequestsToolkit,
   layerIssuesToolkit,
+  layerProjectMemoryToolkit,
   layerDeviceToolkit,
   layerHtmlToolkit,
   layerMessageToolkit,
