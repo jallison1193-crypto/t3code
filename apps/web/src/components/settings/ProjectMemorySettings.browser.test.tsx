@@ -51,7 +51,12 @@ const canEditAtom = Atom.make(() => state.canEdit);
 
 vi.mock(import("./SettingsScopeContext"), async (original) => ({
   ...(await original()),
-  useOptionalSettingsScope: () => state.scopeContext as never,
+  useOptionalSettingsScope: () =>
+    (state.scopeContext && {
+      connectedEnvironments: [],
+      ...state.scopeContext,
+      scope: { environmentIds: [], ...state.scopeContext.scope },
+    }) as never,
 }));
 
 vi.mock(import("../../state/projects"), async (original) => {

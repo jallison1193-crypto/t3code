@@ -28,7 +28,10 @@ const state = vi.hoisted(() => ({
   }>,
   updateSettings:
     vi.fn<
-      (request: { environmentId: EnvironmentId; patch: ServerSettingsPatch }) => Promise<unknown>
+      (request: {
+        environmentId: EnvironmentId;
+        input: { patch: ServerSettingsPatch };
+      }) => Promise<unknown>
     >(),
   canWrite: true,
 }));
@@ -139,7 +142,7 @@ function setup(initialInstructions?: string) {
         : {}),
     }),
   ];
-  state.updateSettings.mockImplementation(async ({ environmentId, patch }) => {
+  state.updateSettings.mockImplementation(async ({ environmentId, input: { patch } }) => {
     const env = state.environments.find((candidate) => candidate.environmentId === environmentId);
     if (env && patch.projectSettingsOverrides) {
       const nextOverrides = { ...env.serverConfig.settings.projectSettingsOverrides };
@@ -158,6 +161,9 @@ function setup(initialInstructions?: string) {
           projectSettingsOverrides: nextOverrides,
         },
       };
+      state.environments = state.environments.map((candidate) =>
+        candidate === env ? { ...env } : candidate,
+      );
     }
     return { _tag: "Success" as const, value: undefined };
   });
@@ -170,9 +176,9 @@ describe("ProjectInstructionsSettings", () => {
     expect(screen.container.textContent).toBe("");
   });
 
-  it("saves project instructions on blur and clears the override when emptied", async () => {
+  it("saves trimmed project instructions on blur", async () => {
     setup();
-    await using screen = await render(<Harness />);
+    await using _screen = await render(<Harness />);
 
     await expect
       .element(page.getByText("Shared with every thread in this project, whatever the provider."))
@@ -188,30 +194,39 @@ describe("ProjectInstructionsSettings", () => {
     });
     expect(state.updateSettings).toHaveBeenLastCalledWith({
       environmentId: envId,
-      patch: {
-        projectSettingsOverrides: {
-          [projectId]: {
-            projectInstructions: "Always run typecheck before finishing.",
+      input: {
+        patch: {
+          projectSettingsOverrides: {
+            [projectId]: {
+              projectInstructions: "Always run typecheck before finishing.",
+            },
           },
         },
       },
     });
+  });
 
-    await screen.rerender(<Harness />);
-    const updatedTextarea = page.getByLabelText("Project instructions");
-    await userEvent.click(updatedTextarea);
-    await userEvent.clear(updatedTextarea);
-    await userEvent.type(updatedTextarea, "   ");
+  it("clears the project override when the instructions are emptied", async () => {
+    setup("Follow strict TypeScript rules.");
+    await using _screen = await render(<Harness />);
+
+    const textarea = page.getByLabelText("Project instructions");
+    await expect.element(textarea).toHaveValue("Follow strict TypeScript rules.");
+    await userEvent.click(textarea);
+    await userEvent.clear(textarea);
+    await userEvent.type(textarea, "   ");
     (document.activeElement as HTMLElement | null)?.blur();
 
     await vi.waitFor(() => {
-      expect(state.updateSettings).toHaveBeenCalledTimes(2);
+      expect(state.updateSettings).toHaveBeenCalledTimes(1);
     });
     expect(state.updateSettings).toHaveBeenLastCalledWith({
       environmentId: envId,
-      patch: {
-        projectSettingsOverrides: {
-          [projectId]: {},
+      input: {
+        patch: {
+          projectSettingsOverrides: {
+            [projectId]: null,
+          },
         },
       },
     });
@@ -222,7 +237,7 @@ describe("ProjectInstructionsSettings", () => {
     await using _screen = await render(<Harness />);
 
     const resetButton = page.getByRole("button", {
-      name: "Reset Project instructions to inherited value",
+      name: "Reset Project instructions to default",
     });
     await expect.element(resetButton).toBeVisible();
     await userEvent.click(resetButton);
@@ -232,9 +247,11 @@ describe("ProjectInstructionsSettings", () => {
     });
     expect(state.updateSettings).toHaveBeenLastCalledWith({
       environmentId: envId,
-      patch: {
-        projectSettingsOverrides: {
-          [projectId]: {},
+      input: {
+        patch: {
+          projectSettingsOverrides: {
+            [projectId]: null,
+          },
         },
       },
     });

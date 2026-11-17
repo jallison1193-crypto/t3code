@@ -13,6 +13,7 @@ import * as Cause from "effect/Cause";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
+import "~/index.css";
 import { render } from "../../../test/render";
 
 const envId = EnvironmentId.make("env-1");
@@ -63,7 +64,12 @@ const canDeleteAtom = Atom.make(() => state.canDelete);
 
 vi.mock(import("./SettingsScopeContext"), async (original) => ({
   ...(await original()),
-  useOptionalSettingsScope: () => state.scopeContext as never,
+  useOptionalSettingsScope: () =>
+    (state.scopeContext && {
+      connectedEnvironments: [],
+      ...state.scopeContext,
+      scope: { environmentIds: [], ...state.scopeContext.scope },
+    }) as never,
 }));
 
 vi.mock(import("./projectKnowledgePdf"), () => ({
@@ -149,7 +155,23 @@ describe("ProjectKnowledgeSettings", () => {
     expect(screen.container.textContent).toBe("");
   });
 
-  it("opens read-only file preview on click and deletes after confirmation", async () => {
+  it("opens a read-only file preview on click", async () => {
+    const registry = setup();
+
+    await using _screen = await render(
+      <RegistryContext.Provider value={registry}>
+        <ProjectKnowledgeSettings />
+      </RegistryContext.Provider>,
+    );
+
+    await expect.element(page.getByText("architecture.md")).toBeVisible();
+    await expect.element(page.getByText(/2 KB/)).toBeVisible();
+
+    await userEvent.click(page.getByRole("button", { name: /^architecture.md/ }));
+    await expect.element(page.getByText(/Read-only knowledge body/)).toBeVisible();
+  });
+
+  it("deletes a knowledge file after confirmation", async () => {
     const registry = setup();
     state.deleteKnowledge.mockImplementation(async () => {
       state.listResult = AsyncResult.success({ projectId, files: [] });
@@ -162,13 +184,6 @@ describe("ProjectKnowledgeSettings", () => {
         <ProjectKnowledgeSettings />
       </RegistryContext.Provider>,
     );
-
-    await expect.element(page.getByText("architecture.md")).toBeVisible();
-    await expect.element(page.getByText(/2.0 KB/)).toBeVisible();
-
-    await userEvent.click(page.getByRole("button", { name: /architecture.md/ }));
-    await expect.element(page.getByText("Read-only knowledge body")).toBeVisible();
-    await userEvent.click(page.getByRole("button", { name: "Close" }));
 
     await userEvent.click(page.getByRole("button", { name: "Delete architecture.md" }));
     await expect
