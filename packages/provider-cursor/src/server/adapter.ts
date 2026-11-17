@@ -1059,6 +1059,7 @@ export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
           readonly agent: string;
           readonly orchestration: boolean;
           readonly device: boolean;
+          readonly projectInstructions: string | undefined;
         } | null>(null);
         // Cursor drops a run cancelled before its first checkpoint, so the next message carries its prompt.
         const interruptedPrompt = yield* Ref.make<{
@@ -2618,7 +2619,11 @@ export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
           turnInput: ProviderAdapter.ProviderAdapterV2TurnInput,
           mcpServers: Record<string, McpServerConfig> | undefined,
           hasDeviceTools: boolean,
-          delivered: { readonly orchestration: boolean; readonly device: boolean },
+          delivered: {
+            readonly orchestration: boolean;
+            readonly device: boolean;
+            readonly projectInstructions: string | undefined;
+          },
           interrupted: string | undefined,
         ) {
           const rawText = turnInput.message.text;
@@ -2679,7 +2684,16 @@ export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
               detail: "Cursor turn requires non-empty text or attachments.",
             });
           }
-          const text = `${userText}\n\n${buildRuntimeInstructions({ harness: "Cursor", model: turnInput.modelSelection.model })}`;
+          const includeProjectInstructions =
+            turnInput.projectInstructions !== undefined &&
+            delivered.projectInstructions !== turnInput.projectInstructions;
+          const text = [
+            userText,
+            includeProjectInstructions ? turnInput.projectInstructions : undefined,
+            buildRuntimeInstructions({ harness: "Cursor", model: turnInput.modelSelection.model }),
+          ]
+            .filter((part): part is string => part !== undefined)
+            .join("\n\n");
           return {
             message: images.length === 0 ? text : ({ text, images } satisfies SDKUserMessage),
             prompt: userText,
@@ -2714,7 +2728,11 @@ export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
             const delivered =
               known?.agent === agent.nativeThreadId
                 ? known
-                : { orchestration: turnInput.runOrdinal > 1, device: false };
+                : {
+                    orchestration: turnInput.runOrdinal > 1,
+                    device: false,
+                    projectInstructions: undefined,
+                  };
             const interrupted = yield* Ref.get(interruptedPrompt);
             const runCheckpointed = (runId?: string) =>
               agent.session.runCheckpointed?.(runId) ?? Effect.succeed(false);
@@ -2793,6 +2811,7 @@ export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
                 agent: agent.nativeThreadId,
                 orchestration: !compacted && (delivered.orchestration || mcpServers !== undefined),
                 device: !compacted && hasDeviceTools,
+                projectInstructions: compacted ? undefined : turnInput.projectInstructions,
               });
             }
             if (!compacted && resume !== "native") {

@@ -82,4 +82,33 @@ describe("T3 device instructions", () => {
     );
     assert.notInclude(t3AcpPromptWithInstructions({ prompt: "Hi.", state }), "## T3 Code devices");
   });
+
+  it("delivers project instructions via ACP prompt prepend once per change and skips slash commands", () => {
+    const first = "<project_instructions>\nFirst rule.\n</project_instructions>";
+    const second = "<project_instructions>\nUpdated rule.\n</project_instructions>";
+    const state = {
+      interactionMode: "default",
+      hasT3Mcp: false,
+      hasDeviceTools: false,
+      projectInstructions: first,
+    } as const;
+
+    const initial = t3AcpPromptWithInstructions({ prompt: "Do the task.", state });
+    assert.include(initial, first);
+    assert.isBelow(initial.indexOf(first), initial.indexOf("<user_request>"));
+
+    assert.equal(
+      t3AcpPromptWithInstructions({ prompt: "Follow-up.", state, previousState: state }),
+      "Follow-up.",
+    );
+    assert.equal(t3AcpPromptWithInstructions({ prompt: "  /compact", state }), "  /compact");
+    assert.include(
+      t3AcpPromptWithInstructions({
+        prompt: "After edit.",
+        state: { ...state, projectInstructions: second },
+        previousState: state,
+      }),
+      second,
+    );
+  });
 });

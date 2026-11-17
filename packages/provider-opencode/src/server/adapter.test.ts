@@ -162,6 +162,7 @@ const makeOpenCodeRuntimeHarness = Effect.fn("makeOpenCodeRuntimeHarness")(funct
     readonly options?: ReadonlyArray<ProviderOptionSelection>;
     readonly interactionMode?: ProviderAdapter.ProviderAdapterV2RuntimePolicy["interactionMode"];
     readonly attachments?: ProviderAdapter.ProviderAdapterV2TurnInput["message"]["attachments"];
+    readonly projectInstructions?: string;
   } = {},
 ) {
   const instanceId = ProviderInstanceId.make(`opencode-${suffix}`);
@@ -256,6 +257,9 @@ const makeOpenCodeRuntimeHarness = Effect.fn("makeOpenCodeRuntimeHarness")(funct
       },
       modelSelection: { ...modelSelection, model: continuation?.model ?? modelSelection.model },
       runtimePolicy: turnPolicy,
+      ...(turnSettings.projectInstructions !== undefined
+        ? { projectInstructions: turnSettings.projectInstructions }
+        : {}),
     });
   return {
     nativeSessionId,
@@ -3674,6 +3678,36 @@ describe("OpenCodeAdapterV2", () => {
         { agent: steer?.agent, variant: steer?.variant, system: steer?.system },
         { agent: start?.agent, variant: start?.variant, system: start?.system },
       );
+    }).pipe(Effect.provide(Layer.merge(IdAllocator.layer, McpProviderSessions.layer))),
+  );
+
+  it.effect("appends projectInstructions to OpenCode session.promptAsync system instructions", () =>
+    Effect.gen(function* () {
+      const nativeEvents = asyncEventStream();
+      const promptInputs: Array<{ system?: string }> = [];
+      const formatted = "<project_instructions>\nRun unit tests.\n</project_instructions>";
+      const harness = yield* makeOpenCodeRuntimeHarness(
+        "project-instructions",
+        "root",
+        {
+          event: { subscribe: async () => ({ stream: nativeEvents.stream }) },
+          session: {
+            create: async () => ({ data: { id: "root", time: { created: 1, updated: 1 } } }),
+            get: async () => ({ data: { id: "root", time: { created: 1, updated: 1 } } }),
+            messages: async () => ({ data: [] }),
+            promptAsync: async (input: { system?: string }) => {
+              promptInputs.push(input);
+              return { data: true };
+            },
+            abort: async () => ({ data: true }),
+            children: async () => ({ data: [] }),
+          },
+        },
+        {},
+        { projectInstructions: formatted },
+      );
+      yield* harness.startTurn();
+      assert.include(promptInputs[0]?.system ?? "", formatted);
     }).pipe(Effect.provide(Layer.merge(IdAllocator.layer, McpProviderSessions.layer))),
   );
 

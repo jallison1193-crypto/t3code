@@ -845,6 +845,23 @@ describe("ClaudeAdapterV2 native protocol logging", () => {
     assert.include(systemPrompt.append ?? "", "Use `delegate_task`");
     assert.include(systemPrompt.append ?? "", "call `t3_background_wait`");
     assert.notInclude(systemPrompt.append ?? "", "## T3 Code devices");
+    assert.notInclude(systemPrompt.append ?? "", "<project_instructions>");
+
+    const withProjectInstructions = ClaudeAdapterV2.makeClaudeQueryOptions({
+      modelSelection: {
+        instanceId: ProviderInstanceId.make("claudeAgent"),
+        model: "claude-sonnet-4-6",
+      },
+      nativeThreadId: "native-thread-claude-project-instructions",
+      resume: false,
+      cwd: "/workspace",
+      projectInstructions: "<project_instructions>\nUse Effect services.\n</project_instructions>",
+      environment: {},
+    }).systemPrompt as { readonly append?: string };
+    assert.include(
+      withProjectInstructions.append ?? "",
+      "<project_instructions>\nUse Effect services.\n</project_instructions>",
+    );
     const logged = ClaudeAdapterV2.loggedClaudeQueryOptions(options);
     assert.equal(logged.hasMcpServers, true);
     assert.notInclude(JSON.stringify(logged), "secret-claude-token");

@@ -1,4 +1,6 @@
 {
+  "be67b7b6c8a60c30": "Se comparte con cada hilo de este proyecto, sea cual sea el proveedor.",
+  "011a880d28ad813b": "Mixto. Escribe instrucciones para aplicarlas a todos los destinos seleccionados.",
   "0a75e464d833bca8": "Ajustes",
   "6aa1c88c4fa5be28": "Diagnóstico",
   "fb29e435b1219373": "Licencias de código abierto",
@@ -37,12 +39,6 @@
   "3fc130f1e8170073": "El modo mantener también sale con dos pulsaciones rápidas.",
   "72c7fda6ae301e6d": "Del sistema usa el idioma de tu navegador o sistema operativo.",
   "b9ebecdb8db71466": "Del sistema usa el formato de hora de tu navegador o sistema operativo.",
-  "425f7ce2f24cb248": "Secciones de ajustes",
-  "ee3e8bd8b7918aec": "Buscar",
-  "858561b97fdd72f2": "Buscar ajustes",
-  "fed2d32de2b0c566": "Borrar búsqueda de ajustes",
-  "833639e235c97484": "Resultados de búsqueda de ajustes",
-  "be82bbfef472ab44": "No se encontraron ajustes",
   "cc84bfe0ee5d0174": "Proyectos",
   "81d0d1e78b196630": "General",
   "fa19046edd6cfbd4": "Apariencia",
@@ -70,10 +66,17 @@
   "58058320796d28f6": "Código",
   "1a07e4d043f5df4e": "Conexiones",
   "bda5af471ef547e0": "Más",
+  "2004953d89aa0b56": "Instrucciones del proyecto",
   "e5144f91364fd9b7": "Formato de hora",
   "7e4d81ca21a72019": "Confirmación al desfijar",
   "1d5052cbe70d0b28": "Confirmación al archivar",
   "d5dd27a4eb853248": "Confirmación al eliminar",
   "5503ef439beb8d42": "Confirmación al cerrar terminales",
-  "86b43caa9ff41ea2": "Atajo para salir"
+  "86b43caa9ff41ea2": "Atajo para salir",
+  "425f7ce2f24cb248": "Secciones de ajustes",
+  "ee3e8bd8b7918aec": "Buscar",
+  "858561b97fdd72f2": "Buscar ajustes",
+  "fed2d32de2b0c566": "Borrar búsqueda de ajustes",
+  "833639e235c97484": "Resultados de búsqueda de ajustes",
+  "be82bbfef472ab44": "No se encontraron ajustes"
 }

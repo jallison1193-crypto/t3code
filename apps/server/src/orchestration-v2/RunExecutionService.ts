@@ -47,6 +47,7 @@ import * as EventSink from "./EventSink.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import { PROVIDER_STOP_REASON_SIGNAL } from "@t3tools/provider-core/server/subagentProjection";
+import { formatProjectInstructions } from "@t3tools/provider-core/server/projectInstructions";
 import * as ProviderEventIngestor from "./ProviderEventIngestor.ts";
 import * as ProviderUsageAnalytics from "../telemetry/ProviderUsageAnalytics.ts";
 import type { ProjectionStoreV2Error } from "./ProjectionStore.ts";
@@ -2215,6 +2216,19 @@ export const layer: Layer.Layer<
           key: `mcp_app_${entry.itemId.replace(/[^\w.-]/g, "_")}`,
           text: entry.text,
         }));
+        const projectInstructions = yield* serverSettings.getSettings.pipe(
+          Effect.map((settings) =>
+            formatProjectInstructions(
+              resolveProjectSettings(settings, input.appThread.projectId).settings
+                .projectInstructions,
+            ),
+          ),
+          Effect.catch((cause) =>
+            Effect.logWarning("Failed to read project instructions.", { cause }).pipe(
+              Effect.as(undefined),
+            ),
+          ),
+        );
         const turnInput = {
           appThread: input.appThread,
           threadId: input.run.threadId,
@@ -2236,6 +2250,7 @@ export const layer: Layer.Layer<
           modelSelection: input.modelSelection,
           runtimePolicy: input.runtimePolicy,
           ...(appContext.length === 0 ? {} : { appContext }),
+          ...(projectInstructions === undefined ? {} : { projectInstructions }),
         };
         // Check after the context read: ingestion can settle the run while
         // it awaits. A failed ownership read fails the start below.

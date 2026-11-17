@@ -8,6 +8,7 @@ export const T3_MCP_BEARER_ENV = "T3_MCP_BEARER_TOKEN";
 export const T3_PI_RUNTIME_MODE_ENV = "T3_PI_RUNTIME_MODE";
 export const T3_PI_MCP_EXTENSION_PATH_ENV = "T3_PI_MCP_EXTENSION_PATH";
 export const PI_T3_SERVICE_TIER_COMMAND = "t3-service-tier";
+export const PI_T3_PROJECT_INSTRUCTIONS_COMMAND = "t3-project-instructions";
 
 // These tools trigger file-change approvals, bypassed by Auto-accept edits.
 export const PI_FILE_CHANGE_TOOLS = ["edit", "write"] as const;
@@ -25,6 +26,7 @@ const RUNTIME_MODE_ENV = ${JSON.stringify(T3_PI_RUNTIME_MODE_ENV)};
 const EXTENSION_PATH_ENV = ${JSON.stringify(T3_PI_MCP_EXTENSION_PATH_ENV)};
 const ORCHESTRATION_INSTRUCTIONS = ${JSON.stringify(T3_CODE_ORCHESTRATION_INSTRUCTIONS.trim())};
 const SERVICE_TIER_COMMAND = ${JSON.stringify(PI_T3_SERVICE_TIER_COMMAND)};
+const PROJECT_INSTRUCTIONS_COMMAND = ${JSON.stringify(PI_T3_PROJECT_INSTRUCTIONS_COMMAND)};
 const PROTOCOL = "2025-06-18";
 const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls"]);
 const FILE_CHANGE_TOOLS = new Set(${JSON.stringify(PI_FILE_CHANGE_TOOLS)});
@@ -307,6 +309,24 @@ export default async function t3McpExtension(pi: ExtensionAPI) {
     },
   });
 
+  let projectInstructions: string | undefined;
+  pi.registerCommand(PROJECT_INSTRUCTIONS_COMMAND, {
+    description: "Set the project instructions T3 Code includes in the system prompt",
+    handler: async (args) => {
+      const trimmed = args.trim();
+      if (!trimmed) {
+        projectInstructions = undefined;
+        return;
+      }
+      try {
+        const parsed = JSON.parse(trimmed);
+        projectInstructions = typeof parsed === "string" && parsed.length > 0 ? parsed : undefined;
+      } catch {
+        projectInstructions = trimmed;
+      }
+    },
+  });
+
   pi.on("before_provider_request", (event, ctx) => {
     const payload = event.payload;
     if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return;
@@ -497,13 +517,16 @@ export default async function t3McpExtension(pi: ExtensionAPI) {
   // Keep guidance in the system prompt so leading slash commands still expand.
   pi.on("before_agent_start", (event, ctx) => {
     reconcileDiscovery(ctx);
+    const t3Instructions = projectInstructions
+      ? ORCHESTRATION_INSTRUCTIONS + "\\n\\n" + projectInstructions
+      : ORCHESTRATION_INSTRUCTIONS;
     const sections = event.systemPromptOptions?.sections;
     if (sections && typeof sections === "object" && event.systemPromptOptions?.forceSystemPrompt === undefined) {
       // A full prompt override bypasses Pi's later section rendering.
-      sections.t3_code_orchestration = ORCHESTRATION_INSTRUCTIONS;
+      sections.t3_code_orchestration = t3Instructions;
       return undefined;
     }
-    return { systemPrompt: event.systemPrompt + "\\n\\n" + ORCHESTRATION_INSTRUCTIONS };
+    return { systemPrompt: event.systemPrompt + "\\n\\n" + t3Instructions };
   });
 }
 `;

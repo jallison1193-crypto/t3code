@@ -146,6 +146,7 @@ export function makeAntigravityAcpAdapterFlavor(
           options.makeRuntime({
             ...input,
             clientFileReads: true,
+            // makeRuntime opens the session before turnInput is available; makeAcpAdapterV2 delivers projectInstructions on the first turn.
             sessionSystemPromptAppend: PULL_REQUEST_LINKING_INSTRUCTIONS,
             additionalDirectories: [options.host.paths.attachmentsDir],
           }),

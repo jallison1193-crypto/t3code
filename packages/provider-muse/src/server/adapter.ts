@@ -2191,6 +2191,9 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
                       reasoningEffort: effort,
                     }),
                   },
+                  ...(turnInput.projectInstructions === undefined
+                    ? []
+                    : [{ type: "text" as const, text: turnInput.projectInstructions }]),
                   ...parts,
                 ],
                 displayText: turnInput.message.text || "Image attachment",

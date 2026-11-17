@@ -58,3 +58,30 @@ export function buildCodexAdditionalContext(
     ...(tools ? { t3_code_tools: { kind: "application", value: tools } } : {}),
   };
 }
+
+export function buildCodexProjectInstructionsAdditionalContext(
+  projectInstructions: string | undefined,
+): Record<string, V2TurnStartParams__AdditionalContextEntry> {
+  if (!projectInstructions) return {};
+  const chunks: Array<string> = [];
+  let current = "";
+  let currentBytes = 0;
+  for (const ch of projectInstructions) {
+    const chBytes = Buffer.byteLength(ch, "utf8");
+    if (currentBytes + chBytes > CODEX_ADDITIONAL_CONTEXT_VALUE_MAX_BYTES && current.length > 0) {
+      chunks.push(current);
+      current = ch;
+      currentBytes = chBytes;
+    } else {
+      current += ch;
+      currentBytes += chBytes;
+    }
+  }
+  if (current.length > 0) chunks.push(current);
+  return Object.fromEntries(
+    chunks.map((chunk, index) => [
+      `t3_code_project_instructions_${String(index + 1).padStart(2, "0")}`,
+      { kind: "application" as const, value: chunk },
+    ]),
+  );
+}

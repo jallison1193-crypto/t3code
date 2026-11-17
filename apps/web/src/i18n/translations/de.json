@@ -1,4 +1,6 @@
 {
+  "be67b7b6c8a60c30": "Wird unabhängig vom Anbieter mit jedem Thread in diesem Projekt geteilt.",
+  "011a880d28ad813b": "Gemischt. Anweisungen eingeben, die für alle ausgewählten Ziele gelten sollen.",
   "0a75e464d833bca8": "Einstellungen",
   "6aa1c88c4fa5be28": "Diagnose",
   "fb29e435b1219373": "Open-Source-Lizenzen",
@@ -37,12 +39,6 @@
   "3fc130f1e8170073": "Bei „Gedrückt halten“ beendet auch zweimaliges schnelles Drücken die App.",
   "72c7fda6ae301e6d": "Systemstandard folgt der Sprache deines Browsers oder Betriebssystems.",
   "b9ebecdb8db71466": "Systemstandard folgt dem Uhrzeitformat deines Browsers oder Betriebssystems.",
-  "425f7ce2f24cb248": "Einstellungsbereiche",
-  "ee3e8bd8b7918aec": "Suchen",
-  "858561b97fdd72f2": "Einstellungen durchsuchen",
-  "fed2d32de2b0c566": "Einstellungssuche leeren",
-  "833639e235c97484": "Suchergebnisse in den Einstellungen",
-  "be82bbfef472ab44": "Keine Einstellungen gefunden",
   "cc84bfe0ee5d0174": "Projekte",
   "81d0d1e78b196630": "Allgemein",
   "fa19046edd6cfbd4": "Darstellung",
@@ -70,10 +66,17 @@
   "58058320796d28f6": "Code",
   "1a07e4d043f5df4e": "Verbindungen",
   "bda5af471ef547e0": "Mehr",
+  "2004953d89aa0b56": "Projektanweisungen",
   "e5144f91364fd9b7": "Uhrzeitformat",
   "7e4d81ca21a72019": "Loslösen bestätigen",
   "1d5052cbe70d0b28": "Archivieren bestätigen",
   "d5dd27a4eb853248": "Löschen bestätigen",
   "5503ef439beb8d42": "Bestätigung beim Schließen von Terminals",
-  "86b43caa9ff41ea2": "Tastenkürzel zum Beenden"
+  "86b43caa9ff41ea2": "Tastenkürzel zum Beenden",
+  "425f7ce2f24cb248": "Einstellungsbereiche",
+  "ee3e8bd8b7918aec": "Suchen",
+  "858561b97fdd72f2": "Einstellungen durchsuchen",
+  "fed2d32de2b0c566": "Einstellungssuche leeren",
+  "833639e235c97484": "Suchergebnisse in den Einstellungen",
+  "be82bbfef472ab44": "Keine Einstellungen gefunden"
 }

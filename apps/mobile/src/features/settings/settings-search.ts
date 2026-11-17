@@ -50,7 +50,14 @@ const SETTINGS_SEARCH_TERMS = {
     "bluetooth",
   ],
   SettingsScheduledTasks: ["automations", "schedule", "cron", "recurring", "webhook"],
-  SettingsProjectOverview: ["project", "overview", "checkouts", "delete project"],
+  SettingsProjectOverview: [
+    "project",
+    "overview",
+    "project instructions",
+    "instructions",
+    "checkouts",
+    "delete project",
+  ],
   SettingsOrganization: [
     "language",
     "locale",

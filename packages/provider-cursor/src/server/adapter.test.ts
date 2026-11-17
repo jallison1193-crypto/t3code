@@ -904,6 +904,144 @@ describe("CursorAdapterV2", () => {
     ),
   );
 
+  it.effect(
+    "injects projectInstructions once, skips unchanged repeats, and resends on edit or compaction",
+    () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const workspace = yield* fileSystem.makeTempDirectoryScoped({ prefix: "cursor-v2-pi-" });
+        const sentMessages: Array<string> = [];
+        const instanceId = ProviderInstanceId.make("cursor");
+        const threadId = ThreadId.make("cursor-pi-thread");
+        const modelSelection = { instanceId, model: "composer-2.5" };
+        const runtimePolicy = ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          cwd: workspace,
+        });
+        const adapter = yield* makeCursorAdapterV2({
+          instanceId,
+          environment: { HOME: workspace },
+        }).pipe(
+          Effect.provideService(CursorAgentSdk.CursorAgentSdkRunner, {
+            assertComplete: Effect.void,
+            open: () =>
+              Effect.succeed({
+                agentId: "native-cursor-pi",
+                listMessages: Effect.succeed([]),
+                close: Effect.void,
+                send: (input) =>
+                  Effect.sync(() => {
+                    sentMessages.push(
+                      typeof input.message === "string" ? input.message : input.message.text,
+                    );
+                    const runId = `native-cursor-pi-run-${sentMessages.length}`;
+                    return {
+                      agentId: "native-cursor-pi",
+                      runId,
+                      wait: Effect.succeed({
+                        id: runId,
+                        requestId: `native-request-${sentMessages.length}`,
+                        status: "finished" as const,
+                        model: { id: "composer-2.5" },
+                        durationMs: 1,
+                      }),
+                      cancel: Effect.void,
+                    };
+                  }),
+              }),
+          }),
+          Effect.provide(TestProviderHost.layer({ cwd: workspace })),
+        );
+        const runtime = yield* adapter.openSession({
+          threadId,
+          providerSessionId: ProviderSessionId.make("cursor-pi-session"),
+          modelSelection,
+          runtimePolicy,
+        });
+        const providerThread = yield* runtime.ensureThread({
+          threadId,
+          modelSelection,
+          runtimePolicy,
+        });
+        const now = yield* DateTime.now;
+        const appThread = {
+          id: threadId,
+          projectId: ProjectId.make("cursor-pi-project"),
+          createdBy: "user" as const,
+          creationSource: "web" as const,
+          title: "Cursor project instructions",
+          providerInstanceId: instanceId,
+          modelSelection,
+          runtimeMode: "full-access" as const,
+          interactionMode: "default" as const,
+          branch: null,
+          worktreePath: null,
+          activeProviderThreadId: providerThread.id,
+          lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: threadId },
+          forkedFrom: null,
+          createdAt: now,
+          updatedAt: now,
+          archivedAt: null,
+          settledOverride: null,
+          settledAt: null,
+          lastVisitedAt: null,
+          deletedAt: null,
+        };
+        let runOrdinal = 0;
+        const send = Effect.fnUntraced(function* (
+          projectInstructions: string | undefined,
+          compact = false,
+        ) {
+          runOrdinal += 1;
+          const turnInput = {
+            threadId,
+            providerThread,
+            modelSelection,
+            runtimePolicy,
+            runId: RunId.make(`cursor-pi-run-${runOrdinal}`),
+            runOrdinal,
+            providerTurnOrdinal: runOrdinal,
+            attemptId: RunAttemptId.make(`cursor-pi-attempt-${runOrdinal}`),
+            rootNodeId: NodeId.make(`cursor-pi-root-${runOrdinal}`),
+            appThread,
+            ...(projectInstructions !== undefined ? { projectInstructions } : {}),
+            message: {
+              messageId: MessageId.make(`cursor-pi-message-${runOrdinal}`),
+              createdBy: "user" as const,
+              creationSource: "web" as const,
+              text: "Run check.",
+              attachments: [],
+            },
+          };
+          yield* compact ? runtime.compactThread!(turnInput) : runtime.startTurn(turnInput);
+          yield* runtime.events.pipe(
+            Stream.filter((event) => event.type === "turn.terminal"),
+            Stream.runHead,
+          );
+          return sentMessages.at(-1)!;
+        });
+
+        const first = yield* send("<project_instructions>\nRule A\n</project_instructions>");
+        assert.include(first, "Rule A");
+
+        const repeat = yield* send("<project_instructions>\nRule A\n</project_instructions>");
+        assert.notInclude(repeat, "Rule A");
+
+        const edited = yield* send("<project_instructions>\nRule B\n</project_instructions>");
+        assert.include(edited, "Rule B");
+
+        yield* send(undefined, true);
+        const afterCompact = yield* send("<project_instructions>\nRule B\n</project_instructions>");
+        assert.include(afterCompact, "Rule B");
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Layer.mergeAll(NodeServices.layer, IdAllocator.layer, McpProviderSessions.layer),
+        ),
+      ),
+  );
+
   it.effect("carries a dropped prompt forward, and resumes a checkpointed one natively", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

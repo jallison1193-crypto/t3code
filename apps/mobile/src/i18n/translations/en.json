@@ -30,5 +30,12 @@
   "79b768229c9ef672": "Maintenance",
   "54b188d65247e42f": "Labs",
   "f41ea186c275b56e": "About",
-  "2a546119bf3879ee": "Archive"
+  "2a546119bf3879ee": "Archive",
+  "2004953d89aa0b56": "Project instructions",
+  "d52b3d6bf9f2a013": "Mixed",
+  "e0f3572333aabf1c": "Overridden",
+  "be67b7b6c8a60c30": "Shared with every thread in this project, whatever the provider.",
+  "011a880d28ad813b": "Mixed. Enter instructions to apply to all selected targets.",
+  "39f6771b49f9b3b6": "Use default",
+  "1ac4ae3ae625209a": "Use inherited project instructions"
 }

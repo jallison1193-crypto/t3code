@@ -990,3 +990,39 @@ describe("model selection patches at project scope", () => {
     ).toEqual({ ...saved, options });
   });
 });
+
+describe("projectInstructions at project scope", () => {
+  it("writes and clears projectInstructions overrides without disturbing sibling overrides", () => {
+    const customized = environment("Server", {
+      settings: {
+        projectSettingsOverrides: {
+          [projectId]: {
+            defaultAutoPull: true,
+            projectInstructions: "Old instructions.",
+          },
+        },
+      },
+    });
+
+    const writePlan = planScopedSettingsPatch(checkout, [customized], {
+      projectInstructions: "Use strict TypeScript.",
+    });
+    expect(writePlan.serverWrites[0]?.patch).toEqual({
+      projectSettingsOverrides: {
+        [projectId]: {
+          defaultAutoPull: true,
+          projectInstructions: "Use strict TypeScript.",
+        },
+      },
+    });
+
+    const clearPlan = planScopedSettingsClear(checkout, [customized], ["projectInstructions"]);
+    expect(clearPlan.serverWrites[0]?.patch).toEqual({
+      projectSettingsOverrides: {
+        [projectId]: {
+          defaultAutoPull: true,
+        },
+      },
+    });
+  });
+});

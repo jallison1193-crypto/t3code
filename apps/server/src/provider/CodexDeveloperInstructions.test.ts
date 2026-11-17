@@ -5,6 +5,7 @@ import { describe, it } from "vite-plus/test";
 
 import {
   buildCodexAdditionalContext,
+  buildCodexProjectInstructionsAdditionalContext,
   CODEX_ADDITIONAL_CONTEXT_VALUE_MAX_BYTES,
 } from "./CodexDeveloperInstructions.ts";
 
@@ -82,3 +83,24 @@ describe("Codex device context", () => {
 function runtimeInstructions(runtime: Parameters<typeof buildCodexAdditionalContext>[0]) {
   return buildCodexAdditionalContext(runtime).t3_code_runtime!.value;
 }
+
+describe("Codex project instructions context", () => {
+  it("chunks formatted instructions under the per-entry byte cap with stable keys", () => {
+    NodeAssert.deepEqual(buildCodexProjectInstructionsAdditionalContext(undefined), {});
+
+    const body = "🦊".repeat(1_200); // > 4,000 UTF-8 bytes
+    const context = buildCodexProjectInstructionsAdditionalContext(body);
+    const entries = Object.entries(context);
+    NodeAssert.ok(entries.length >= 2);
+    NodeAssert.equal(entries[0]?.[0], "t3_code_project_instructions_01");
+    NodeAssert.equal(entries[1]?.[0], "t3_code_project_instructions_02");
+    for (const [, entry] of entries) {
+      NodeAssert.equal(entry.kind, "application");
+      NodeAssert.ok(
+        Buffer.byteLength(entry.value, "utf8") <= CODEX_ADDITIONAL_CONTEXT_VALUE_MAX_BYTES,
+      );
+      NodeAssert.ok(entry.value.isWellFormed());
+    }
+    NodeAssert.equal(entries.map(([, entry]) => entry.value).join(""), body);
+  });
+});

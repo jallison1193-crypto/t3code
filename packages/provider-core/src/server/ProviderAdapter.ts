@@ -559,6 +559,7 @@ export interface ProviderAdapterV2TurnInput {
   readonly modelSelection: ModelSelection;
   readonly runtimePolicy: ProviderAdapterV2RuntimePolicy;
   readonly appContext?: ReadonlyArray<{ readonly key: string; readonly text: string }>;
+  readonly projectInstructions?: string;
 }
 
 export type ProviderAdapterV2ResumeTurnInput = Omit<

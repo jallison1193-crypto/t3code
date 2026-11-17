@@ -605,6 +605,23 @@ describe("MuseAdapterV2", () => {
     ),
   );
 
+  it.effect("appends formatted projectInstructions to turn/start input when provided", () =>
+    Effect.gen(function* () {
+      const fake = yield* makeFakeMuse();
+      const harness = yield* makeHarness(fake);
+      const formatted = "<project_instructions>\nPrefer strict types.\n</project_instructions>";
+      yield* harness.runtime.startTurn({
+        ...(yield* turnInput(harness.providerThread, 1, harness.policy)),
+        projectInstructions: formatted,
+      });
+      const turnStart = yield* fake.takeCall("turn/start");
+      const textInputs = (turnStart.params.input as ReadonlyArray<{ type: string; text?: string }>)
+        .filter((part) => part.type === "text")
+        .map((part) => part.text);
+      assert.include(textInputs, formatted);
+    }).pipe(Effect.scoped, Effect.provide(testLayer)),
+  );
+
   it.effect("stops at a Meta usage limit until every exhausted window resets", () =>
     Effect.gen(function* () {
       const fake = yield* makeFakeMuse();

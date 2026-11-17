@@ -6,7 +6,11 @@ import * as NodeModule from "node:module";
 import * as NodeVM from "node:vm";
 import { assert, describe, it } from "@effect/vitest";
 
-import { PI_T3_MCP_EXTENSION_SOURCE, PI_T3_SERVICE_TIER_COMMAND } from "./mcpExtensionSource.ts";
+import {
+  PI_T3_MCP_EXTENSION_SOURCE,
+  PI_T3_PROJECT_INSTRUCTIONS_COMMAND,
+  PI_T3_SERVICE_TIER_COMMAND,
+} from "./mcpExtensionSource.ts";
 import { loadMcpBridge } from "./mcpBridge.testkit.ts";
 
 type RequestHook = (
@@ -80,6 +84,26 @@ describe("Pi orchestration prompt section", () => {
       assert.isTrue(result!.systemPrompt.startsWith(`${event.systemPrompt}\n\n`));
       assert.include(result!.systemPrompt, "orchestrator_capabilities");
     }
+  });
+
+  it("appends and clears project instructions via the Pi extension command", async () => {
+    const bridge = await loadMcpBridge();
+    const hook = bridge.handlers.get("before_agent_start")!;
+    const setProjectInstructions = bridge.commands.get(PI_T3_PROJECT_INSTRUCTIONS_COMMAND)!;
+    assert.isDefined(setProjectInstructions);
+
+    const wrapped = "<project_instructions>\nUse concise commits.\n</project_instructions>";
+    await setProjectInstructions(JSON.stringify(wrapped));
+    const injected = await hook({ systemPrompt: "base" }, { ui: { notify: assert.fail } });
+    assert.isDefined(injected);
+    assert.isTrue(injected!.systemPrompt.endsWith(`\n\n${wrapped}`));
+    assert.include(injected!.systemPrompt, "orchestrator_capabilities");
+
+    await setProjectInstructions("");
+    const cleared = await hook({ systemPrompt: "base" }, { ui: { notify: assert.fail } });
+    assert.isDefined(cleared);
+    assert.notInclude(cleared!.systemPrompt, wrapped);
+    assert.include(cleared!.systemPrompt, "orchestrator_capabilities");
   });
 });
 

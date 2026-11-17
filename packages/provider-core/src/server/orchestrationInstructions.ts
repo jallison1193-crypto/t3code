@@ -71,6 +71,7 @@ export interface T3AcpInstructionState {
   readonly interactionMode: ProviderInteractionMode;
   readonly hasT3Mcp: boolean;
   readonly hasDeviceTools: boolean;
+  readonly projectInstructions?: string | undefined;
 }
 
 /** ACP lacks system/developer fields; inject context on first prompt and tool/mode changes. */
@@ -84,7 +85,8 @@ export function t3AcpPromptWithInstructions(input: {
   if (
     input.previousState?.interactionMode === input.state.interactionMode &&
     input.previousState.hasT3Mcp === input.state.hasT3Mcp &&
-    input.previousState.hasDeviceTools === input.state.hasDeviceTools
+    input.previousState.hasDeviceTools === input.state.hasDeviceTools &&
+    input.previousState.projectInstructions === input.state.projectInstructions
   ) {
     return input.prompt;
   }
@@ -101,7 +103,11 @@ export function t3AcpPromptWithInstructions(input: {
         ]
       : []),
   ];
-  return `<t3_code_instructions>\n${instructions.join("\n\n")}\n</t3_code_instructions>\n\n<user_request>\n${input.prompt}\n</user_request>`;
+  const sections = [
+    `<t3_code_instructions>\n${instructions.join("\n\n")}\n</t3_code_instructions>`,
+    ...(input.state.projectInstructions ? [input.state.projectInstructions] : []),
+  ];
+  return `${sections.join("\n\n")}\n\n<user_request>\n${input.prompt}\n</user_request>`;
 }
 
 const orchestrationInstructions = (hasDeviceTools: boolean) =>

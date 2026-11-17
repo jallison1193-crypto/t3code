@@ -3,7 +3,7 @@ import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
 import { ProjectFavicon } from "../../components/ProjectFavicon";
 import * as Dialog from "../../components/ui/Dialog";
-import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
+import { AuthOrchestrationOperateScope, AuthSettingsWriteScope } from "@t3tools/contracts";
 import { planProjectRemoval } from "@t3tools/client-runtime/state/projects";
 import {
   isAtomCommandInterrupted,
@@ -40,12 +40,52 @@ import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActi
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 import { useSettingsEnvironmentMenu } from "./components/SettingsEnvironmentFilterHeader";
 import { useSettingsEnvironmentFilter, type SettingsTarget } from "./settings-environment-filter";
+import { I18nProvider } from "../../i18n/I18nProvider";
+import {
+  ProjectInstructionsSettings,
+  type ProjectInstructionsSource,
+} from "./components/ProjectInstructionsSettings";
+import {
+  managedSettingReason,
+  planMobileScopedSettingsClear,
+  planMobileScopedSettingsPatch,
+  resolveMobileSettingsTargets,
+  uniformMobileSetting,
+  type ScopedMobileSettingsTarget,
+} from "./settings-scoped-server";
+import { useSettingsWriter } from "./useSettingsWriter";
 import { leaveSettingsPage } from "./settings-navigation";
 import { workspaceHasColumns } from "../layout/workspace/workspace-selection-store";
 import { DEFAULT_SETTINGS_PAGE } from "../layout/workspace/workspace-tab-navigation";
 import { readUnloadedThreadCount } from "../../state/olderSettledShelf";
 
 export function SettingsProjectOverviewRouteScreen() {
+  return (
+    <I18nProvider>
+      <ProjectOverviewScreen />
+    </I18nProvider>
+  );
+}
+
+function resolveProjectInstructionsSource(
+  targets: readonly ScopedMobileSettingsTarget[],
+): ProjectInstructionsSource {
+  if (targets.length === 0) return "environment";
+  const first = targets[0]!;
+  const firstSource = first.sources.projectInstructions;
+  if (
+    targets.some(
+      (target) =>
+        target.sources.projectInstructions !== firstSource ||
+        target.settings.projectInstructions !== first.settings.projectInstructions,
+    )
+  ) {
+    return "mixed";
+  }
+  return firstSource === "project" ? "project" : "environment";
+}
+
+function ProjectOverviewScreen() {
   const environmentMenu = useSettingsEnvironmentMenu();
   const insets = useSafeAreaInsets();
   const [isRemoving, setIsRemoving] = useState(false);
@@ -285,6 +325,75 @@ function ProjectOverviewContent(props: {
     });
   };
 
+  const settingsTargets = resolveMobileSettingsTargets(props.environments, props.members);
+  const writableSettingsEnvironments = useEnvironmentsWithScope(
+    props.environments,
+    AuthSettingsWriteScope,
+  );
+  const canWriteSettings =
+    settingsTargets.length > 0 &&
+    settingsTargets.every((target) =>
+      writableSettingsEnvironments.has(target.environment.environmentId),
+    );
+  const writeSettings = useSettingsWriter();
+  const [pendingInstructionsWrites, setPendingInstructionsWrites] = useState(0);
+  const instructionsWriteInFlight = useRef(false);
+  const queuedInstructionsAction = useRef<
+    | { readonly key: string; readonly kind: "save"; readonly value: string }
+    | { readonly key: string; readonly kind: "clear" }
+    | null
+  >(null);
+  const [pendingInstructionsTargets, setPendingInstructionsTargets] = useState<
+    readonly ScopedMobileSettingsTarget[] | null
+  >(null);
+  const instructionsTargetsKey = settingsTargets
+    .map((target) => `${target.environment.environmentId}:${target.projectId}`)
+    .join(",");
+  const displayInstructionsTargets =
+    pendingInstructionsWrites > 0 && pendingInstructionsTargets !== null
+      ? pendingInstructionsTargets
+      : settingsTargets;
+  const managedInstructionsReason = managedSettingReason(settingsTargets, "projectInstructions");
+  const instructionsDisabled =
+    !canWriteSettings || pendingInstructionsWrites > 0 || managedInstructionsReason !== undefined;
+  const runInstructionsAction = (
+    action: { readonly kind: "save"; readonly value: string } | { readonly kind: "clear" },
+  ) => {
+    if (instructionsWriteInFlight.current) {
+      queuedInstructionsAction.current = { key: instructionsTargetsKey, ...action };
+      return;
+    }
+    if (
+      settingsTargets.length === 0 ||
+      !settingsTargets.every((target) =>
+        readEnvironmentScope(target.environment.environmentId, AuthSettingsWriteScope),
+      )
+    ) {
+      return;
+    }
+    const writes =
+      action.kind === "clear"
+        ? planMobileScopedSettingsClear(settingsTargets, ["projectInstructions"])
+        : planMobileScopedSettingsPatch(settingsTargets, true, {
+            projectInstructions: action.value,
+          });
+    if (writes.length === 0) return;
+    instructionsWriteInFlight.current = true;
+    setPendingInstructionsTargets(settingsTargets);
+    setPendingInstructionsWrites((count) => count + 1);
+    void writeSettings(settingsTargets, writes).finally(() => {
+      instructionsWriteInFlight.current = false;
+      setPendingInstructionsTargets(null);
+      setPendingInstructionsWrites((count) => count - 1);
+      const queued = queuedInstructionsAction.current;
+      queuedInstructionsAction.current = null;
+      if (queued?.key === instructionsTargetsKey) {
+        runInstructionsAction(
+          queued.kind === "clear" ? { kind: "clear" } : { kind: "save", value: queued.value },
+        );
+      }
+    });
+  };
   const saveName = () => {
     if (!canSave) return;
     setIsSaving(true);
@@ -347,6 +456,16 @@ function ProjectOverviewContent(props: {
           </View>
         </View>
       </SettingsSection>
+
+      <ProjectInstructionsSettings
+        instructions={uniformMobileSetting(displayInstructionsTargets, "projectInstructions")}
+        source={resolveProjectInstructionsSource(displayInstructionsTargets)}
+        disabled={instructionsDisabled}
+        pending={pendingInstructionsWrites > 0}
+        managedReason={managedInstructionsReason}
+        onSave={(value) => runInstructionsAction({ kind: "save", value })}
+        onClear={() => runInstructionsAction({ kind: "clear" })}
+      />
 
       {canOrganize ? (
         <SettingsSection title="Organize">

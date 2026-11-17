@@ -18,6 +18,7 @@ import {
   type OrchestrationV2StoredEvent,
   type OrchestrationV2Subagent,
   type OrchestrationV2TurnItem,
+  ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
   ProviderSessionId,
@@ -53,6 +54,7 @@ import type { PendingOrchestrationEffectV2 } from "./EffectOutbox.ts";
 import * as EventSink from "./EventSink.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import { formatProjectInstructions } from "@t3tools/provider-core/server/projectInstructions";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProviderCommitBatch from "./ProviderCommitBatch.ts";
 import * as ProviderEventIngestor from "./ProviderEventIngestor.ts";
@@ -920,6 +922,9 @@ it.effect("passes the thread's MCP app context to the provider under a safe key"
     const runExecution = yield* RunExecutionService.RunExecutionServiceV2;
     const started = yield* Deferred.make<ProviderAdapter.ProviderAdapterV2TurnInput>();
     const threadId = ThreadId.make("thread:run-execution-app-context");
+    const emptyThreadId = ThreadId.make("thread:run-execution-empty-instructions");
+    const configuredProjectId = ProjectId.make("project:run-execution-instructions");
+    const emptyProjectId = ProjectId.make("project:run-execution-empty");
     const providerInstanceId = ProviderInstanceId.make("codex");
     const attemptId = RunAttemptId.make("attempt:run-execution-app-context");
     const session = {
@@ -930,7 +935,7 @@ it.effect("passes the thread's MCP app context to the provider under a safe key"
 
     yield* runExecution.startRootRun({
       commandId: CommandId.make("command:run-execution-app-context"),
-      appThread: rootAppThread(threadId),
+      appThread: { ...rootAppThread(threadId), projectId: configuredProjectId },
       providerSessionId: ProviderSessionId.make("session:run-execution-app-context"),
       session,
       run: {
@@ -967,6 +972,54 @@ it.effect("passes the thread's MCP app context to the provider under a safe key"
     assert.deepEqual(input.appContext, [
       { key: "mcp_app_turn-item_provider_codex_native-item_call-1", text: "2 overdue" },
     ]);
+    assert.equal(
+      input.projectInstructions,
+      formatProjectInstructions("Always run targeted tests."),
+    );
+
+    const emptyStarted = yield* Deferred.make<ProviderAdapter.ProviderAdapterV2TurnInput>();
+    const emptyAttemptId = RunAttemptId.make("attempt:run-execution-empty-instructions");
+    yield* runExecution.startRootRun({
+      commandId: CommandId.make("command:run-execution-empty-instructions"),
+      appThread: { ...rootAppThread(emptyThreadId), projectId: emptyProjectId },
+      providerSessionId: ProviderSessionId.make("session:run-execution-empty-instructions"),
+      session: {
+        events: Stream.never,
+        startTurn: (turnInput: ProviderAdapter.ProviderAdapterV2TurnInput) =>
+          Deferred.succeed(emptyStarted, turnInput),
+      } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime,
+      run: {
+        id: RunId.make("run:run-execution-empty-instructions"),
+        threadId: emptyThreadId,
+        ordinal: 1,
+        providerInstanceId,
+      } as OrchestrationV2Run,
+      rootNode: {
+        id: NodeId.make("node:run-execution-empty-instructions"),
+      } as OrchestrationV2ExecutionNode,
+      checkpointScope: {
+        id: CheckpointScopeId.make("checkpoint-scope:run-execution-empty-instructions"),
+      } as OrchestrationV2CheckpointScope,
+      providerThread: {
+        id: ProviderThreadId.make("provider-thread:run-execution-empty-instructions"),
+        driver,
+      } as OrchestrationV2ProviderThread,
+      attempt: { id: emptyAttemptId, providerTurnId: null } as OrchestrationV2RunAttempt,
+      attemptId: emptyAttemptId,
+      providerTurnOrdinal: 1,
+      message: {
+        messageId: MessageId.make("message:run-execution-empty-instructions"),
+        text: "Hello",
+        attachments: [],
+        createdBy: "user",
+        creationSource: "web",
+      },
+      modelSelection: { instanceId: providerInstanceId, model: "gpt-5.4" },
+      runtimePolicy: { runtimeMode: "full-access", interactionMode: "default", cwd: process.cwd() },
+    });
+    const emptyInput = yield* Deferred.await(emptyStarted);
+    assert.isUndefined(emptyInput.projectInstructions);
+    assert.isFalse("projectInstructions" in emptyInput);
   }).pipe(
     Effect.provide(
       RunExecutionService.layer.pipe(
@@ -994,7 +1047,16 @@ it.effect("passes the thread's MCP app context to the provider under a safe key"
             Layer.mock(ProviderEventIngestor.ProviderEventIngestorV2)({
               ingestNormalized: () => Effect.succeed([]),
             }),
-            ServerSettings.layerTest(),
+            ServerSettings.layerTest({
+              projectSettingsOverrides: {
+                [ProjectId.make("project:run-execution-instructions")]: {
+                  projectInstructions: "Always run targeted tests.",
+                },
+                [ProjectId.make("project:run-execution-empty")]: {
+                  projectInstructions: "   ",
+                },
+              },
+            }),
           ),
         ),
       ),

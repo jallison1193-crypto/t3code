@@ -87,6 +87,14 @@ describe("searchSettings", () => {
     });
   });
 
+  it("finds project instructions under project settings", () => {
+    expect(searchSettings("project instructions")[0]).toMatchObject({
+      id: "project-instructions",
+      to: "/settings/projects",
+      scope: "project",
+    });
+  });
+
   it("matches normalized title substrings", () => {
     expect(searchSettings("  WORD   WRAP  ", ITEMS).map((item) => item.id)).toEqual(["word-wrap"]);
     expect(searchSettings("glass").map((item) => item.id)).toEqual(["setting-glass-opacity"]);

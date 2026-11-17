@@ -188,3 +188,50 @@ describe("managed settings across environments", () => {
     expect(managedSettingReason(targets.slice(0, 1), "storageCleanup")).toBeUndefined();
   });
 });
+
+describe("projectInstructions at project scope", () => {
+  it("writes and clears projectInstructions overrides without disturbing sibling overrides", () => {
+    const env = environment(firstId, {
+      ...DEFAULT_SERVER_SETTINGS,
+      projectSettingsOverrides: {
+        [firstProject]: {
+          defaultAutoPull: true,
+          projectInstructions: "Old instructions.",
+        },
+      },
+    });
+    const targets = resolveMobileSettingsTargets(
+      [env],
+      [{ id: firstProject, environmentId: firstId }],
+    );
+
+    expect(
+      planMobileScopedSettingsPatch(targets, true, { projectInstructions: "Always run tests." }),
+    ).toEqual([
+      {
+        environmentId: firstId,
+        patch: {
+          projectSettingsOverrides: {
+            [firstProject]: {
+              defaultAutoPull: true,
+              projectInstructions: "Always run tests.",
+            },
+          },
+        },
+      },
+    ]);
+
+    expect(planMobileScopedSettingsClear(targets, ["projectInstructions"])).toEqual([
+      {
+        environmentId: firstId,
+        patch: {
+          projectSettingsOverrides: {
+            [firstProject]: {
+              defaultAutoPull: true,
+            },
+          },
+        },
+      },
+    ]);
+  });
+});

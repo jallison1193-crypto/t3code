@@ -79,7 +79,11 @@ import {
   materializePiT3McpExtension,
   resolvePiLaunchArgs,
 } from "./mcpInjection.ts";
-import { PI_FILE_CHANGE_TOOLS, PI_T3_SERVICE_TIER_COMMAND } from "./mcpExtensionSource.ts";
+import {
+  PI_FILE_CHANGE_TOOLS,
+  PI_T3_PROJECT_INSTRUCTIONS_COMMAND,
+  PI_T3_SERVICE_TIER_COMMAND,
+} from "./mcpExtensionSource.ts";
 import { PI_STANDARD_SERVICE_TIER } from "./modelCapabilities.ts";
 
 export const PI_PROVIDER = ProviderDriverKind.make("pi");
@@ -93,6 +97,7 @@ const STREAM_FLUSH_MS = 50;
 const PI_REQUEST_TIMEOUT_MS = 15_000;
 const PI_SUBAGENT_ASYNC_PREFIX = "PI_SUBAGENT_ASYNC_JSON:";
 const decodePiJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
+const encodePiJsonString = Schema.encodeEffect(Schema.fromJsonString(Schema.String));
 const PI_SESSION_TIMEOUT_MS = 60_000;
 const MAX_EXTENSION_STATUSES = 32;
 const MAX_EXTENSION_STATUS_KEY_LENGTH = 256;
@@ -679,6 +684,7 @@ export const makePiAdapterV2 = Effect.fn("makePiAdapterV2")(function* (
       // Pi reloads extensions (resetting the tier) on paths the adapter cannot see, so a chosen tier
       // is resent every turn; Standard sends a clear only when an earlier tier may still be set.
       let serviceTierMayBeSet = false;
+      let projectInstructionsMayBeSet = false;
       let appliedSessionName: string | null = null;
       const outOfTurnExtensionErrors: Array<PiRpcRecord> = [];
       let lastKnownLeaf: string | null = null;
@@ -3209,6 +3215,28 @@ export const makePiAdapterV2 = Effect.fn("makePiAdapterV2")(function* (
         }
       });
 
+      const applyProjectInstructions = Effect.fnUntraced(function* (
+        projectInstructions: string | undefined,
+      ) {
+        if (projectInstructions !== undefined || projectInstructionsMayBeSet) {
+          projectInstructionsMayBeSet = true;
+          const result = yield* request({
+            type: "prompt",
+            message:
+              projectInstructions === undefined
+                ? `/${PI_T3_PROJECT_INSTRUCTIONS_COMMAND}`
+                : `/${PI_T3_PROJECT_INSTRUCTIONS_COMMAND} ${yield* encodePiJsonString(projectInstructions).pipe(Effect.mapError((cause) => protocolError("Failed to encode project instructions", cause)))}`,
+          });
+          const disposition = recordString(result, "disposition");
+          if (disposition !== undefined && disposition !== "handled") {
+            return yield* protocolError(
+              "T3 Code's Pi extension did not apply project instructions",
+            );
+          }
+          projectInstructionsMayBeSet = projectInstructions !== undefined;
+        }
+      });
+
       const resolvePromptPayload = Effect.fnUntraced(function* (
         text: string,
         attachments: ReadonlyArray<ChatAttachment>,
@@ -3322,7 +3350,10 @@ export const makePiAdapterV2 = Effect.fn("makePiAdapterV2")(function* (
             const continuation =
               turnInput.message.createdBy === "agent" &&
               turnInput.message.creationSource === "provider";
-            if (!continuation) yield* applySelection(turnInput.modelSelection);
+            if (!continuation) {
+              yield* applySelection(turnInput.modelSelection);
+              yield* applyProjectInstructions(turnInput.projectInstructions);
+            }
             if (turnInput.appThread.title !== appliedSessionName) {
               yield* request({
                 type: "set_session_name",

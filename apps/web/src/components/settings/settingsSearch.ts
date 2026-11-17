@@ -284,6 +284,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["name icon emoji image checkout remove delete"],
   },
   {
+    id: "project-instructions",
+    title: msg("Project instructions"),
+    to: "/settings/projects",
+    scope: "project",
+    searchTerms: ["instructions prompt context shared every thread provider"],
+  },
+  {
     id: "default-model",
     title: "Default model",
     to: "/settings/threads",
