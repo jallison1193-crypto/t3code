@@ -87,9 +87,24 @@ describe("searchSettings", () => {
     });
   });
 
-  it("finds project instructions under project settings", () => {
+  it("finds project instructions, memory, and knowledge files under project settings", () => {
     expect(searchSettings("project instructions")[0]).toMatchObject({
       id: "project-instructions",
+      to: "/settings/projects",
+      scope: "project",
+    });
+    expect(searchSettings("project memory")[0]).toMatchObject({
+      id: "project-memory",
+      to: "/settings/projects",
+      scope: "project",
+    });
+    expect(searchSettings("MEMORY.md")[0]).toMatchObject({
+      id: "project-memory",
+      to: "/settings/projects",
+      scope: "project",
+    });
+    expect(searchSettings("knowledge files")[0]).toMatchObject({
+      id: "project-knowledge",
       to: "/settings/projects",
       scope: "project",
     });

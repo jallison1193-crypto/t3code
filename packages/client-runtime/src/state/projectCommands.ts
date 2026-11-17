@@ -115,6 +115,21 @@ export function createProjectEnvironmentAtoms<R, E>(
             : fileMetadata.rememberFile(input.cwd, result, isCurrent),
       ),
   });
+  const memoryGet = createEnvironmentRpcQueryAtomFamily(runtime, {
+    label: "environment-data:projects:memory:get",
+    tag: WS_METHODS.projectsMemoryGet,
+    staleTimeMs: 15_000,
+  });
+  const knowledgeList = createEnvironmentRpcQueryAtomFamily(runtime, {
+    label: "environment-data:projects:knowledge:list",
+    tag: WS_METHODS.projectsKnowledgeList,
+    staleTimeMs: 15_000,
+  });
+  const knowledgeGet = createEnvironmentRpcQueryAtomFamily(runtime, {
+    label: "environment-data:projects:knowledge:get",
+    tag: WS_METHODS.projectsKnowledgeGet,
+    staleTimeMs: 30_000,
+  });
   const projectConcurrency = {
     mode: "serial" as const,
     key: ({ environmentId, input }: { environmentId: string; input: { projectId: string } }) =>
@@ -163,6 +178,9 @@ export function createProjectEnvironmentAtoms<R, E>(
       staleTimeMs: 15_000,
     }),
     readFile,
+    memoryGet,
+    knowledgeList,
+    knowledgeGet,
     optimisticFile: (target: OptimisticProjectFileTarget) =>
       optimisticFileFamily(optimisticProjectFileKey(target)),
     create: createEnvironmentCommand(runtime, {
@@ -242,6 +260,48 @@ export function createProjectEnvironmentAtoms<R, E>(
         Effect.sync(() => {
           for (const path of writtenFilePaths(input, result))
             fileMetadata.refreshPath(environmentId, path, registry);
+        }),
+    }),
+    memorySet: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:projects:memory:set",
+      tag: WS_METHODS.projectsMemorySet,
+      scheduler: projectScheduler,
+      concurrency: projectConcurrency,
+      onSuccess: ({ environmentId, input }, registry) =>
+        Effect.sync(() => {
+          registry.refresh(memoryGet({ environmentId, input: { projectId: input.projectId } }));
+        }),
+    }),
+    knowledgeAdd: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:projects:knowledge:add",
+      tag: WS_METHODS.projectsKnowledgeAdd,
+      scheduler: projectScheduler,
+      concurrency: projectConcurrency,
+      onSuccess: ({ environmentId, input }, registry) =>
+        Effect.sync(() => {
+          registry.refresh(knowledgeList({ environmentId, input: { projectId: input.projectId } }));
+          registry.refresh(
+            knowledgeGet({
+              environmentId,
+              input: { projectId: input.projectId, name: input.name },
+            }),
+          );
+        }),
+    }),
+    knowledgeDelete: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:projects:knowledge:delete",
+      tag: WS_METHODS.projectsKnowledgeDelete,
+      scheduler: projectScheduler,
+      concurrency: projectConcurrency,
+      onSuccess: ({ environmentId, input }, registry) =>
+        Effect.sync(() => {
+          registry.refresh(knowledgeList({ environmentId, input: { projectId: input.projectId } }));
+          registry.refresh(
+            knowledgeGet({
+              environmentId,
+              input: { projectId: input.projectId, name: input.name },
+            }),
+          );
         }),
     }),
   };

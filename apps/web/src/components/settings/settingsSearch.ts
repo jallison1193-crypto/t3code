@@ -291,6 +291,20 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["instructions prompt context shared every thread provider"],
   },
   {
+    id: "project-memory",
+    title: msg("Project memory"),
+    to: "/settings/projects",
+    scope: "project",
+    searchTerms: ["memory MEMORY.md notes persistent context agent markdown"],
+  },
+  {
+    id: "project-knowledge",
+    title: msg("Knowledge files"),
+    to: "/settings/projects",
+    scope: "project",
+    searchTerms: ["knowledge files documents docs pdf markdown upload reference"],
+  },
+  {
     id: "default-model",
     title: "Default model",
     to: "/settings/threads",

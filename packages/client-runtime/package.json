@@ -275,6 +275,10 @@
       "types": "./src/state/preview.ts",
       "default": "./src/state/preview.ts"
     },
+    "./project-memory": {
+      "types": "./src/projectMemory.ts",
+      "default": "./src/projectMemory.ts"
+    },
     "./state/projects": {
       "types": "./src/state/projects.ts",
       "default": "./src/state/projects.ts"

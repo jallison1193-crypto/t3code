@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import {
   AuthFilesystemWriteScope,
+  AuthOrchestrationOperateScope,
   EnvironmentId,
   ProjectId,
   ProjectReadFileError,
@@ -49,6 +50,8 @@ const PROJECT = {
 const makeHarness = Effect.fn("TestProjectCommands.makeHarness")(function* () {
   const metadataRequests: string[][] = [];
   const file = { byteLength: 5 };
+  const memoryState = { exists: false, content: "", updatedAt: null as string | null };
+  const knowledgeFiles = new Map<string, { content: string; updatedAt: string }>();
   const readResponse = {
     wait: Effect.void as Effect.Effect<void, ProjectReadFileError>,
     missing: false,
@@ -84,6 +87,73 @@ const makeHarness = Effect.fn("TestProjectCommands.makeHarness")(function* () {
               file.byteLength = 10;
               return { relativePath: "foo" };
             }),
+          [WS_METHODS.projectsMemoryGet]: (input: { projectId: ProjectId }) =>
+            Effect.sync(() => ({
+              projectId: input.projectId,
+              exists: memoryState.exists,
+              content: memoryState.content,
+              sizeBytes: new TextEncoder().encode(memoryState.content).byteLength,
+              updatedAt: memoryState.updatedAt,
+            })),
+          [WS_METHODS.projectsMemorySet]: (input: { projectId: ProjectId; content: string }) =>
+            Effect.sync(() => {
+              memoryState.exists = true;
+              memoryState.content = input.content;
+              memoryState.updatedAt = "2026-02-01T00:00:00.000Z";
+              return {
+                projectId: input.projectId,
+                sizeBytes: new TextEncoder().encode(input.content).byteLength,
+                updatedAt: memoryState.updatedAt,
+              };
+            }),
+          [WS_METHODS.projectsKnowledgeList]: (input: { projectId: ProjectId }) =>
+            Effect.sync(() => ({
+              projectId: input.projectId,
+              files: [...knowledgeFiles.entries()].map(([name, entry]) => ({
+                name,
+                sizeBytes: new TextEncoder().encode(entry.content).byteLength,
+                updatedAt: entry.updatedAt,
+              })),
+            })),
+          [WS_METHODS.projectsKnowledgeGet]: (input: { projectId: ProjectId; name: string }) =>
+            Effect.sync(() => {
+              const entry = knowledgeFiles.get(input.name) ?? {
+                content: "",
+                updatedAt: "2026-02-01T00:00:00.000Z",
+              };
+              const lines = entry.content.split("\n");
+              return {
+                projectId: input.projectId,
+                name: input.name,
+                content: entry.content,
+                startLine: 1,
+                endLine: lines.length,
+                totalLines: lines.length,
+                sizeBytes: new TextEncoder().encode(entry.content).byteLength,
+                updatedAt: entry.updatedAt,
+              };
+            }),
+          [WS_METHODS.projectsKnowledgeAdd]: (input: {
+            projectId: ProjectId;
+            name: string;
+            content: string;
+          }) =>
+            Effect.sync(() => {
+              const updatedAt = "2026-02-01T00:00:00.000Z";
+              knowledgeFiles.set(input.name, { content: input.content, updatedAt });
+              return {
+                projectId: input.projectId,
+                name: input.name,
+                sizeBytes: new TextEncoder().encode(input.content).byteLength,
+                updatedAt,
+              };
+            }),
+          [WS_METHODS.projectsKnowledgeDelete]: (input: { projectId: ProjectId; name: string }) =>
+            Effect.sync(() => ({
+              projectId: input.projectId,
+              name: input.name,
+              deleted: knowledgeFiles.delete(input.name),
+            })),
           [WS_METHODS.filesystemGetMetadata]: (input: { paths: string[] }) =>
             Effect.sync(() => {
               metadataRequests.push(input.paths);
@@ -136,8 +206,8 @@ const makeHarness = Effect.fn("TestProjectCommands.makeHarness")(function* () {
         sessionMethods: [],
         sessionCookieName: "test",
       },
-      scopes: [AuthFilesystemWriteScope],
-      permissions: [AuthFilesystemWriteScope],
+      scopes: [AuthFilesystemWriteScope, AuthOrchestrationOperateScope],
+      permissions: [AuthFilesystemWriteScope, AuthOrchestrationOperateScope],
     }),
   );
   const openScratch = Effect.promise(() =>
@@ -373,5 +443,112 @@ describe("openScratch", () => {
       const result = yield* Fiber.join(opening);
       expect(result).toMatchObject({ _tag: "Success", value: PROJECT });
     }),
+  );
+});
+
+describe("project memory and knowledge RPCs", () => {
+  it.effect("refreshes memoryGet after memorySet succeeds", () =>
+    Effect.gen(function* () {
+      const { registry, commands } = yield* makeHarness();
+      const memoryAtom = commands.memoryGet({
+        environmentId: ENVIRONMENT_ID,
+        input: { projectId: PROJECT_ID },
+      });
+      const initial = yield* AtomRegistry.getResult(registry, memoryAtom, {
+        suspendOnWaiting: true,
+      });
+      expect(initial).toMatchObject({ exists: false, content: "" });
+
+      const saved = yield* Effect.promise(() =>
+        commands.memorySet.run(registry, {
+          environmentId: ENVIRONMENT_ID,
+          input: { projectId: PROJECT_ID, content: "# Notes\nRemember tests." },
+        }),
+      );
+      expect(saved).toMatchObject({ _tag: "Success" });
+
+      const refreshed = yield* AtomRegistry.getResult(registry, memoryAtom, {
+        suspendOnWaiting: true,
+      });
+      expect(refreshed).toMatchObject({
+        exists: true,
+        content: "# Notes\nRemember tests.",
+      });
+    }),
+  );
+
+  it.effect("refreshes knowledgeList and knowledgeGet after add and delete", () =>
+    Effect.gen(function* () {
+      const { registry, commands } = yield* makeHarness();
+      const listAtom = commands.knowledgeList({
+        environmentId: ENVIRONMENT_ID,
+        input: { projectId: PROJECT_ID },
+      });
+      const detailAtom = commands.knowledgeGet({
+        environmentId: ENVIRONMENT_ID,
+        input: { projectId: PROJECT_ID, name: "guide.md" },
+      });
+
+      expect(yield* AtomRegistry.getResult(registry, listAtom, { suspendOnWaiting: true })).toEqual(
+        { projectId: PROJECT_ID, files: [] },
+      );
+
+      const added = yield* Effect.promise(() =>
+        commands.knowledgeAdd.run(registry, {
+          environmentId: ENVIRONMENT_ID,
+          input: { projectId: PROJECT_ID, name: "guide.md", content: "# Guide" },
+        }),
+      );
+      expect(added).toMatchObject({ _tag: "Success" });
+
+      expect(
+        yield* AtomRegistry.getResult(registry, listAtom, { suspendOnWaiting: true }),
+      ).toMatchObject({
+        files: [{ name: "guide.md" }],
+      });
+      expect(
+        yield* AtomRegistry.getResult(registry, detailAtom, { suspendOnWaiting: true }),
+      ).toMatchObject({
+        name: "guide.md",
+        content: "# Guide",
+      });
+
+      const removed = yield* Effect.promise(() =>
+        commands.knowledgeDelete.run(registry, {
+          environmentId: ENVIRONMENT_ID,
+          input: { projectId: PROJECT_ID, name: "guide.md" },
+        }),
+      );
+      expect(removed).toMatchObject({ _tag: "Success", value: { deleted: true } });
+      expect(yield* AtomRegistry.getResult(registry, listAtom, { suspendOnWaiting: true })).toEqual(
+        { projectId: PROJECT_ID, files: [] },
+      );
+    }),
+  );
+
+  it.effect(
+    "gates memorySet, knowledgeAdd, and knowledgeDelete on AuthOrchestrationOperateScope",
+    () =>
+      Effect.gen(function* () {
+        const { registry, commands } = yield* makeHarness();
+        expect(registry.get(commands.memorySet.permissionAtom(ENVIRONMENT_ID))).toBe(true);
+        registry.set(
+          sessions(ENVIRONMENT_ID),
+          AsyncResult.success({
+            authenticated: true,
+            auth: {
+              policy: "remote-reachable" as const,
+              bootstrapMethods: [],
+              sessionMethods: [],
+              sessionCookieName: "test",
+            },
+            scopes: [],
+            permissions: [],
+          }),
+        );
+        expect(registry.get(commands.memorySet.permissionAtom(ENVIRONMENT_ID))).toBe(false);
+        expect(registry.get(commands.knowledgeAdd.permissionAtom(ENVIRONMENT_ID))).toBe(false);
+        expect(registry.get(commands.knowledgeDelete.permissionAtom(ENVIRONMENT_ID))).toBe(false);
+      }),
   );
 });

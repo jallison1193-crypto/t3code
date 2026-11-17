@@ -45,6 +45,8 @@ import {
   ProjectInstructionsSettings,
   type ProjectInstructionsSource,
 } from "./components/ProjectInstructionsSettings";
+import { ProjectKnowledgeSettings } from "./components/ProjectKnowledgeSettings";
+import { ProjectMemorySettings } from "./components/ProjectMemorySettings";
 import {
   managedSettingReason,
   planMobileScopedSettingsClear,
@@ -466,6 +468,25 @@ function ProjectOverviewContent(props: {
         onSave={(value) => runInstructionsAction({ kind: "save", value })}
         onClear={() => runInstructionsAction({ kind: "clear" })}
       />
+
+      {props.members.length === 1 && props.members[0] ? (
+        <>
+          <ProjectMemorySettings
+            environmentId={props.members[0].environmentId}
+            projectId={props.members[0].id}
+            connected={props.connectedTargets.some(
+              (target) => target.environmentId === props.members[0]!.environmentId,
+            )}
+          />
+          <ProjectKnowledgeSettings
+            environmentId={props.members[0].environmentId}
+            projectId={props.members[0].id}
+            connected={props.connectedTargets.some(
+              (target) => target.environmentId === props.members[0]!.environmentId,
+            )}
+          />
+        </>
+      ) : null}
 
       {canOrganize ? (
         <SettingsSection title="Organize">

@@ -52,6 +52,8 @@ import {
 import { ProjectActionsSettings } from "./ProjectActionsSettings";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import { ProjectInstructionsSettings } from "./ProjectInstructionsSettings";
+import { ProjectKnowledgeSettings } from "./ProjectKnowledgeSettings";
+import { ProjectMemorySettings } from "./ProjectMemorySettings";
 import {
   defaultProjectIcon,
   hasDefaultProjectIcon,
@@ -619,6 +621,8 @@ function ProjectDetail({
             }
           />
           <ProjectInstructionsSettings />
+          <ProjectMemorySettings />
+          <ProjectKnowledgeSettings />
           {canOrganize ? (
             <>
               <SettingsRow

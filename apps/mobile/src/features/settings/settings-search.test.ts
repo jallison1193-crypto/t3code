@@ -64,6 +64,13 @@ describe("filterSettingsSections", () => {
     expect(visible(query)).toEqual(expected);
   });
 
+  it("matches project memory and knowledge keywords for SettingsProjectOverview", () => {
+    const projectSections = [{ rows: [{ id: "SettingsProjectOverview", label: "Project" }] }];
+    expect(filterSettingsSections(projectSections, "project memory")).toHaveLength(1);
+    expect(filterSettingsSections(projectSections, "MEMORY.md")).toHaveLength(1);
+    expect(filterSettingsSections(projectSections, "knowledge files")).toHaveLength(1);
+  });
+
   it("drops sections that start empty", () => {
     expect(filterSettingsSections([{ rows: [] }, ...SECTIONS], "").length).toBe(SECTIONS.length);
   });
