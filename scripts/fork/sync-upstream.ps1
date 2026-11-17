@@ -6,7 +6,7 @@ param(
   [string]$WorktreePath = "C:\Users\jalli\dev\t3code-fork-sync",
   [string]$Branch = "fork/main",
   [string]$UpstreamRemote = "origin",
-  [string]$ForkRemote = "fork",
+  [string]$ForkRemote = "myfork",
   [switch]$NoPush
 )
 
