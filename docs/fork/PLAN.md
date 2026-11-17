@@ -48,6 +48,16 @@ Text delivered to every thread in a project, any provider.
 - Replace the redirect in `apps/web/src/routes/projects.$projectKey.tsx` with `ProjectHomeView.tsx`: coordinator, threads, instructions, memory, files. Mobile equivalent.
 - "Since you were away" digest: what finished, what waits on the user, what failed.
 
+### Sidebar and color (with M4)
+
+Josh's pain points: hard to organize, looks plain, projects feel buried.
+
+- Projects-first sidebar mode (toggle; classic stays): each project is a colored group with its coordinator pinned on top, then active threads, then a collapsed "older" fold. Loose threads in their own section below.
+- Project color everywhere: reuse the existing `ProjectIconColor` palette (`packages/contracts/src/project.ts`); tint the group header, a thin rail on its thread rows, and the chat header. No new schema.
+- Organize: group threads inside a project by state (needs you, running, done), quick project switcher.
+- Design pass first: references from the vault's look-first list (app UI: Mobbin, Refero, Component Gallery), then a mockup for Josh before building.
+- Sidebar.tsx is a hot file: put the new mode in new `apps/web/src/components/sidebar/` files behind a small switch.
+
 ## Milestone 5+: Mods
 
 Phase 1 declarative `t3mod.json`: themes, skills, slash commands, instructions, MCP servers (approval-gated, proxied through T3's `/mcp`), hooks (approval-gated), panels rendered in the existing MCP Apps sandbox (`McpAppFrame.tsx` / `McpAppWebView.tsx`). User mods in T3 home; repo mods in `.t3/mods/`, disabled until approved. Share as folder or git repo.
