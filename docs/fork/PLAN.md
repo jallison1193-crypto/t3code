@@ -26,11 +26,16 @@ Text delivered to every thread in a project, any provider.
 5. UI: textarea in `ProjectSettingsPanel.tsx` (web) and mobile project settings; i18n keys.
 6. Tests: formatter unit test; one adapter delivery test per delivery style.
 
-## Milestone 2: Project Memory
+## Upstream sync (before M2)
+
+- Daily scheduled job: fetch `origin` (upstream), rebase or merge the fork branches, run `vp run check:changed`, report conflicts and failures. Keeps drift small given upstream churn.
+
+## Milestone 2: Project Memory and Knowledge
 
 - File at `<T3 home>/userdata/projects/<projectId>/MEMORY.md` (shared across worktrees, never dirties git).
 - New MCP toolkit `project_memory` (`read`, `append`, `replace_section`) registered in `McpHttpServer.ts`; HTTP/RPC route for UI editing.
 - Inject a short pointer plus capped head of memory alongside project instructions.
+- Knowledge files: docs, PDFs and notes added to `<T3 home>/userdata/projects/<projectId>/knowledge/`, searchable by any provider through the same toolkit (`knowledge_search`, `knowledge_read`). Not injected wholesale; the instructions point to the tools.
 
 ## Milestone 3: Coordinator thread
 
@@ -41,13 +46,20 @@ Text delivered to every thread in a project, any provider.
 ## Milestone 4: Project home view
 
 - Replace the redirect in `apps/web/src/routes/projects.$projectKey.tsx` with `ProjectHomeView.tsx`: coordinator, threads, instructions, memory, files. Mobile equivalent.
+- "Since you were away" digest: what finished, what waits on the user, what failed.
 
 ## Milestone 5+: Mods
 
 Phase 1 declarative `t3mod.json`: themes, skills, slash commands, instructions, MCP servers (approval-gated, proxied through T3's `/mcp`), hooks (approval-gated), panels rendered in the existing MCP Apps sandbox (`McpAppFrame.tsx` / `McpAppWebView.tsx`). User mods in T3 home; repo mods in `.t3/mods/`, disabled until approved. Share as folder or git repo.
 Phase 2: code mods in an isolated worker process; persistent panels.
+First real mod: Obsidian vault sync (project memory and status to the vault's project notes).
+Later: project templates (instructions, memory skeleton, scripts, mods).
 
-## Blockers
+## Prompt recipes, not features
 
-- Toolchain: repo needs Node 26.13.1, pnpm 12.14.0 and `vp`. Machine has Node 24.21.0, no pnpm, no vp.
-- GitHub fork not created yet (local clone only).
+Model roles per project (who plans, builds, reviews) and cross-provider review need no code: write them in the project instructions and let the coordinator use `delegate_task`. Ship examples in `docs/fork/recipes/` instead of building them in.
+
+## Status
+
+- Toolchain solved: Vite+ `vp` provides Node 26.13.1 and pnpm 12.14.0.
+- Fork: `jallison1193-crypto/t3code`, remote `fork`. M1 pushed on `fork/m1-project-instructions`.
