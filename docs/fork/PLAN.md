@@ -71,10 +71,30 @@ Josh's pain points: hard to organize, looks plain, projects feel buried.
   - A collapsed project row still shows a dot or count when something inside needs the user.
   - A "Needs you" section at the top gathers waiting threads from every project, so the project layout never hides T3's cross-project triage.
   - Pinned section mixes projects and threads. Loose threads go in their own section below.
-- Project color everywhere: reuse the existing `ProjectIconColor` palette (`packages/contracts/src/project.ts`); tint the group header, a thin rail on its thread rows, and the chat header. No new schema.
+- Project color: through the project icon only (see Calm default look). No new schema.
 - Organize: group threads inside a project by state (needs you, running, done), quick project switcher.
 - Design pass done 2026-11-17; Josh approved the mockup. The wordmark reads T3ther (web sidebar, mobile header). The project home header names the view ("Coordinator", "Threads"), not the project, since the sidebar already shows it.
 - Sidebar.tsx is a hot file: put the new mode in new `apps/web/src/components/sidebar/` files behind a small switch.
+
+### Calm default look (decided 2026-11-18)
+
+Compared with Linear, ChatGPT and platform guidance: color stays small. A project's color shows only through its project icon, and that icon appears wherever a thread shows outside its project's group (Needs you, Pinned, other threads, chat header). No stripes, tinted rows or colored backgrounds. Strong color is for status only. Users who want more restyle through mods.
+
+## Milestone 4b: Work mode
+
+Target: Antigravity's Knowledge Work mode, ChatGPT Work and Claude Cowork, without splitting the app. Same agents, threads and projects in both modes.
+
+- Mode: Code (today's T3) or Work. Work hides coding chrome (diffs, terminal, branch and worktree controls, checkpoints) and opens on the projects sidebar and project home. A Work project can be any folder, not only a repo.
+- Each thread records the mode it was started in. Threads of both modes live in the same projects and open from either mode.
+- Sidebar tabs at the top: **All | Code | Work | Bots** (Bots appears once M6 lands). All is the default. Projects filter by the threads they hold, not by a project-level mode. Anything waiting on the user stays in Needs you on every tab.
+- Custom sections: user-named folders ("Taxes", "Client work") that hold threads, saved on the server like thread order so they follow the user across devices.
+- Library (artifacts): one place for visual replies (HTML pages) and files threads produced, globally and per project, following the same All/Code/Work filter. Open full screen, jump to the source thread, pin, rename; "change this" continues in the source thread. Prominent in Work mode, one click away in Code mode.
+- "Since you were away" digest and Suggested threads (from M4) land here.
+- Candidates: personal memory shared across projects and providers; one connectors page (Gmail, Calendar, Drive) set up once for every provider.
+
+## Mobile
+
+On hold since 2026-11-18. Phones use the regular T3 Code app connected to a T3ther server, so server and contract changes stay additive and fork features degrade quietly there. The M4 mobile Threads screen stays but gets no more work.
 
 ## Milestone 5+: Mods
 
@@ -90,6 +110,23 @@ Goal (Josh, 2026-11-17): ask an agent for a change and get a working mod. "Make 
 - First real mods: Obsidian vault sync (project memory and status to the vault's project notes), then one agent-built panel as the end-to-end test of authoring.
 - Later: project templates (instructions, memory skeleton, scripts, mods).
 
+## Milestone 6: Bots
+
+Target: always-on agents like Grok Bot, OpenAI dots and Claude Duet, but on the user's own subscriptions and hardware.
+
+- A bot is a named, long-lived agent: goal, model, memory, triggers (schedule, webhook, message), and a home environment (the laptop or a linked VPS as its "own computer").
+- Bots live in their own sidebar tab; their working threads stay inside the bot. Approvals and questions still reach Needs you.
+- Daily summary; approval gates for sending, paying and deleting, since bots read untrusted email and web pages.
+- Builds on existing pieces: scheduled tasks, webhook automations, coordinator completion wakes, project memory, approvals, phone notifications, linked environments. Chat-app bridges (Telegram, iMessage, Slack) ship as mods.
+- Open questions: an unattended signed-in browser for bots, and per-bot usage limits.
+
+## Going public
+
+Asked for 2026-11-18; do it when the fork goes public, and ask Josh before the repo rename or making anything public.
+
+- A polished GitHub page: banner and name, one-line pitch, screenshots or a short GIF, what T3ther adds over T3 Code, every provider supported, the 9 UI languages, install for desktop, web and server, links to docs, contributing, MIT license with T3 Tools' copyright kept, and a clear "unofficial fork of T3 Code" note.
+- Donations: `.github/FUNDING.yml` shows GitHub's Sponsor button. Use GitHub Sponsors and Buy Me a Coffee; a bio-site link can go under `custom`. Skip Cash App (it shows a personal payment handle and looks less trustworthy to strangers).
+
 ## Prompt recipes, not features
 
 Model roles per project (who plans, builds, reviews) and cross-provider review need no code: write them in the project instructions and let the coordinator use `delegate_task`. Ship examples in `docs/fork/recipes/` instead of building them in.
@@ -100,5 +137,6 @@ Model roles per project (who plans, builds, reviews) and cross-provider review n
 - Fork: `jallison1193-crypto/t3code`, remote `myfork`. Integration branch `fork/main`, synced daily from upstream by `scripts/fork/sync-upstream.ps1`.
 - M1, M2 and M3 done.
 - M4 core done (2026-11-18): project home opens the coordinator, threads open beside it, Threads board, settings tabs, opt-in projects-first sidebar, mobile Threads screen. Mobile was checked by tests only; no emulator on the laptop yet.
-- M4 still open: project color everywhere, Suggested threads, Library, "Since you were away" digest. Next: M5 mods.
+- M4 project icons outside their group done (calm look). Suggested threads, Library and the digest moved into M4b.
+- Order: M4b Work mode, then M5 mods, then M6 bots. Mobile on hold.
 - Working name: **T3ther** (unofficial fork of T3 Code). Repo rename and README disclaimer come when the fork goes public.

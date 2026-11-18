@@ -1,4 +1,9 @@
-import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import {
+  scopedProjectKey,
+  scopedThreadKey,
+  scopeProjectRef,
+  scopeThreadRef,
+} from "@t3tools/client-runtime/environment";
 import {
   projectThreadBoardColumn,
   type ProjectThreadBoardColumn,
@@ -13,7 +18,7 @@ import { useShownThreadRouteTarget } from "~/hooks/useShownThreadRouteTarget";
 import { cn } from "~/lib/utils";
 import { useQuietThreadShells } from "~/state/entities";
 import { useEnvironments } from "~/state/environments";
-import { ProjectFavicon } from "../ProjectFavicon";
+import { ProjectFavicon, type ProjectFaviconProject } from "../ProjectFavicon";
 import { useSettingsProjectGroups } from "../settings/useSettingsProjectGroups";
 import {
   SidebarContent,
@@ -58,11 +63,13 @@ function SidebarSectionHeading({ label }: { readonly label: string }) {
 
 function ThreadNavRow({
   thread,
+  project = null,
   isActive,
   nested = false,
   onSelect,
 }: {
   readonly thread: ProjectsSidebarThread;
+  readonly project?: ProjectFaviconProject | null;
   readonly isActive: boolean;
   readonly nested?: boolean;
   readonly onSelect: (thread: ProjectsSidebarThread) => void;
@@ -75,6 +82,7 @@ function ThreadNavRow({
       onClick={() => onSelect(thread)}
     >
       <span aria-hidden className={cn("size-2 shrink-0 rounded-full", THREAD_DOT_CLASS[column])} />
+      {project ? <ProjectFavicon project={project} className="size-3.5 shrink-0" /> : null}
       <span className="min-w-0 flex-1 truncate">{thread.title}</span>
     </SidebarMenuButton>
   );
@@ -112,6 +120,22 @@ export function ProjectsSidebar() {
     getServerSettings: (environmentId) =>
       presentationById.get(environmentId)?.serverConfig?.settings,
   });
+
+  const projectByMemberKey = new Map<string, ProjectFaviconProject>();
+  for (const group of projectGroups) {
+    if (group.isScratch) continue;
+    for (const member of group.memberProjects) {
+      if (member.isScratch) continue;
+      projectByMemberKey.set(
+        scopedProjectKey(scopeProjectRef(member.environmentId, member.id)),
+        member,
+      );
+    }
+  }
+  const projectForThread = (thread: ProjectsSidebarThread) =>
+    projectByMemberKey.get(
+      scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
+    ) ?? null;
 
   const openThread = (thread: ProjectsSidebarThread) => {
     if (isMobile) setOpenMobile(false);
@@ -176,6 +200,7 @@ export function ProjectsSidebar() {
                 <ThreadNavRow
                   key={scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))}
                   thread={thread}
+                  project={projectForThread(thread)}
                   isActive={
                     activeThreadKey ===
                     scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))
@@ -286,6 +311,7 @@ export function ProjectsSidebar() {
                 <ThreadNavRow
                   key={scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))}
                   thread={thread}
+                  project={projectForThread(thread)}
                   isActive={
                     activeThreadKey ===
                     scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))
@@ -305,6 +331,7 @@ export function ProjectsSidebar() {
                 <ThreadNavRow
                   key={scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))}
                   thread={thread}
+                  project={projectForThread(thread)}
                   isActive={
                     activeThreadKey ===
                     scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))

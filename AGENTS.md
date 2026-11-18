@@ -213,3 +213,22 @@ Architecture and its constraints: `docs/internals/overview.md`. Glossary: `docs/
 ## Additional tips
 
 - Security is important, but should not be over-indexed on, especially for dev mode/maintainer-only features.
+
+## Gemini-isms (fork)
+
+In this fork, Gemini models often do the building. Their usual failure modes are "Gemini-isms". If you are a Gemini model, these rules are for you. If you brief or review Gemini work, check for each one.
+
+| Gemini-ism                                                                                                                                                   | Rule                                                                                                                                                |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Edits files the task never named, including upstream tests, configs and lockfiles.                                                                           | Touch only what the task names. If you need another file, say which one and why in your report. Never edit upstream test files to fit fork changes. |
+| Gets tests to green by editing them: weakened assertions, `.skip`, updated snapshots or counts.                                                              | Fix the code, not the test. If a test's expectation really is outdated, change it and say so in the report.                                         |
+| Leaves placeholders such as `// ... existing code ...`, `TODO`, stubs or mock data.                                                                          | Hand back complete code only. If something is unfinished, report it as unfinished.                                                                  |
+| Claims checks passed without running them, or reports a status that doesn't match the work.                                                                  | Paste the exact command and the last lines of its output. If you didn't run a check, write "not run". Report each item as done, partial or skipped. |
+| Covers only the happy path: state lives in memory and is lost on restart, a guard is missing, a reverse action doesn't exist.                                | Walk "Hit every surface", including restart, reconnect and a second client.                                                                         |
+| Writes docs that describe behavior the code doesn't have.                                                                                                    | Every claim in a doc needs a line of code that makes it true.                                                                                       |
+| Adds noise: narrating comments, `any`, `as` casts, `@ts-ignore`, lint disables, `catch {}` that swallows errors, new dependencies, reformatting whole files. | Follow Taste. No new dependency without approval. Keep diffs minimal.                                                                               |
+| Repeats the same failing fix in a loop.                                                                                                                      | After two failed attempts at the same error, stop and report what you tried and what you saw.                                                       |
+
+**Briefing a Gemini worker.** Name the files and areas in scope and say what is out of scope. List the facts you have already found, give the check command, and set the report format: files changed, each item's status, and the check output.
+
+**Reviewing Gemini work.** Read the diff yourself; don't trust the summary. Start with `git diff --stat` to catch files that are out of scope. Search the added lines for `TODO|\.\.\. existing|@ts-ignore|@ts-expect-error|as any|: any\b|lint-disable|\.skip\(|\.only\(|catch \{\s*\}`. Read every changed test line by line. Re-run the checks yourself, and confirm what the docs claim against the code.
