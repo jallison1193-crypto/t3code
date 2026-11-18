@@ -215,8 +215,7 @@ describe("CoordinatorSettings", () => {
     expect(page.getByRole("button", { name: "Clear" }).query()).toBeNull();
 
     const textarea = page.getByLabelText("Coordinator instructions");
-    await userEvent.click(textarea);
-    await userEvent.type(textarea, "  Delegate worker threads before merging.  ");
+    await userEvent.fill(textarea, "  Delegate worker threads before merging.  ");
     (document.activeElement as HTMLElement | null)?.blur();
 
     await vi.waitFor(() => {

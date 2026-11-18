@@ -77,6 +77,7 @@ import type { RunStopPresentation } from "@t3tools/client-runtime/state/thread-e
 import { Atom } from "effect/reactivity";
 import { environmentThreadDetails } from "../../state/threads";
 import { resolveThreadOpenRoute } from "../../lib/sideChatPane";
+import { openThreadBesideCoordinator } from "../projectHome/openThreadBeside";
 import type { useLocalDispatchState } from "./useLocalDispatchState";
 const RELATED_THREAD_SHELL_WAIT_MS = 1_000;
 const NO_RUN_STOP_ATOM = Atom.make<RunStopPresentation | null>(null).pipe(
@@ -493,6 +494,12 @@ export function useThreadLifecycle(input: ThreadLifecycleInput) {
     const shell = readThreadShell(threadRef);
     if (shell === null ? !shellOmitsChildren && isEnvironmentLive() : shell.deletedAt != null) {
       toastManager.add({ type: "info", title: "This thread is no longer available" });
+      return;
+    }
+    if (
+      activeThreadRef &&
+      openThreadBesideCoordinator(activeThreadRef, activeThreadShell?.projectId, threadRef, shell)
+    ) {
       return;
     }
     const routeRef = resolveThreadOpenRoute(threadRef, shell);

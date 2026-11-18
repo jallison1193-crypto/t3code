@@ -72,6 +72,7 @@ export function useRightPanelSurfaceClose(input: {
     }
     if (
       surface.kind === "side-chat" &&
+      surface.variant !== "thread" &&
       readEnvironmentScope(ref.environmentId, AuthOrchestrationOperateScope) &&
       // A live shell without the side chat means it is already deleted.
       !(

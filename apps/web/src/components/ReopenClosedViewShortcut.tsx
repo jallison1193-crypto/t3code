@@ -112,6 +112,7 @@ export function ReopenClosedViewShortcut() {
         sideChatExists:
           entry.kind !== "panel-tab" ||
           entry.surface.kind !== "side-chat" ||
+          entry.surface.variant === "thread" ||
           readThreadShell(scopeThreadRef(ref.environmentId, entry.surface.threadId)) !== null,
         shellLive:
           appAtomRegistry.get(environmentShell.stateValueAtom(ref.environmentId)).status === "live",

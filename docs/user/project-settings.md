@@ -303,4 +303,6 @@ To designate one, open the thread's context menu and choose **Make project coord
 
 Add guidance in **Settings → Projects → Coordinator instructions**; only the coordinator thread receives it. When the coordinator launches a thread with `notifyOnFinish`, T3 Code sends the coordinator a message once that thread's run ends, so it can pick up the next step without you checking in.
 
+Opening a project's home (**Open project home** in the command palette) goes to its coordinator, and creates one the first time if the project has none. In the coordinator, clicking a thread it launched or one of its subagents opens that thread beside the conversation, where you can follow and steer it. Use **Open full size** in that pane to switch to the thread.
+
 To remove the designation, choose **Remove as coordinator** from the thread's menu or click **Clear** next to **Coordinator thread** in **Settings → Projects**.

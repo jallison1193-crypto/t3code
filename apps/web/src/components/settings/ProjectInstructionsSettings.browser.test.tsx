@@ -185,8 +185,7 @@ describe("ProjectInstructionsSettings", () => {
       .toBeVisible();
 
     const textarea = page.getByLabelText("Project instructions");
-    await userEvent.click(textarea);
-    await userEvent.type(textarea, "  Always run typecheck before finishing.  ");
+    await userEvent.fill(textarea, "  Always run typecheck before finishing.  ");
     (document.activeElement as HTMLElement | null)?.blur();
 
     await vi.waitFor(() => {
@@ -212,9 +211,7 @@ describe("ProjectInstructionsSettings", () => {
 
     const textarea = page.getByLabelText("Project instructions");
     await expect.element(textarea).toHaveValue("Follow strict TypeScript rules.");
-    await userEvent.click(textarea);
-    await userEvent.clear(textarea);
-    await userEvent.type(textarea, "   ");
+    await userEvent.fill(textarea, "   ");
     (document.activeElement as HTMLElement | null)?.blur();
 
     await vi.waitFor(() => {

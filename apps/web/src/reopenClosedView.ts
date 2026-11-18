@@ -162,7 +162,7 @@ export async function reopenClosedView(
       panels.openIssue(ref, surface);
       break;
     case "side-chat":
-      panels.openSideChat(ref, surface.threadId);
+      panels.openSideChat(ref, surface.threadId, surface.variant);
       break;
     default:
       panels.open(ref, surface.kind);

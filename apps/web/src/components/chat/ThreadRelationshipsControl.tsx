@@ -83,6 +83,7 @@ import { AgentElapsed } from "./AgentElapsed";
 import { ThreadRelationshipIcon, threadRelationshipStatusLabel } from "./ThreadRelationshipIcon";
 import { ThreadLineageWorkflowRow } from "./ThreadLineageWorkflowRow";
 import { resolveThreadOpenRoute } from "../../lib/sideChatPane";
+import { openThreadBesideCoordinator } from "../projectHome/openThreadBeside";
 
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -638,10 +639,10 @@ export function ThreadRelationshipsPanel(props: {
 
   // Idle children can be omitted from the shell; opening one loads its own detail.
   const openThread = (threadId: ThreadId) => {
-    const routeRef = resolveThreadOpenRoute(
-      scopeThreadRef(props.environmentId, threadId),
-      graph.nodes.get(threadId)?.thread ?? null,
-    );
+    const targetRef = scopeThreadRef(props.environmentId, threadId);
+    const target = graph.nodes.get(threadId)?.thread ?? null;
+    if (openThreadBesideCoordinator(ref, currentThread?.projectId, targetRef, target)) return;
+    const routeRef = resolveThreadOpenRoute(targetRef, target);
     if (routeRef.threadId === ref.threadId) return;
     void navigate({
       to: "/$environmentId/$threadId",

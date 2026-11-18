@@ -12,6 +12,7 @@ import type {
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { lazy, Suspense } from "react";
 import SideChatPane from "./SideChatPane";
+import ThreadBesidePane from "../projectHome/ThreadBesidePane";
 import type { ComposerImageAttachment, DraftId } from "../../composerDraftStore";
 import type { ShortcutMatchContext } from "../../keybindings";
 import type { SideChatParentPanel } from "../../lib/sideChatPane";
@@ -212,7 +213,15 @@ export function RightPanelSurfaceContent(props: {
       return <ThreadPullRequestsPanel threadRef={threadRef} />;
     case "side-chat":
       // Not lazy: revealing a suspended tiptap editor tears down its view and crashes the composer.
-      return (
+      return surface.variant === "thread" ? (
+        <ThreadBesidePane
+          key={surface.id}
+          parentRef={threadRef}
+          threadId={surface.threadId}
+          parentPanel={props.sideChatParentPanel}
+          onClose={() => onCloseSurface(surface)}
+        />
+      ) : (
         <SideChatPane
           key={surface.id}
           parentRef={threadRef}
