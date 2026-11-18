@@ -38,6 +38,7 @@ import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
+import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   SettingResetButton,
@@ -59,8 +60,10 @@ import {
   defaultProjectIcon,
   hasDefaultProjectIcon,
   projectGroupTitleNeedsUpdate,
+  projectSettingsTabForAnchor,
   SCRATCH_PROJECT_TITLE,
   scopeProjectSettingsGroup,
+  type ProjectSettingsTab,
 } from "./ProjectSettingsPanel.logic";
 import { useSettingsProjectGroups } from "./useSettingsProjectGroups";
 import { readUnloadedThreadCount } from "../../state/olderSettledShelf";
@@ -263,6 +266,15 @@ function ProjectDetail({
   hasOtherMembers: boolean;
 }) {
   const navigate = useNavigate({ from: "/settings" });
+  const hash = useLocation({ select: (location) => location.hash });
+  const anchorTab = projectSettingsTabForAnchor(hash);
+  const [activeTab, setActiveTab] = useState<ProjectSettingsTab>(anchorTab ?? "general");
+  // The page clears the hash once it scrolls to the row, so the tab it opened has to stick.
+  const [seenHash, setSeenHash] = useState(hash);
+  if (hash !== seenHash) {
+    setSeenHash(hash);
+    if (anchorTab !== null) setActiveTab(anchorTab);
+  }
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const { environments } = useEnvironments();
   const environmentById = new Map(
@@ -447,7 +459,7 @@ function ProjectDetail({
     </div>
   );
   const checkoutChoices = (
-    <SettingsSection title="Checkouts">
+    <SettingsSection id="project-checkouts" title="Checkouts">
       <p className="px-3 py-2.5 text-xs text-muted-foreground sm:px-4">
         Grouping rule decides how each checkout joins project groups in the sidebar. Changing it can
         move a checkout to a different project.
@@ -527,187 +539,213 @@ function ProjectDetail({
             Can't find a setting? Keep this project picked above and hop to any other settings page.
           </AlertDescription>
         </Alert>
-        <SettingsSection id="project-overview" title="Project" hideTitle>
-          {!canEditGroup ? (
-            <p className="px-3 py-2 text-sm text-muted-foreground sm:px-4">
-              {group.memberProjects.length > 1
-                ? "Shared settings require permission to change every checkout in this group."
-                : "This connection cannot change this project."}
-            </p>
-          ) : null}
-          <SettingsRow
-            title="Name"
-            description="The shared name for this project group in the sidebar and thread lists."
-            resetAction={
-              canResetScratchTitle ? (
-                <SettingResetButton
-                  label="project name"
-                  disabled={!canEditGroup}
-                  onClick={() =>
-                    void updateAllMembers(
-                      { title: SCRATCH_PROJECT_TITLE },
-                      "Failed to rename project",
-                    )
-                  }
-                />
-              ) : null
-            }
-            control={
-              <Input
-                key={`${group.projectKey}:${group.displayName}`}
-                size="sm"
-                className="w-full sm:w-64"
-                aria-label="Project name"
-                disabled={!canEditGroup}
-                defaultValue={group.displayName}
-                onChange={() => {
-                  projectNameEditedRef.current = true;
-                }}
-                onBlur={(event) => {
-                  const wasEdited = projectNameEditedRef.current;
-                  projectNameEditedRef.current = false;
-                  void renameGroup(event.currentTarget.value, wasEdited);
-                }}
-                onKeyDown={(event) => {
-                  if (event.nativeEvent.isComposing || event.keyCode === 229) return;
-                  if (event.key === "Enter") event.currentTarget.blur();
-                }}
-              />
-            }
-          />
-          <SettingsRow
-            title="Project icon"
-            description={
-              projectIcon?.kind === "lucide"
-                ? `${projectIcon.name} · ${projectIcon.color}`
-                : projectIcon?.kind === "monogram"
-                  ? `${projectIcon.text} · ${projectIcon.color}`
-                  : projectIcon?.kind === "emoji"
-                    ? projectIcon.emoji
-                    : (faviconPath ?? "Automatic")
-            }
-            resetAction={
-              group.memberProjects.some((member) => !hasDefaultProjectIcon(member)) ? (
-                <SettingResetButton
-                  label="project icon"
-                  disabled={isSavingFavicon || !canEditGroup}
-                  onClick={() => void setProjectIcon(defaultProjectIcon)}
-                />
-              ) : null
-            }
-            control={
-              <div className="flex items-center gap-2">
-                <ProjectFavicon project={group} className="size-6" />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  type="button"
-                  aria-label="Choose a project icon"
-                  disabled={isSavingFavicon || !canEditGroup}
-                  onClick={() => setIconPickerOpen(true)}
-                >
-                  Choose icon
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  type="button"
-                  aria-label="Choose a project icon file"
-                  disabled={isSavingFavicon || !canEditGroup}
-                  onClick={() => setFaviconPickerOpen(true)}
-                >
-                  Choose file
-                </Button>
-              </div>
-            }
-          />
-          <ProjectInstructionsSettings />
-          <CoordinatorSettings />
-          <ProjectMemorySettings />
-          <ProjectKnowledgeSettings />
-          {canOrganize ? (
-            <>
+        <ToggleGroup
+          aria-label="Project settings section"
+          variant="segmented"
+          size="segmented"
+          value={[activeTab]}
+          onValueChange={(next) => {
+            const tab = next.find((value): value is ProjectSettingsTab => value !== activeTab);
+            if (tab) setActiveTab(tab);
+          }}
+        >
+          <Toggle value="general">General</Toggle>
+          <Toggle value="memory">Memory</Toggle>
+          <Toggle value="environment">Environment</Toggle>
+        </ToggleGroup>
+        {activeTab === "general" ? (
+          <>
+            <SettingsSection id="project-overview" title="Project" hideTitle>
+              {!canEditGroup ? (
+                <p className="px-3 py-2 text-sm text-muted-foreground sm:px-4">
+                  {group.memberProjects.length > 1
+                    ? "Shared settings require permission to change every checkout in this group."
+                    : "This connection cannot change this project."}
+                </p>
+              ) : null}
               <SettingsRow
-                title="Pin"
-                description="Pinned projects come first in project pickers."
+                title="Name"
+                description="The shared name for this project group in the sidebar and thread lists."
+                resetAction={
+                  canResetScratchTitle ? (
+                    <SettingResetButton
+                      label="project name"
+                      disabled={!canEditGroup}
+                      onClick={() =>
+                        void updateAllMembers(
+                          { title: SCRATCH_PROJECT_TITLE },
+                          "Failed to rename project",
+                        )
+                      }
+                    />
+                  ) : null
+                }
                 control={
-                  <Switch
-                    checked={group.pinned}
-                    disabled={isOrganizing}
-                    onCheckedChange={(checked) =>
-                      void organize(
-                        { pinned: Boolean(checked) },
-                        checked ? "Failed to pin project" : "Failed to unpin project",
-                      )
-                    }
-                    aria-label="Pin project"
+                  <Input
+                    key={`${group.projectKey}:${group.displayName}`}
+                    size="sm"
+                    className="w-full sm:w-64"
+                    aria-label="Project name"
+                    disabled={!canEditGroup}
+                    defaultValue={group.displayName}
+                    onChange={() => {
+                      projectNameEditedRef.current = true;
+                    }}
+                    onBlur={(event) => {
+                      const wasEdited = projectNameEditedRef.current;
+                      projectNameEditedRef.current = false;
+                      void renameGroup(event.currentTarget.value, wasEdited);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+                      if (event.key === "Enter") event.currentTarget.blur();
+                    }}
                   />
                 }
               />
               <SettingsRow
-                title="Archive"
+                title="Project icon"
                 description={
-                  group.archived
-                    ? "Hidden from project pickers. Threads and files are kept."
-                    : "Hides the project from project pickers. Threads and files are kept."
+                  projectIcon?.kind === "lucide"
+                    ? `${projectIcon.name} · ${projectIcon.color}`
+                    : projectIcon?.kind === "monogram"
+                      ? `${projectIcon.text} · ${projectIcon.color}`
+                      : projectIcon?.kind === "emoji"
+                        ? projectIcon.emoji
+                        : (faviconPath ?? "Automatic")
+                }
+                resetAction={
+                  group.memberProjects.some((member) => !hasDefaultProjectIcon(member)) ? (
+                    <SettingResetButton
+                      label="project icon"
+                      disabled={isSavingFavicon || !canEditGroup}
+                      onClick={() => void setProjectIcon(defaultProjectIcon)}
+                    />
+                  ) : null
+                }
+                control={
+                  <div className="flex items-center gap-2">
+                    <ProjectFavicon project={group} className="size-6" />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      type="button"
+                      aria-label="Choose a project icon"
+                      disabled={isSavingFavicon || !canEditGroup}
+                      onClick={() => setIconPickerOpen(true)}
+                    >
+                      Choose icon
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      type="button"
+                      aria-label="Choose a project icon file"
+                      disabled={isSavingFavicon || !canEditGroup}
+                      onClick={() => setFaviconPickerOpen(true)}
+                    >
+                      Choose file
+                    </Button>
+                  </div>
+                }
+              />
+              {canOrganize ? (
+                <>
+                  <SettingsRow
+                    title="Pin"
+                    description="Pinned projects come first in project pickers."
+                    control={
+                      <Switch
+                        checked={group.pinned}
+                        disabled={isOrganizing}
+                        onCheckedChange={(checked) =>
+                          void organize(
+                            { pinned: Boolean(checked) },
+                            checked ? "Failed to pin project" : "Failed to unpin project",
+                          )
+                        }
+                        aria-label="Pin project"
+                      />
+                    }
+                  />
+                  <SettingsRow
+                    title="Archive"
+                    description={
+                      group.archived
+                        ? "Hidden from project pickers. Threads and files are kept."
+                        : "Hides the project from project pickers. Threads and files are kept."
+                    }
+                    control={
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isOrganizing}
+                        onClick={() =>
+                          void organize(
+                            { archived: !group.archived },
+                            group.archived
+                              ? "Failed to unarchive project"
+                              : "Failed to archive project",
+                          )
+                        }
+                      >
+                        {group.archived ? "Unarchive" : "Archive"}
+                      </Button>
+                    }
+                  />
+                </>
+              ) : null}
+            </SettingsSection>
+            <SettingsSection id="project-coordinator" title="Coordinator">
+              <CoordinatorSettings />
+            </SettingsSection>
+            <ProjectDefaultsSettings category="project" />
+            <SettingsSection title="Danger">
+              <SettingsRow
+                title={
+                  hasOtherMembers
+                    ? "Remove checkout"
+                    : group.memberProjects.length > 1
+                      ? "Remove this project everywhere"
+                      : "Remove project"
+                }
+                description={
+                  hasOtherMembers
+                    ? "Deletes the selected machine's checkout entries and their threads. Other machines and files on disk are not touched."
+                    : group.memberProjects.length > 1
+                      ? `Deletes all ${group.memberProjects.length} checkout entries and their threads on every machine. Files on disk are not touched.`
+                      : "Deletes the project entry and its threads. Files on disk are not touched."
                 }
                 control={
                   <Button
                     size="sm"
-                    variant="outline"
-                    disabled={isOrganizing}
-                    onClick={() =>
-                      void organize(
-                        { archived: !group.archived },
-                        group.archived
-                          ? "Failed to unarchive project"
-                          : "Failed to archive project",
-                      )
-                    }
+                    variant="destructive-outline"
+                    disabled={!canEditGroup}
+                    onClick={() => void removeMembers(group.memberProjects)}
                   >
-                    {group.archived ? "Unarchive" : "Archive"}
+                    <Trash2Icon />
+                    {hasOtherMembers
+                      ? "Remove checkout"
+                      : group.memberProjects.length > 1
+                        ? "Remove all entries"
+                        : "Remove project"}
                   </Button>
                 }
               />
-            </>
-          ) : null}
-        </SettingsSection>
-        <ProjectDefaultsSettings category="project" />
-        <ProjectActionsSettings />
-        {checkoutChoices}
-        <SettingsSection title="Danger">
-          <SettingsRow
-            title={
-              hasOtherMembers
-                ? "Remove checkout"
-                : group.memberProjects.length > 1
-                  ? "Remove this project everywhere"
-                  : "Remove project"
-            }
-            description={
-              hasOtherMembers
-                ? "Deletes the selected machine's checkout entries and their threads. Other machines and files on disk are not touched."
-                : group.memberProjects.length > 1
-                  ? `Deletes all ${group.memberProjects.length} checkout entries and their threads on every machine. Files on disk are not touched.`
-                  : "Deletes the project entry and its threads. Files on disk are not touched."
-            }
-            control={
-              <Button
-                size="sm"
-                variant="destructive-outline"
-                disabled={!canEditGroup}
-                onClick={() => void removeMembers(group.memberProjects)}
-              >
-                <Trash2Icon />
-                {hasOtherMembers
-                  ? "Remove checkout"
-                  : group.memberProjects.length > 1
-                    ? "Remove all entries"
-                    : "Remove project"}
-              </Button>
-            }
-          />
-        </SettingsSection>
+            </SettingsSection>
+          </>
+        ) : activeTab === "memory" ? (
+          <SettingsSection id="project-memory-section" title="Instructions and memory">
+            <ProjectInstructionsSettings />
+            <ProjectMemorySettings />
+            <ProjectKnowledgeSettings />
+          </SettingsSection>
+        ) : (
+          <>
+            <ProjectActionsSettings />
+            {checkoutChoices}
+          </>
+        )}
       </SettingsPageContainer>
 
       <ProjectFaviconPickerDialog

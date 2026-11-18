@@ -315,6 +315,8 @@ const nameInput = (screen: Screen) =>
   screen.container.querySelector<HTMLInputElement>('[aria-label="Project name"]')!;
 const removeCheckout = (screen: Screen, root: string) =>
   screen.container.querySelector<HTMLButtonElement>(`[aria-label="Remove checkout ${root}"]`)!;
+const openEnvironmentTab = () =>
+  userEvent.click(page.getByRole("button", { name: "Environment", exact: true }));
 const removeAll = (screen: Screen) =>
   [...screen.container.querySelectorAll("button")].find((button) =>
     button.textContent?.includes("Remove all entries"),
@@ -405,6 +407,7 @@ describe("project settings permissions", () => {
     setup();
     await grant(remoteId, AsyncResult.success(session([])));
     await using screen = await mountPanel();
+    await openEnvironmentTab();
     expect(removeCheckout(screen, "/work/remote").disabled).toBe(true);
     expect(removeCheckout(screen, "/work/primary").disabled).toBe(false);
   });
@@ -415,6 +418,7 @@ describe("project settings permissions", () => {
     await using screen = await mountPanel();
     const initialHref = screen.router.state.location.href;
     expect(removeAll(screen).disabled).toBe(true);
+    await openEnvironmentTab();
 
     await userEvent.click(removeCheckout(screen, "/work/primary"));
     await vi.waitFor(() => expect(state.delete).toHaveBeenCalledOnce());
@@ -445,6 +449,7 @@ describe("project settings permissions", () => {
     });
     drafts.setPrompt(draftId, "keep this prompt");
     await using screen = await mountPanel();
+    await openEnvironmentTab();
 
     await userEvent.click(removeCheckout(screen, "/work/remote"));
     await vi.waitFor(() => expect(state.releaseUploads).toHaveBeenCalledOnce());

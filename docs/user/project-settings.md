@@ -43,7 +43,9 @@ the server-setting pages, such as Threads, Source control & issues and Worktrees
 environments' defaults. Choosing a project edits its overrides on the selected
 environments. Use **Use defaults** in a page to remove that page's project overrides.
 Open **Settings → Projects** to rename the project across its selected
-connected checkouts and see where those checkouts live.
+connected checkouts. The page has three tabs: **General** (name, icon, coordinator, new-thread
+defaults, archive), **Memory** (project instructions, memory, and knowledge files), and
+**Environment** (actions and where the project's checkouts live).
 Settings that are environment-wide stay read-only while a project is selected. When selected
 targets disagree, a control shows **Mixed** until you choose one value. Appearance, keyboard,
 and other phone-only settings ignore the filter.

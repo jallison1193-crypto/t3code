@@ -6,6 +6,7 @@ import { buildSidebarProjectSnapshots } from "../../sidebarProjectGrouping";
 import type { Project } from "../../types";
 import {
   projectGroupTitleNeedsUpdate,
+  projectSettingsTabForAnchor,
   scopeProjectSettingsGroup,
 } from "./ProjectSettingsPanel.logic";
 
@@ -189,5 +190,14 @@ describe("projectGroupTitleNeedsUpdate", () => {
       false,
     );
     expect(projectGroupTitleNeedsUpdate([renamed, renamed], "repo", true)).toBe(false);
+  });
+});
+
+describe("projectSettingsTabForAnchor", () => {
+  it("finds the tab holding a linked row, with or without the leading #", () => {
+    expect(projectSettingsTabForAnchor("project-knowledge")).toBe("memory");
+    expect(projectSettingsTabForAnchor("#import-scripts")).toBe("environment");
+    expect(projectSettingsTabForAnchor("coordinator-instructions")).toBe("general");
+    expect(projectSettingsTabForAnchor("")).toBeNull();
   });
 });

@@ -51,3 +51,23 @@ export function hasDefaultProjectIcon(
     icon.color === SCRATCH_PROJECT_ICON.color
   );
 }
+
+export type ProjectSettingsTab = "general" | "memory" | "environment";
+
+const PROJECT_SETTINGS_ANCHOR_TABS: Readonly<Record<string, ProjectSettingsTab>> = {
+  "project-overview": "general",
+  "coordinator-instructions": "general",
+  "coordinator-thread": "general",
+  "project-defaults": "general",
+  "project-instructions": "memory",
+  "project-memory": "memory",
+  "project-knowledge": "memory",
+  "project-actions": "environment",
+  "import-scripts": "environment",
+  "project-checkouts": "environment",
+};
+
+/** The tab holding a settings search link's row, so the link can open it. */
+export function projectSettingsTabForAnchor(hash: string): ProjectSettingsTab | null {
+  return PROJECT_SETTINGS_ANCHOR_TABS[hash.replace(/^#/, "")] ?? null;
+}
