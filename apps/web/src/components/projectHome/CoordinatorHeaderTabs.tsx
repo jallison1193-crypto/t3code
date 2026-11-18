@@ -11,6 +11,7 @@ import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { serverEnvironment } from "~/state/server";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
+import { useProjectThreadBoard } from "./useProjectThreadBoard";
 
 export function useIsProjectCoordinator(
   environmentId: EnvironmentId,
@@ -21,6 +22,56 @@ export function useIsProjectCoordinator(
   return coordinatorThreadIdOf(serverSettings, projectId) === threadId;
 }
 
+type ProjectView = "conversation" | "threads" | "settings";
+
+/** The project's views: its coordinator conversation, its threads board, and its settings. */
+export function ProjectViewTabs({
+  projectKey,
+  active,
+}: {
+  readonly projectKey: string;
+  readonly active: ProjectView;
+}) {
+  const navigate = useNavigate();
+  const { openCount } = useProjectThreadBoard(projectKey);
+  const open = (view: ProjectView) => {
+    if (view === active) return;
+    if (view === "settings") {
+      void navigate({
+        to: "/settings/projects",
+        search: { project: projectKey, machine: undefined },
+      });
+    } else if (view === "threads") {
+      void navigate({ to: "/projects/$projectKey/threads", params: { projectKey } });
+    } else {
+      void navigate({ to: "/projects/$projectKey", params: { projectKey } });
+    }
+  };
+  return (
+    <div className="shrink-0 [-webkit-app-region:no-drag]">
+      <ToggleGroup
+        aria-label="Project view"
+        variant="segmented"
+        size="segmented"
+        value={[active]}
+        onValueChange={(next) => {
+          const view = next.find((value): value is ProjectView => value !== active);
+          if (view) open(view);
+        }}
+      >
+        <Toggle value="conversation">Conversation</Toggle>
+        <Toggle value="threads">
+          Threads
+          {openCount > 0 ? (
+            <span className="text-muted-foreground tabular-nums">{openCount}</span>
+          ) : null}
+        </Toggle>
+        <Toggle value="settings">Settings</Toggle>
+      </ToggleGroup>
+    </div>
+  );
+}
+
 /** The coordinator thread is the project home, so its header carries the project's views. */
 export function CoordinatorHeaderTabs({
   environmentId,
@@ -29,34 +80,10 @@ export function CoordinatorHeaderTabs({
   readonly environmentId: EnvironmentId;
   readonly project: EnvironmentProject;
 }) {
-  const navigate = useNavigate();
   const settings = useEnvironmentSettings(environmentId);
-  const openProjectSettings = () => {
-    void navigate({
-      to: "/settings/projects",
-      search: {
-        project: deriveLogicalProjectKeyFromSettings(
-          project,
-          selectProjectGroupingSettings(settings),
-        ),
-        machine: undefined,
-      },
-    });
-  };
-  return (
-    <div className="shrink-0 [-webkit-app-region:no-drag]">
-      <ToggleGroup
-        aria-label="Project view"
-        variant="segmented"
-        size="segmented"
-        value={["conversation"]}
-        onValueChange={(next) => {
-          if (next.includes("settings")) openProjectSettings();
-        }}
-      >
-        <Toggle value="conversation">Conversation</Toggle>
-        <Toggle value="settings">Settings</Toggle>
-      </ToggleGroup>
-    </div>
+  const projectKey = deriveLogicalProjectKeyFromSettings(
+    project,
+    selectProjectGroupingSettings(settings),
   );
+  return <ProjectViewTabs projectKey={projectKey} active="conversation" />;
 }

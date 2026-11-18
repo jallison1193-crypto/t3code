@@ -59,6 +59,10 @@
       "types": "./src/projectHome.ts",
       "default": "./src/projectHome.ts"
     },
+    "./project-thread-board": {
+      "types": "./src/projectThreadBoard.ts",
+      "default": "./src/projectThreadBoard.ts"
+    },
     "./device/stream": {
       "types": "./src/device/stream.ts",
       "default": "./src/device/stream.ts"

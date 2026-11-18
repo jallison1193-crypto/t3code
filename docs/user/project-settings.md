@@ -305,4 +305,6 @@ Add guidance in **Settings → Projects → Coordinator instructions**; only the
 
 Opening a project's home (**Open project home** in the command palette) goes to its coordinator, and creates one the first time if the project has none. In the coordinator, clicking a thread it launched or one of its subagents opens that thread beside the conversation, where you can follow and steer it. Use **Open full size** in that pane to switch to the thread.
 
+The coordinator's **Threads** tab shows every thread in the project by state: Ready for review (finished since you last looked), Waiting on you, Working, Idle, and Done (settled). The count on the tab leaves out Done threads. Click a thread to open it beside the coordinator.
+
 To remove the designation, choose **Remove as coordinator** from the thread's menu or click **Clear** next to **Coordinator thread** in **Settings → Projects**.
