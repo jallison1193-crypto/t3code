@@ -41,6 +41,7 @@ import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 import { useSettingsEnvironmentMenu } from "./components/SettingsEnvironmentFilterHeader";
 import { useSettingsEnvironmentFilter, type SettingsTarget } from "./settings-environment-filter";
 import { I18nProvider } from "../../i18n/I18nProvider";
+import { CoordinatorSettings } from "./components/CoordinatorSettings";
 import {
   ProjectInstructionsSettings,
   type ProjectInstructionsSource,
@@ -468,6 +469,8 @@ function ProjectOverviewContent(props: {
         onSave={(value) => runInstructionsAction({ kind: "save", value })}
         onClear={() => runInstructionsAction({ kind: "clear" })}
       />
+
+      <CoordinatorSettings environments={props.environments} members={props.members} />
 
       {props.members.length === 1 && props.members[0] ? (
         <>

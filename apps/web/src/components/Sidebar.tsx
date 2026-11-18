@@ -126,6 +126,11 @@ import {
   useAcknowledgeThreadWoke,
   useThreadActions,
 } from "../hooks/useThreadActions";
+import {
+  readCoordinatorMenuState,
+  useCoordinatorThreadActions,
+} from "../hooks/useCoordinatorThreadActions";
+import { coordinatorThreadIdOf } from "@t3tools/client-runtime/coordinator-thread";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useOrderWhileOpen } from "../hooks/useOrderWhileOpen";
 import { useProjectPin } from "../hooks/useProjectGroupUpdate";
@@ -938,6 +943,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     archiveThread,
     deleteThread,
   } = useThreadActions();
+  const { makeCoordinatorThread, removeCoordinatorThread } = useCoordinatorThreadActions(pinThread);
   const updateThreadMetadata = useOrchestrationCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
@@ -2617,6 +2623,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         const isSettled = settledThreadKeysRef.current.has(threadKey);
         const isSnoozed = snoozedThreadKeysRef.current.has(threadKey);
         const isPinned = thread.pinnedAt != null;
+        const coordinator = readCoordinatorMenuState(thread);
         const snoozePresets = resolveSnoozePresets(
           new Date(),
           timestampFormat,
@@ -2647,6 +2654,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                     }
                   : null,
               isPinned,
+              isCoordinator: coordinator.isCoordinator,
               isSettled,
               autoSettleEnabled: thread.autoSettleDisabledAt == null,
               isSnoozed,
@@ -2663,6 +2671,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 snooze: configLoaded,
                 pinning: configLoaded,
                 titleRegeneration: configLoaded,
+                coordinator: coordinator.supported,
               },
               snoozePresets,
             }),
@@ -2737,6 +2746,12 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             return;
           case "unpin":
             attemptUnpin(threadRef);
+            return;
+          case "make-coordinator":
+            void makeCoordinatorThread(threadRef, thread.projectId, isPinned);
+            return;
+          case "remove-coordinator":
+            void removeCoordinatorThread(threadRef, thread.projectId);
             return;
           case "turn-into-project": {
             const result = await turnThreadIntoProject(threadRef);
@@ -3429,6 +3444,12 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                             }
                             wokeAt={threadWokeAt(thread, { now: snoozeNow })}
                             isActive={routeRowThreadKey === threadKey}
+                            isCoordinator={
+                              coordinatorThreadIdOf(
+                                serverConfigs.get(thread.environmentId)?.settings,
+                                thread.projectId,
+                              ) === thread.id
+                            }
                             revealRef={
                               routeRowThreadKey === threadKey ? revealActiveRow : undefined
                             }

@@ -39,20 +39,36 @@ Text delivered to every thread in a project, any provider.
 
 ## Milestone 3: Coordinator thread
 
-- Optional `coordinatorThreadId` on the project (contracts, `ProjectCommands.ts`, `ProjectStore.ts`, new migration).
-- Pinned and badged in the sidebar; coordinator-only instruction block.
-- `t3_thread_launch` gains optional `notifyThreadId`; a new completion-wake reactor (new file) uses `continuationRequests.offer`, like `delegate_task` already does.
+Built (differs from the first sketch):
 
-## Milestone 4: Project home view
+- `coordinatorThreadId` and `coordinatorInstructions` live in project settings overrides, not a new DB column. Fork migrations would collide with upstream's numbered ones.
+- Thread menu "Make project coordinator" / "Remove as coordinator" (web and mobile) pins the thread and shows a robot badge. Settings → Projects has coordinator instructions and a Clear row.
+- Only the coordinator gets a `## Coordinator` block: a built-in lead (plan in memory, launch with `notifyOnFinish`, review results) plus the user's text.
+- `t3_thread_launch` takes `notifyOnFinish: true`. `CompletionWakeService` queues one message to the launching thread when the child's run ends. Wakes are single-use and persisted in `<stateDir>/coordinator/completion-wakes.json`, so later messages in the child never cost a coordinator turn.
 
-- Replace the redirect in `apps/web/src/routes/projects.$projectKey.tsx` with `ProjectHomeView.tsx`: coordinator, threads, instructions, memory, files. Mobile equivalent.
-- "Since you were away" digest: what finished, what waits on the user, what failed.
+## Milestone 4: Project home view (Claude desktop Projects model)
+
+Target: Claude desktop's redesigned Projects, where a project is one coordinator conversation that hands work to threads.
+
+- Project home: replace the redirect in `apps/web/src/routes/projects.$projectKey.tsx` with `ProjectHomeView.tsx`. The coordinator conversation is the main view, and a coordinator thread is created on first visit when none is set, so there is no setup step. Mobile equivalent.
+- Threads overview grouped by state like Claude: ready for review, waiting on you, working, idle, done.
+- Side-by-side threads: clicking a launched thread, subagent or child thread opens it next to the coordinator with a "Threads > title" header, its live transcript and a steer box. It can be closed, minimized and opened full size. Reuse the right panel's `side-chat` surface (`SideChatPane.tsx` already embeds a full `ChatView`). Add a variant without the side-chat "Bring back" and delete actions instead of a new pane.
+- Project settings laid out like Claude's dialog:
+  - General: name and icon, "what do you want to work on" description, coordinator model, default thread model and effort, archive.
+  - Memory: instructions, memory, knowledge files.
+  - Environment: repos and folders every thread gets.
+  - Reuse M1 and M2 rows and existing project fields; no new storage unless a setting has no home.
+- Later in M4 or after: "Suggested threads" (the coordinator proposes work and the user starts it), a Library of files the threads produced, and a "Since you were away" digest of what finished, what waits on the user and what failed.
 
 ### Sidebar and color (with M4)
 
 Josh's pain points: hard to organize, looks plain, projects feel buried.
 
-- Projects-first sidebar mode (toggle; classic stays): each project is a colored group with its coordinator pinned on top, then active threads, then a collapsed "older" fold. Loose threads in their own section below.
+- Projects-first sidebar mode (toggle; classic stays), laid out like Claude desktop's sidebar but in T3's styling:
+  - Top nav: New, Search, Projects, Scheduled, plus T3's own pages.
+  - One row per project with its color icon; clicking it opens the M4 coordinator view.
+  - A project row expands to show only threads that are running or waiting on the user; the rest live in the project overview.
+  - Pinned section mixes projects and threads. Loose threads go in their own section below.
 - Project color everywhere: reuse the existing `ProjectIconColor` palette (`packages/contracts/src/project.ts`); tint the group header, a thin rail on its thread rows, and the chat header. No new schema.
 - Organize: group threads inside a project by state (needs you, running, done), quick project switcher.
 - Design pass first: references from the vault's look-first list (app UI: Mobbin, Refero, Component Gallery), then a mockup for Josh before building.
@@ -73,5 +89,5 @@ Model roles per project (who plans, builds, reviews) and cross-provider review n
 
 - Toolchain solved: Vite+ `vp` provides Node 26.13.1 and pnpm 12.14.0.
 - Fork: `jallison1193-crypto/t3code`, remote `myfork`. Integration branch `fork/main`, synced daily from upstream by `scripts/fork/sync-upstream.ps1`.
-- M1 and M2 done and merged into `fork/main`. Next: M3.
+- M1, M2 and M3 done. Next: M4 (Claude desktop Projects model).
 - Working name: **T3ther** (unofficial fork of T3 Code). Repo rename and README disclaimer come when the fork goes public.

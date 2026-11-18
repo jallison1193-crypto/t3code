@@ -142,6 +142,14 @@ vi.mock("./useThreadActions", () => ({
     ),
 }));
 
+vi.mock("./useCoordinatorThreadActions", () => ({
+  readCoordinatorMenuState: () => ({ supported: true, isCoordinator: false }),
+  useCoordinatorThreadActions: () => ({
+    makeCoordinatorThread: async () => recordEffect("make-coordinator"),
+    removeCoordinatorThread: async () => recordEffect("remove-coordinator"),
+  }),
+}));
+
 import { useThreadActionMenu } from "./useThreadActionMenu";
 
 const target = {
@@ -192,5 +200,12 @@ describe("thread menu permissions", () => {
     expect(items[0]?.disabled).not.toBe(true);
     expect(state.effects).toEqual(["find"]);
     expect(onFind).toHaveBeenCalledExactlyOnceWith(target);
+  });
+
+  it("runs make-coordinator without task operate permission", async () => {
+    state.show.mockResolvedValue("make-coordinator");
+    createMenu().openMenu(position);
+    await state.completed.promise;
+    expect(state.effects).toEqual(["make-coordinator"]);
   });
 });

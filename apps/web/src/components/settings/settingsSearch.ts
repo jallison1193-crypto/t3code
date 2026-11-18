@@ -291,6 +291,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["instructions prompt context shared every thread provider"],
   },
   {
+    id: "coordinator-instructions",
+    title: msg("Coordinator instructions"),
+    to: "/settings/projects",
+    scope: "project",
+    searchTerms: ["coordinator instructions prompt thread delegate orchestrate"],
+  },
+  {
     id: "project-memory",
     title: msg("Project memory"),
     to: "/settings/projects",

@@ -10,6 +10,7 @@ import {
 } from "./thread-list-v2-row-appearance";
 import { RowPressable } from "../../components/ui/RowPressable";
 import { CustomSnoozeSheet } from "./CustomSnoozeSheet";
+import { useCoordinatorThreadRowAction } from "./useCoordinatorThreadRowAction";
 import { appAtomRegistry } from "../../state/atom-registry";
 import { threadArrangementOpenAtom } from "../../state/thread-order";
 import { threadEnvironment } from "../../state/threads";
@@ -738,6 +739,8 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   } = props;
   const snoozedRow = props.snoozed === true;
   const pinnedRow = props.pinned === true;
+  const { isCoordinator, coordinatorMenuItems, handleCoordinatorMenuAction } =
+    useCoordinatorThreadRowAction(thread, onPinThread);
   const dormant = useSwipeRowDormant(props.activationKey);
 
   const selectThread = () => onSelectThread(thread);
@@ -983,6 +986,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         reorder: [],
         pin: [],
         secondary: [
+          ...coordinatorMenuItems,
           ...titleMenuItems,
           ...autoSettleMenuItems,
           LEGACY_MENU_ACTIONS[0]!,
@@ -996,7 +1000,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         direct: [...direct, LEGACY_MENU_ACTIONS[0]!],
         reorder: reorderMenuItems,
         pin: pinMenuItems,
-        secondary: [...titleMenuItems, LEGACY_MENU_ACTIONS[1]!],
+        secondary: [...coordinatorMenuItems, ...titleMenuItems, LEGACY_MENU_ACTIONS[1]!],
       });
     }
     if (canUnsettle) {
@@ -1008,6 +1012,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         ),
         pin: pinMenuItems,
         secondary: [
+          ...coordinatorMenuItems,
           ...titleMenuItems,
           ...autoSettleMenuItems,
           LEGACY_MENU_ACTIONS[0]!,
@@ -1027,6 +1032,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       reorder: reorderMenuItems,
       pin: pinMenuItems,
       secondary: [
+        ...coordinatorMenuItems,
         ...titleMenuItems,
         ...autoSettleMenuItems,
         LEGACY_MENU_ACTIONS[0]!,
@@ -1036,6 +1042,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   }, [
     autoSettleMenuItems,
     canUnsettle,
+    coordinatorMenuItems,
     pinMenuItems,
     props.settlementSupported,
     reorderMenuItems,
@@ -1047,6 +1054,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   ]);
   const handleMenuAction = useCallback(
     ({ nativeEvent }: { readonly nativeEvent: { readonly event: string } }) => {
+      if (handleCoordinatorMenuAction(nativeEvent.event)) return;
       if (nativeEvent.event === "new-thread-on-branch") onNewThreadOnBranch(thread);
       if (nativeEvent.event === "settle") handleSettle();
       if (nativeEvent.event === "unsettle") handleUnsettle();
@@ -1103,6 +1111,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     [
       onNewThreadOnBranch,
       thread,
+      handleCoordinatorMenuAction,
       handleArchive,
       handleDelete,
       handleRegenerateTitle,
@@ -1224,6 +1233,14 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         </Text>
         <View className="flex-row items-center gap-1.5" style={{ minHeight: titleLineHeight }}>
           {props.hasQueuedMessages ? <QueuedMessageIcon selected={selected} /> : null}
+          {isCoordinator ? (
+            <SymbolView
+              name="robot"
+              size={12}
+              tintColorClassName={rowAppearance.mutedIconTintClassName}
+              type="monochrome"
+            />
+          ) : null}
           {pinnedRow ? (
             <SymbolView
               name="pin"
@@ -1556,6 +1573,14 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
             ) : null}
           </View>
           {props.hasQueuedMessages ? <QueuedMessageIcon selected={selected} /> : null}
+          {isCoordinator ? (
+            <SymbolView
+              name="robot"
+              size={12}
+              tintColorClassName={rowAppearance.mutedIconTintClassName}
+              type="monochrome"
+            />
+          ) : null}
           <Text
             className={cn(
               "text-sm tabular-nums",

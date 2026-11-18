@@ -28,6 +28,7 @@ const reactTests = [
   "src/features/settings/SettingsServerControlsRouteScreen.test.tsx",
   "src/features/settings/SettingsScheduledTasksRouteScreen.test.tsx",
   "src/features/settings/components/BranchNamingSettings.test.tsx",
+  "src/features/settings/components/CoordinatorSettings.test.tsx",
   "src/features/settings/components/ProjectInstructionsSettings.test.tsx",
   "src/features/settings/components/ProjectKnowledgeSettings.test.tsx",
   "src/features/settings/components/ProjectMemorySettings.test.tsx",

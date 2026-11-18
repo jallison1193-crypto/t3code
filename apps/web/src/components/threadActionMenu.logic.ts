@@ -9,6 +9,8 @@ export type ThreadActionMenuId =
   | "project-settings"
   | "pin"
   | "unpin"
+  | "make-coordinator"
+  | "remove-coordinator"
   | "settle"
   | "unsettle"
   | "auto-settle"
@@ -76,6 +78,7 @@ export interface ThreadActionMenuState {
     readonly isActive: boolean;
   } | null;
   readonly isPinned: boolean;
+  readonly isCoordinator?: boolean;
   readonly isSettled: boolean;
   readonly autoSettleEnabled: boolean;
   readonly isSnoozed: boolean;
@@ -89,6 +92,7 @@ export interface ThreadActionMenuState {
     readonly snooze: boolean;
     readonly pinning: boolean;
     readonly titleRegeneration: boolean;
+    readonly coordinator?: boolean;
   };
   readonly snoozePresets: ReadonlyArray<SnoozePreset>;
   /** Guest links need their own grant, so the caller checks it instead of `canOperate`. */
@@ -102,6 +106,8 @@ export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean
   return ![
     "find",
     "new-thread-on-branch",
+    "make-coordinator",
+    "remove-coordinator",
     "project-settings",
     "mark-unread",
     "share-guest",
@@ -134,6 +140,13 @@ export function buildThreadActionMenuItems(
           state.isPinned
             ? { id: "unpin" as const, label: "Unpin thread", icon: "pin-off" }
             : { id: "pin" as const, label: "Pin thread", icon: "pin" },
+        ]
+      : []),
+    ...(state.supports.coordinator
+      ? [
+          state.isCoordinator
+            ? { id: "remove-coordinator" as const, label: "Remove as coordinator", icon: "bot" }
+            : { id: "make-coordinator" as const, label: "Make project coordinator", icon: "bot" },
         ]
       : []),
     ...(state.supports.settlement

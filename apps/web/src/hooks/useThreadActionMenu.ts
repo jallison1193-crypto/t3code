@@ -48,6 +48,10 @@ import { useCopyToClipboard } from "./useCopyToClipboard";
 import { useNewThreadHandler } from "./useHandleNewThread";
 import { useClientSettings } from "./useSettings";
 import { canTurnThreadIntoProject, useThreadActions } from "./useThreadActions";
+import {
+  readCoordinatorMenuState,
+  useCoordinatorThreadActions,
+} from "./useCoordinatorThreadActions";
 
 function failureToast(title: string, error: unknown) {
   toastManager.add(
@@ -89,6 +93,7 @@ export function useThreadActionMenu(input: {
     markThreadUnread,
     turnThreadIntoProject,
   } = useThreadActions();
+  const { makeCoordinatorThread, removeCoordinatorThread } = useCoordinatorThreadActions(pinThread);
   const regenerateThreadTitle = useOrchestrationCommand(threadEnvironment.regenerateTitle, {
     reportFailure: false,
   });
@@ -119,12 +124,14 @@ export function useThreadActionMenu(input: {
       }
       const now = new Date();
       const configLoaded = readEnvironmentServerConfigLoaded(threadRef.environmentId);
+      const coordinator = readCoordinatorMenuState(thread);
       const supports = {
         settlement: configLoaded,
         autoSettleOptOut: readEnvironmentSupportsAutoSettleOptOut(threadRef.environmentId),
         snooze: configLoaded,
         pinning: configLoaded,
         titleRegeneration: configLoaded,
+        coordinator: coordinator.supported,
       };
       const isRegeneratingTitle = thread.titleRegeneration != null;
       const snoozePresets = resolveSnoozePresets(now, timestampFormat, threadRef.environmentId);
@@ -134,6 +141,7 @@ export function useThreadActionMenu(input: {
         branch: thread.branch ?? null,
         projectFilter: null,
         isPinned: thread.pinnedAt != null,
+        isCoordinator: coordinator.isCoordinator,
         isSettled: supports.settlement && thread.settledOverride === "settled",
         autoSettleEnabled: thread.autoSettleDisabledAt == null,
         isSnoozed: supports.snooze && effectiveSnoozed(thread, { now: now.toISOString() }),
@@ -233,6 +241,12 @@ export function useThreadActionMenu(input: {
           await reportFailure("Failed to unpin thread", () => confirmAndUnpinThread(threadRef));
           return;
         }
+        case "make-coordinator":
+          await makeCoordinatorThread(threadRef, thread.projectId, thread.pinnedAt != null);
+          return;
+        case "remove-coordinator":
+          await removeCoordinatorThread(threadRef, thread.projectId);
+          return;
         case "auto-settle:enabled":
         case "auto-settle:disabled":
           await reportFailure("Failed to update auto-settle", () =>

@@ -51,6 +51,10 @@
       "types": "./src/handoff.ts",
       "default": "./src/handoff.ts"
     },
+    "./coordinator-thread": {
+      "types": "./src/coordinatorThread.ts",
+      "default": "./src/coordinatorThread.ts"
+    },
     "./device/stream": {
       "types": "./src/device/stream.ts",
       "default": "./src/device/stream.ts"

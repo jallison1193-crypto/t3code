@@ -74,4 +74,33 @@ describe("buildThreadActionMenuItems", () => {
     expect(items.find((item) => item.id === "archive")?.disabled).toBe(true);
     expect(items.find((item) => item.id === "turn-into-project")?.disabled).toBe(true);
   });
+
+  it("shows coordinator actions only when supported and toggles by isCoordinator", () => {
+    const unsupported = buildThreadActionMenuItems(baseState);
+    expect(
+      unsupported.some(
+        (item) => item.id === "make-coordinator" || item.id === "remove-coordinator",
+      ),
+    ).toBe(false);
+
+    const nonCoordinator = buildThreadActionMenuItems({
+      ...baseState,
+      isCoordinator: false,
+      supports: { ...baseState.supports, coordinator: true },
+    });
+    expect(nonCoordinator.find((item) => item.id === "make-coordinator")?.label).toBe(
+      "Make project coordinator",
+    );
+    expect(nonCoordinator.find((item) => item.id === "remove-coordinator")).toBeUndefined();
+
+    const coordinator = buildThreadActionMenuItems({
+      ...baseState,
+      isCoordinator: true,
+      supports: { ...baseState.supports, coordinator: true },
+    });
+    expect(coordinator.find((item) => item.id === "remove-coordinator")?.label).toBe(
+      "Remove as coordinator",
+    );
+    expect(coordinator.find((item) => item.id === "make-coordinator")).toBeUndefined();
+  });
 });

@@ -49,6 +49,7 @@ import {
   canPickExternalProjectFavicon,
   ProjectFaviconPickerDialog,
 } from "./ProjectFaviconPickerDialog";
+import { CoordinatorSettings } from "./CoordinatorSettings";
 import { ProjectActionsSettings } from "./ProjectActionsSettings";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import { ProjectInstructionsSettings } from "./ProjectInstructionsSettings";
@@ -621,6 +622,7 @@ function ProjectDetail({
             }
           />
           <ProjectInstructionsSettings />
+          <CoordinatorSettings />
           <ProjectMemorySettings />
           <ProjectKnowledgeSettings />
           {canOrganize ? (

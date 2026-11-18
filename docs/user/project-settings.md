@@ -294,3 +294,13 @@ On mobile, use **Settings → Source control & issues** to change selected envir
 T3 Code only pulls when it can fast-forward and the checkout has no changed files, untracked files,
 or local commits. It skips checkouts on another branch or without an upstream. If a checkout has
 local work, resolve it yourself before automatic pulls can resume.
+
+## Coordinator thread
+
+A project can have one coordinator thread. Its agent is told to keep the plan in project memory, hand work to new threads, and review their results.
+
+To designate one, open the thread's context menu and choose **Make project coordinator** (on mobile, it is under **More**). Making a thread the coordinator replaces any previous coordinator for that project and pins the thread if it isn't pinned already.
+
+Add guidance in **Settings → Projects → Coordinator instructions**; only the coordinator thread receives it. When the coordinator launches a thread with `notifyOnFinish`, T3 Code sends the coordinator a message once that thread's run ends, so it can pick up the next step without you checking in.
+
+To remove the designation, choose **Remove as coordinator** from the thread's menu or click **Clear** next to **Coordinator thread** in **Settings → Projects**.
