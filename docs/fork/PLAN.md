@@ -98,5 +98,7 @@ Model roles per project (who plans, builds, reviews) and cross-provider review n
 
 - Toolchain solved: Vite+ `vp` provides Node 26.13.1 and pnpm 12.14.0.
 - Fork: `jallison1193-crypto/t3code`, remote `myfork`. Integration branch `fork/main`, synced daily from upstream by `scripts/fork/sync-upstream.ps1`.
-- M1, M2 and M3 done. Next: M4 (Claude desktop Projects model).
+- M1, M2 and M3 done.
+- M4 core done (2026-11-18): project home opens the coordinator, threads open beside it, Threads board, settings tabs, opt-in projects-first sidebar, mobile Threads screen. Mobile was checked by tests only; no emulator on the laptop yet.
+- M4 still open: project color everywhere, Suggested threads, Library, "Since you were away" digest. Next: M5 mods.
 - Working name: **T3ther** (unofficial fork of T3 Code). Repo rename and README disclaimer come when the fork goes public.
