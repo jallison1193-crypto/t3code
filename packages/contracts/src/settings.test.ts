@@ -555,3 +555,13 @@ describe("server model preferences", () => {
     expect(decodeServerSettingsPatch(input)).toEqual(input);
   });
 });
+
+describe("ClientSettings.sidebarLayout", () => {
+  it("defaults to threads and accepts projects patches", () => {
+    expect(decodeClientSettings({}).sidebarLayout).toBe("threads");
+    expect(decodeClientSettings({ sidebarLayout: "projects" }).sidebarLayout).toBe("projects");
+    expect(decodeClientSettingsPatch({ sidebarLayout: "projects" })).toEqual({
+      sidebarLayout: "projects",
+    });
+  });
+});

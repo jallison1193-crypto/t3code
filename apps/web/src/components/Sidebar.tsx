@@ -1269,6 +1269,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         const clicked = await settlePromise(() =>
           api.contextMenu.show(
             [
+              { id: "project-home", label: "Open project home" },
               { id: "new-thread", label: "New thread" },
               { id: "copy-path", label: "Copy path" },
               ...(canPinProject(group)
@@ -1286,6 +1287,15 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         );
         if (clicked._tag === "Failure") return;
         switch (clicked.value) {
+          case "project-home":
+            if (isMobile) setOpenMobile(false);
+            void router.navigate({
+              to: "/projects/$projectKey",
+              params: {
+                projectKey: getSidebarProjectSettingsKey(group, projectGroupingSettings, projects),
+              },
+            });
+            return;
           case "new-thread":
             startThreadInProjectFolder(group);
             return;

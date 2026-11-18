@@ -75,6 +75,7 @@ import {
   RotateCcwIcon,
   SettingsIcon,
   MonitorIcon,
+  PanelLeftIcon,
   PinIcon,
   PinOffIcon,
   PlugIcon,
@@ -112,7 +113,7 @@ import {
   copyPromptLink,
   promptLinkRepositoryOf,
 } from "./promptLinks/copyPromptLink";
-import { useClientSettings } from "../hooks/useSettings";
+import { updateClientSettings, useClientSettings } from "../hooks/useSettings";
 import { useStableCallback } from "../hooks/useStableCallback";
 import { readLocalApi } from "../localApi";
 import { configuredHostedAppUrl } from "../hostedPairing";
@@ -1811,6 +1812,22 @@ function OpenCommandPaletteDialog(props: {
       },
     });
   }
+
+  actionItems.push({
+    kind: "action",
+    value: "action:toggle-sidebar-layout",
+    searchTerms: ["sidebar", "projects", "threads", "layout", "switch"],
+    title:
+      clientSettings.sidebarLayout === "projects"
+        ? "Switch to threads sidebar"
+        : "Switch to projects sidebar",
+    icon: <PanelLeftIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await updateClientSettings({
+        sidebarLayout: clientSettings.sidebarLayout === "projects" ? "threads" : "projects",
+      });
+    },
+  });
 
   const rootGroups = buildRootGroups({ actionItems, recentThreadItems });
   // Every setting goes to the palette's own matcher, so settings get the same

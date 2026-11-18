@@ -496,6 +496,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.sidebarWorkingShelfEnabled !== DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled
       ? ["Working section"]
       : []),
+    ...(settings.sidebarLayout !== DEFAULT_UNIFIED_SETTINGS.sidebarLayout
+      ? ["Projects sidebar"]
+      : []),
     ...(settings.sidebarAutoSettleAfterDays !== DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays
       ? ["Auto-settle inactive threads"]
       : []),
@@ -680,6 +683,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
       sidebarProjectSortOrder: DEFAULT_UNIFIED_SETTINGS.sidebarProjectSortOrder,
       sidebarWorkingShelfEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled,
+      sidebarLayout: DEFAULT_UNIFIED_SETTINGS.sidebarLayout,
       sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
       sidebarAutoSettleKeepPullRequests: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleKeepPullRequests,
       sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
@@ -931,6 +935,35 @@ export function GeneralSettingsPanel() {
                 updateSettings({ sidebarWorkingShelfEnabled: Boolean(checked) })
               }
               aria-label={gt("Working section")}
+            />
+          }
+        />
+        <SettingsRow
+          {...setting("projects-sidebar")}
+          description={
+            <T>
+              List projects first, with only threads that are working or need you under each one.
+            </T>
+          }
+          resetAction={
+            settings.sidebarLayout !== DEFAULT_UNIFIED_SETTINGS.sidebarLayout ? (
+              <SettingResetButton
+                label="projects sidebar"
+                onClick={() =>
+                  updateSettings({
+                    sidebarLayout: DEFAULT_UNIFIED_SETTINGS.sidebarLayout,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.sidebarLayout === "projects"}
+              onCheckedChange={(checked) =>
+                updateSettings({ sidebarLayout: checked ? "projects" : "threads" })
+              }
+              aria-label={gt("Projects sidebar")}
             />
           }
         />

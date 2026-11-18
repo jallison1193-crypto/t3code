@@ -160,6 +160,13 @@ Pinned threads stay above the folders, and Snoozed and Settled stay below them. 
 can drag a thread onto the composer to mention it, but not within the sidebar, and the Working
 section is off. Each device keeps its own choice.
 
+### Projects sidebar
+
+Turn on **Settings → General → Projects sidebar** (or run **Switch to projects sidebar** in the
+command palette) to list projects first, with a **Needs you** section at the top for threads
+waiting on approvals or input, expandable active threads under each project, **Pinned**, and up
+to 10 **Other threads** outside your project groups. Each device keeps its own choice.
+
 ## Settle finished work
 
 Choose **Settle thread** from its menu to move finished work out of the active list

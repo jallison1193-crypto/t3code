@@ -1,5 +1,12 @@
-import { isListedThreadLineage, type ThreadId } from "@t3tools/contracts";
+import {
+  isListedThreadLineage,
+  type EnvironmentId,
+  type ProjectId,
+  type ServerSettings,
+  type ThreadId,
+} from "@t3tools/contracts";
 
+import { coordinatorThreadIdOf } from "./coordinatorThread.ts";
 import type { EnvironmentThreadShell } from "./state/models.ts";
 import { isThreadWorking } from "./state/threadInbox.ts";
 import { toSortableTimestamp } from "./state/threadSort.ts";
@@ -79,4 +86,42 @@ export function groupProjectThreads<T extends BoardThread>(
     );
   }
   return columns;
+}
+
+export type ProjectGroupServerSettingsLookup = (
+  environmentId: EnvironmentId,
+) => Pick<ServerSettings, "projectSettingsOverrides"> | null | undefined;
+
+function resolveProjectGroupThreadMembership(
+  memberProjects: ReadonlyArray<{ readonly environmentId: EnvironmentId; readonly id: ProjectId }>,
+  getServerSettings: ProjectGroupServerSettingsLookup,
+): {
+  readonly memberKeys: ReadonlySet<string>;
+  readonly coordinatorThreadIds: ReadonlySet<ThreadId>;
+} {
+  const memberKeys = new Set<string>();
+  const coordinatorThreadIds = new Set<ThreadId>();
+  for (const member of memberProjects) {
+    memberKeys.add(`${member.environmentId}:${member.id}`);
+    const coordinatorId = coordinatorThreadIdOf(getServerSettings(member.environmentId), member.id);
+    if (coordinatorId !== null) coordinatorThreadIds.add(coordinatorId);
+  }
+  return { memberKeys, coordinatorThreadIds };
+}
+
+export function groupProjectBoardThreadsForMembers<
+  T extends BoardThread & { readonly environmentId: EnvironmentId; readonly projectId: ProjectId },
+>(
+  threads: ReadonlyArray<T>,
+  memberProjects: ReadonlyArray<{ readonly environmentId: EnvironmentId; readonly id: ProjectId }>,
+  getServerSettings: ProjectGroupServerSettingsLookup,
+): Record<ProjectThreadBoardColumn, T[]> {
+  const { memberKeys, coordinatorThreadIds } = resolveProjectGroupThreadMembership(
+    memberProjects,
+    getServerSettings,
+  );
+  return groupProjectThreads(
+    threads.filter((thread) => memberKeys.has(`${thread.environmentId}:${thread.projectId}`)),
+    { coordinatorThreadIds },
+  );
 }
