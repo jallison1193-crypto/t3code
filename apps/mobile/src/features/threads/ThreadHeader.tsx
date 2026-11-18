@@ -1,5 +1,8 @@
+import { useGT } from "gt-react-native";
+
 import { AppBar } from "../../components/ui/AppBar";
 import type { AppBarAction, AppBarMenu } from "../../components/ui/AppBar.types";
+import { I18nProvider } from "../../i18n/I18nProvider";
 import {
   useAdaptiveWorkspaceLayout,
   useWorkspacePaneState,
@@ -12,7 +15,7 @@ import {
   type ThreadGitControlsProps,
 } from "./ThreadGitControls";
 
-export function ThreadHeader(props: {
+export interface ThreadHeaderProps {
   readonly title: string;
   readonly subtitle: string;
   readonly gitControls: ThreadGitControlsProps;
@@ -21,12 +24,35 @@ export function ThreadHeader(props: {
   readonly hasThreadCwd: boolean;
   readonly inspectorMode: ThreadInspectorMode | null;
   readonly onOpenFilesInspector: () => void;
-}) {
+  readonly onOpenProjectThreads?: () => void;
+}
+
+function ThreadHeaderContent(
+  props: ThreadHeaderProps & {
+    readonly coordinatorMenuTitle?: string;
+    readonly projectThreadsTitle?: string;
+  },
+) {
   const goBack = useWorkspaceBackNavigation();
   const { toggleAuxiliaryPane, startNewTask } = useAdaptiveWorkspaceLayout();
   const { panes } = useWorkspacePaneState();
   const gitMenu = useThreadGitMenuDefinition(props.gitControls);
   const terminalMenu = threadTerminalMenu(props.gitControls);
+  const coordinatorMenu: AppBarMenu | null = props.onOpenProjectThreads
+    ? {
+        title: props.coordinatorMenuTitle ?? "Coordinator",
+        icon: "robot",
+        separateBackground: false,
+        items: [
+          {
+            id: "project-threads",
+            title: props.projectThreadsTitle ?? "Project threads",
+            icon: "text.bubble",
+            onPress: props.onOpenProjectThreads,
+          },
+        ],
+      }
+    : null;
   const filesVisible = props.inspectorMode === "files" && panes.auxiliaryPaneVisible;
   const actions: AppBarAction[] = props.hasThreadCwd
     ? [
@@ -40,7 +66,9 @@ export function ThreadHeader(props: {
         },
       ]
     : [];
-  const menus = [gitMenu, terminalMenu].filter((menu): menu is AppBarMenu => menu !== null);
+  const menus = [coordinatorMenu, gitMenu, terminalMenu].filter(
+    (menu): menu is AppBarMenu => menu !== null,
+  );
 
   return (
     <AppBar
@@ -61,5 +89,35 @@ export function ThreadHeader(props: {
       menus={menus}
       hideBottomBorder
     />
+  );
+}
+
+function TranslatedThreadHeader(props: ThreadHeaderProps) {
+  const gt = useGT();
+  return (
+    <ThreadHeaderContent
+      {...props}
+      coordinatorMenuTitle={gt("Coordinator")}
+      projectThreadsTitle={gt("Project threads")}
+    />
+  );
+}
+
+export function ThreadHeader(props: ThreadHeaderProps) {
+  if (!props.onOpenProjectThreads) {
+    return <ThreadHeaderContent {...props} />;
+  }
+  return (
+    <I18nProvider
+      fallback={
+        <ThreadHeaderContent
+          {...props}
+          coordinatorMenuTitle="Coordinator"
+          projectThreadsTitle="Project threads"
+        />
+      }
+    >
+      <TranslatedThreadHeader {...props} />
+    </I18nProvider>
   );
 }

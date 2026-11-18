@@ -58,14 +58,22 @@ export function useLanguagePreference(): string {
 }
 
 /** Translates the screens inside it into the saved language; "system" follows the device. */
-export function I18nProvider(props: { readonly children: ReactNode }) {
+export function I18nProvider(props: {
+  readonly children: ReactNode;
+  readonly fallback?: ReactNode;
+}) {
   // GT suspends while a locale's catalog loads. Deferring the switch keeps the current language
   // on screen until then, instead of GT's full-screen spinner.
   const locale = useDeferredValue(
     resolveLocale(useLanguagePreference(), readSystemLocales(), SUPPORTED_LOCALES, DEFAULT_LOCALE),
   );
   return (
-    <GTProvider locale={locale} fallback={<View className="flex-1 bg-screen" />}>
+    <GTProvider
+      locale={locale}
+      fallback={
+        props.fallback === undefined ? <View className="flex-1 bg-screen" /> : props.fallback
+      }
+    >
       {props.children}
     </GTProvider>
   );

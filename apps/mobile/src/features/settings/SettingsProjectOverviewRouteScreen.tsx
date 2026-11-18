@@ -14,7 +14,8 @@ import {
   type ProjectGroup,
 } from "@t3tools/client-runtime/state/project-grouping";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
-import { useNavigation } from "@react-navigation/native";
+import { StackActions, useNavigation } from "@react-navigation/native";
+import { useGT } from "gt-react-native";
 import { useRef, useState } from "react";
 import { Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -37,10 +38,12 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
 import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActionRow";
+import { ListRow } from "../../components/ui/ListRow";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 import { useSettingsEnvironmentMenu } from "./components/SettingsEnvironmentFilterHeader";
 import { useSettingsEnvironmentFilter, type SettingsTarget } from "./settings-environment-filter";
 import { I18nProvider } from "../../i18n/I18nProvider";
+import { resolveProjectCoordinatorTarget } from "../projects/projectThreads.logic";
 import { CoordinatorSettings } from "./components/CoordinatorSettings";
 import {
   ProjectInstructionsSettings,
@@ -186,9 +189,18 @@ function ProjectOverviewContent(props: {
     representative,
     members: props.members,
   });
+  const gt = useGT();
+  const navigation = useNavigation();
   const [draftName, setDraftName] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const threads = useThreadShells();
+  const coordinatorTarget = resolveProjectCoordinatorTarget(
+    props.members,
+    (environmentId) =>
+      props.environments.find((entry) => entry.environmentId === environmentId)?.serverConfig
+        .settings,
+    threads,
+  );
   const allMembers = props.group.members.map((member) => member.project);
   const removableEnvironments = useEnvironmentsWithScope(allMembers, AuthOrchestrationOperateScope);
   const canRemoveGroup = props.members.every((member) =>
@@ -434,6 +446,40 @@ function ProjectOverviewContent(props: {
           </Text>
         </View>
       </View>
+
+      <SettingsSection title={gt("Threads")}>
+        <ListRow
+          icon="text.bubble"
+          label={gt("Threads")}
+          description={gt("Browse project threads by status")}
+          onPress={() =>
+            navigation.dispatch(
+              StackActions.push("ProjectThreads", {
+                projectKey: props.group.key,
+                environmentId: String(representative.environmentId),
+                projectId: String(representative.id),
+              }),
+            )
+          }
+        />
+        {coordinatorTarget ? (
+          <View className="border-t border-border-subtle">
+            <ListRow
+              icon="robot"
+              label={gt("Open coordinator")}
+              description={coordinatorTarget.title}
+              onPress={() =>
+                navigation.dispatch(
+                  StackActions.push("Thread", {
+                    environmentId: String(coordinatorTarget.environmentId),
+                    threadId: String(coordinatorTarget.threadId),
+                  }),
+                )
+              }
+            />
+          </View>
+        ) : null}
+      </SettingsSection>
 
       <SettingsSection title="Project">
         <View className="gap-3 p-4">

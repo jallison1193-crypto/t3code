@@ -27,6 +27,7 @@ vi.mock("./Button", () => ({ Button: () => null }));
 vi.mock("../../features/layout/adaptive-workspace-context", () => ({
   useAdaptiveWorkspaceLayout: () => ({ layout: { usesSplitView: false } }),
 }));
+vi.mock("./useThreadPushedOnPage", () => ({ useThreadPushedOnPage: () => false }));
 vi.mock("./useToolbarLayout", () => ({
   useToolbarLayout: () => ({ height: 48, paddingTop: 0, paddingBottom: 0 }),
 }));

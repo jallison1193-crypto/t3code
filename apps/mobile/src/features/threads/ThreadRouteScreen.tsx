@@ -83,6 +83,7 @@ import {
 } from "../terminal/terminalLaunchContext";
 import type { ThreadDetailScreenProps } from "./ThreadDetailScreen";
 import { ThreadScreenBinding, ThreadScreenFallback, ThreadScreenHost } from "./ThreadScreenHost";
+import { isProjectCoordinatorThread } from "../projects/projectThreads.logic";
 import { draftRouteIdentity } from "./thread-route-state";
 import { NewTaskDraftRouteScreen, type NewTaskDraftRouteParams } from "./NewTaskDraftRouteScreen";
 import { GitOverviewSheet } from "./git/GitOverviewSheet";
@@ -1004,6 +1005,16 @@ function ThreadRouteContent(
   }
 
   const serverConfig = routeEnvironmentRuntime?.serverConfig ?? null;
+  const isCoordinator = isProjectCoordinatorThread(selectedThread, serverConfig?.settings);
+  const handleOpenProjectThreads = isCoordinator
+    ? () =>
+        navigation.dispatch(
+          StackActions.push("ProjectThreads", {
+            environmentId: String(selectedThread.environmentId),
+            projectId: String(selectedThread.projectId),
+          }),
+        )
+    : undefined;
   const renderThreadRouteBody = () => (
     <>
       <GitActionProgressOverlay
@@ -1024,6 +1035,7 @@ function ThreadRouteContent(
                 inspectorMode={inspectorMode}
                 onOpenFilesInspector={handleOpenFilesInspector}
                 onReturnToThread={props.onReturnToThread}
+                onOpenProjectThreads={handleOpenProjectThreads}
               />
             )
           }

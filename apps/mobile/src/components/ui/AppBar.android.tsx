@@ -2,6 +2,7 @@ import { type RefObject, use, useRef, useState } from "react";
 import { Keyboard, type TextInputInstance, View } from "react-native";
 import { useHardwareBack } from "../../lib/backHandler";
 import { useToolbarLayout } from "./useToolbarLayout";
+import { useThreadPushedOnPage } from "./useThreadPushedOnPage";
 import { BottomSheetContext } from "./BottomSheetContext";
 import { RoutedFormSheetContext } from "./RoutedFormSheetContext";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
@@ -32,11 +33,14 @@ interface SearchState {
 
 export function AppBar(barProps: AppBarProps) {
   const { layout } = useAdaptiveWorkspaceLayout();
+  const pushedThreadBelow = useThreadPushedOnPage();
   const props = {
     ...barProps,
     onBack:
       barProps.onBack ??
-      (layout.usesSplitView ? barProps.backInSplitView?.onPress : barProps.onBackToList),
+      (layout.usesSplitView && !pushedThreadBelow
+        ? barProps.backInSplitView?.onPress
+        : barProps.onBackToList),
   };
   return props.search ? (
     <SearchableAppBar {...props} search={props.search} />
