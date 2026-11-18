@@ -68,10 +68,12 @@ Josh's pain points: hard to organize, looks plain, projects feel buried.
   - Top nav: New, Search, Projects, Scheduled, plus T3's own pages.
   - One row per project with its color icon; clicking it opens the M4 coordinator view.
   - A project row expands to show only threads that are running or waiting on the user; the rest live in the project overview.
+  - A collapsed project row still shows a dot or count when something inside needs the user.
+  - A "Needs you" section at the top gathers waiting threads from every project, so the project layout never hides T3's cross-project triage.
   - Pinned section mixes projects and threads. Loose threads go in their own section below.
 - Project color everywhere: reuse the existing `ProjectIconColor` palette (`packages/contracts/src/project.ts`); tint the group header, a thin rail on its thread rows, and the chat header. No new schema.
 - Organize: group threads inside a project by state (needs you, running, done), quick project switcher.
-- Design pass first: references from the vault's look-first list (app UI: Mobbin, Refero, Component Gallery), then a mockup for Josh before building.
+- Design pass done 2026-11-17; Josh approved the mockup. The wordmark reads T3ther (web sidebar, mobile header). The project home header names the view ("Coordinator", "Threads"), not the project, since the sidebar already shows it.
 - Sidebar.tsx is a hot file: put the new mode in new `apps/web/src/components/sidebar/` files behind a small switch.
 
 ## Milestone 5+: Mods
