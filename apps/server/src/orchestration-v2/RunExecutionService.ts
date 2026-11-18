@@ -2219,15 +2219,21 @@ export const layer: Layer.Layer<
           key: `mcp_app_${entry.itemId.replace(/[^\w.-]/g, "_")}`,
           text: entry.text,
         }));
-        const rawProjectInstructions = yield* serverSettings.getSettings.pipe(
-          Effect.map(
-            (settings) =>
-              resolveProjectSettings(settings, input.appThread.projectId).settings
-                .projectInstructions,
-          ),
+        const instructionSettings = yield* serverSettings.getSettings.pipe(
+          Effect.map((settings) => {
+            const resolved = resolveProjectSettings(settings, input.appThread.projectId).settings;
+            const override = settings.projectSettingsOverrides[input.appThread.projectId];
+            return {
+              instructions: resolved.projectInstructions,
+              coordinator:
+                override?.coordinatorThreadId === input.appThread.id
+                  ? { instructions: resolved.coordinatorInstructions }
+                  : undefined,
+            };
+          }),
           Effect.catch((cause) =>
             Effect.logWarning("Failed to read project instructions.", { cause }).pipe(
-              Effect.as(undefined),
+              Effect.as({ instructions: undefined, coordinator: undefined }),
             ),
           ),
         );
@@ -2252,7 +2258,8 @@ export const layer: Layer.Layer<
             )
           : undefined;
         const projectInstructions = formatProjectContext({
-          instructions: rawProjectInstructions,
+          instructions: instructionSettings.instructions,
+          coordinator: instructionSettings.coordinator,
           memoryHead,
           knowledgeFiles,
         });

@@ -13,6 +13,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { OrchestratorRuntimeModeAboveCeilingError } from "../../../orchestration-v2/Orchestrator.ts";
 import * as ThreadLaunch from "../../../orchestration-v2/ThreadLaunchService.ts";
+import * as CompletionWake from "../../../orchestration-v2/CompletionWakeService.ts";
 import * as ThreadMessageIntake from "../../../orchestration-v2/ThreadMessageIntake.ts";
 import * as Claims from "../../../orchestration-v2/AttachmentClaims.ts";
 import * as Project from "../../../project/ProjectService.ts";
@@ -117,6 +118,11 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
         const scope = yield* McpInvocationContext.McpInvocationContext;
         const context = yield* readCaller();
         const { caller } = context;
+        if (input.notifyOnFinish === true && caller === undefined)
+          return yield* new OrchestratorMcpFailure({
+            code: "invalid_request",
+            message: "notifyOnFinish needs a calling thread.",
+          });
         // A retry with the same key replays the first launch: the ids derive
         // from the caller and the key, and the launch service replays a
         // command it already accepted.
@@ -324,6 +330,13 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
         );
         const thread = result.projection.thread;
         const run = result.projection.runs.find((run) => run.userMessageId === messageId);
+        const completionWake = yield* Effect.serviceOption(CompletionWake.CompletionWakeService);
+        if (input.notifyOnFinish === true && caller !== undefined && Option.isSome(completionWake))
+          yield* completionWake.value.registerWake({
+            childThreadId: thread.id,
+            notifyThreadId: caller.id,
+            label: thread.title,
+          });
         return {
           threadId: thread.id,
           link: McpInvocationContext.threadLinkFor(scope, thread.id, thread.title),

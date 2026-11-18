@@ -1247,6 +1247,152 @@ it.effect(
     ),
 );
 
+it.effect("adds the coordinator block only when appThread.id matches coordinatorThreadId", () =>
+  Effect.gen(function* () {
+    const runExecution = yield* RunExecutionService.RunExecutionServiceV2;
+    const coordinatorThreadId = ThreadId.make("thread:run-execution-coordinator");
+    const workerThreadId = ThreadId.make("thread:run-execution-worker");
+    const projectId = ProjectId.make("project:run-execution-coordinator");
+    const providerInstanceId = ProviderInstanceId.make("codex");
+    const driver = ProviderDriverKind.make("codex");
+
+    const coordinatorStarted = yield* Deferred.make<ProviderAdapter.ProviderAdapterV2TurnInput>();
+    const coordinatorAttemptId = RunAttemptId.make("attempt:run-execution-coordinator");
+    yield* runExecution.startRootRun({
+      commandId: CommandId.make("command:run-execution-coordinator"),
+      appThread: { ...rootAppThread(coordinatorThreadId), projectId },
+      providerSessionId: ProviderSessionId.make("session:run-execution-coordinator"),
+      session: {
+        events: Stream.never,
+        startTurn: (turnInput: ProviderAdapter.ProviderAdapterV2TurnInput) =>
+          Deferred.succeed(coordinatorStarted, turnInput),
+      } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime,
+      run: {
+        id: RunId.make("run:run-execution-coordinator"),
+        threadId: coordinatorThreadId,
+        ordinal: 1,
+        providerInstanceId,
+      } as OrchestrationV2Run,
+      rootNode: {
+        id: NodeId.make("node:run-execution-coordinator"),
+      } as OrchestrationV2ExecutionNode,
+      checkpointScope: {
+        id: CheckpointScopeId.make("checkpoint-scope:run-execution-coordinator"),
+      } as OrchestrationV2CheckpointScope,
+      providerThread: {
+        id: ProviderThreadId.make("provider-thread:run-execution-coordinator"),
+        driver,
+      } as OrchestrationV2ProviderThread,
+      attempt: { id: coordinatorAttemptId, providerTurnId: null } as OrchestrationV2RunAttempt,
+      attemptId: coordinatorAttemptId,
+      providerTurnOrdinal: 1,
+      message: {
+        messageId: MessageId.make("message:run-execution-coordinator"),
+        text: "Hello coordinator",
+        attachments: [],
+        createdBy: "user",
+        creationSource: "web",
+      },
+      modelSelection: { instanceId: providerInstanceId, model: "gpt-5.4" },
+      runtimePolicy: {
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        cwd: process.cwd(),
+      },
+    });
+
+    const coordinatorInput = yield* Deferred.await(coordinatorStarted);
+    assert.equal(
+      coordinatorInput.projectInstructions,
+      formatProjectContext({
+        instructions: "Shared project rules.",
+        coordinator: { instructions: "Delegate tasks to worker threads." },
+      }),
+    );
+
+    const workerStarted = yield* Deferred.make<ProviderAdapter.ProviderAdapterV2TurnInput>();
+    const workerAttemptId = RunAttemptId.make("attempt:run-execution-worker");
+    yield* runExecution.startRootRun({
+      commandId: CommandId.make("command:run-execution-worker"),
+      appThread: { ...rootAppThread(workerThreadId), projectId },
+      providerSessionId: ProviderSessionId.make("session:run-execution-worker"),
+      session: {
+        events: Stream.never,
+        startTurn: (turnInput: ProviderAdapter.ProviderAdapterV2TurnInput) =>
+          Deferred.succeed(workerStarted, turnInput),
+      } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime,
+      run: {
+        id: RunId.make("run:run-execution-worker"),
+        threadId: workerThreadId,
+        ordinal: 1,
+        providerInstanceId,
+      } as OrchestrationV2Run,
+      rootNode: {
+        id: NodeId.make("node:run-execution-worker"),
+      } as OrchestrationV2ExecutionNode,
+      checkpointScope: {
+        id: CheckpointScopeId.make("checkpoint-scope:run-execution-worker"),
+      } as OrchestrationV2CheckpointScope,
+      providerThread: {
+        id: ProviderThreadId.make("provider-thread:run-execution-worker"),
+        driver,
+      } as OrchestrationV2ProviderThread,
+      attempt: { id: workerAttemptId, providerTurnId: null } as OrchestrationV2RunAttempt,
+      attemptId: workerAttemptId,
+      providerTurnOrdinal: 1,
+      message: {
+        messageId: MessageId.make("message:run-execution-worker"),
+        text: "Hello worker",
+        attachments: [],
+        createdBy: "user",
+        creationSource: "web",
+      },
+      modelSelection: { instanceId: providerInstanceId, model: "gpt-5.4" },
+      runtimePolicy: {
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        cwd: process.cwd(),
+      },
+    });
+
+    const workerInput = yield* Deferred.await(workerStarted);
+    assert.equal(
+      workerInput.projectInstructions,
+      formatProjectInstructions("Shared project rules."),
+    );
+  }).pipe(
+    Effect.provide(
+      RunExecutionService.layer.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            McpAppModelContext.layerEmpty,
+            PreviewAgentActivity.layer,
+            Layer.mock(CheckpointService.CheckpointServiceV2)({
+              captureBaseline: () => Effect.void,
+            }),
+            layerTurnItemPositionsTest,
+            mockEventSink({}),
+            IdAllocator.layer,
+            ThreadCommandExecutor.layer,
+            Layer.mock(ProviderEventIngestor.ProviderEventIngestorV2)({
+              ingestNormalized: () => Effect.succeed([]),
+            }),
+            ServerSettings.layerTest({
+              projectSettingsOverrides: {
+                [ProjectId.make("project:run-execution-coordinator")]: {
+                  projectInstructions: "Shared project rules.",
+                  coordinatorInstructions: "Delegate tasks to worker threads.",
+                  coordinatorThreadId: ThreadId.make("thread:run-execution-coordinator"),
+                },
+              },
+            }),
+          ),
+        ),
+      ),
+    ),
+  ),
+);
+
 it.effect("fails the run when its ownership check cannot be read before calling the provider", () =>
   Effect.gen(function* () {
     const guardCalls = yield* Ref.make(0);

@@ -1,6 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
 
 import {
+  COORDINATOR_INSTRUCTIONS_LEAD,
+  COORDINATOR_INSTRUCTIONS_TRUNCATION_NOTE,
   formatProjectContext,
   formatProjectInstructions,
   PROJECT_INSTRUCTIONS_LEAD,
@@ -47,7 +49,11 @@ describe("formatProjectContext", () => {
   it("returns undefined when all parts are empty", () => {
     assert.isUndefined(formatProjectContext({}));
     assert.isUndefined(
-      formatProjectContext({ instructions: "  ", memoryHead: "\n", knowledgeFiles: ["  ", ""] }),
+      formatProjectContext({
+        instructions: "  ",
+        memoryHead: "\n",
+        knowledgeFiles: ["  ", ""],
+      }),
     );
   });
 
@@ -60,10 +66,12 @@ describe("formatProjectContext", () => {
     assert.include(memoryOnly!, "- Use Effect");
     assert.include(memoryOnly!, PROJECT_MEMORY_TOOLS_NOTE);
     assert.notInclude(memoryOnly!, PROJECT_INSTRUCTIONS_LEAD);
+    assert.notInclude(memoryOnly!, "## Coordinator");
     assert.notInclude(memoryOnly!, "## Project knowledge");
 
     const combined = formatProjectContext({
       instructions: "Run tests.",
+      coordinator: { instructions: "Delegate long tasks." },
       memoryHead: "Memory line",
       knowledgeFiles: ["arch.md", "api.md"],
     });
@@ -71,9 +79,36 @@ describe("formatProjectContext", () => {
     assert.isTrue(combined!.startsWith("<project_instructions>\n"));
     assert.isTrue(combined!.endsWith("\n</project_instructions>"));
     assert.include(combined!, PROJECT_INSTRUCTIONS_LEAD);
+    assert.include(combined!, "## Coordinator");
+    assert.include(combined!, COORDINATOR_INSTRUCTIONS_LEAD);
+    assert.include(combined!, "Delegate long tasks.");
     assert.include(combined!, "## Project memory");
     assert.include(combined!, "## Project knowledge");
     assert.include(combined!, "- arch.md\n- api.md");
+  });
+
+  it("formats the coordinator block alone and truncates within 16 KB limit", () => {
+    const coordinatorOnly = formatProjectContext({
+      coordinator: { instructions: "  Coordinate subthreads carefully.  " },
+    });
+    assert.equal(
+      coordinatorOnly,
+      `<project_instructions>\n## Coordinator\n\n${COORDINATOR_INSTRUCTIONS_LEAD}\n\nCoordinate subthreads carefully.\n</project_instructions>`,
+    );
+    assert.equal(
+      formatProjectContext({ coordinator: { instructions: " " } }),
+      `<project_instructions>\n## Coordinator\n\n${COORDINATOR_INSTRUCTIONS_LEAD}\n</project_instructions>`,
+    );
+
+    const oversized = formatProjectContext({
+      instructions: "Keep PRs small.",
+      coordinator: { instructions: "c".repeat(20_000) },
+      memoryHead: "Memory that won't fit",
+    });
+    assert.isDefined(oversized);
+    assert.isAtMost(Buffer.byteLength(oversized!, "utf8"), PROJECT_INSTRUCTIONS_MAX_BYTES);
+    assert.include(oversized!, COORDINATOR_INSTRUCTIONS_TRUNCATION_NOTE.trim());
+    assert.isTrue(oversized!.endsWith("\n</project_instructions>"));
   });
 
   it("caps memory preview at 2 KB and knowledge file list at 1 KB", () => {
@@ -106,6 +141,7 @@ describe("formatProjectContext", () => {
     const bigInstructions = "i".repeat(15_900);
     const formatted = formatProjectContext({
       instructions: bigInstructions,
+      coordinator: { instructions: "Should not push over 16 KB" },
       memoryHead: "Should not push over 16 KB",
       knowledgeFiles: ["spec.md"],
     });

@@ -3,7 +3,11 @@ import {
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
+  ServerSettings,
+  ServerSettingsPatch,
+  ThreadId,
 } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 import { createModelSelection } from "./model.ts";
 import {
@@ -18,6 +22,8 @@ import { applyServerSettingsPatch } from "./serverSettings.ts";
 
 const projectId = ProjectId.make("project-a");
 const otherProjectId = ProjectId.make("project-b");
+const decodeServerSettings = Schema.decodeUnknownSync(ServerSettings);
+const decodeServerSettingsPatch = Schema.decodeUnknownSync(ServerSettingsPatch);
 
 describe("resolveSendEnvMode", () => {
   // regression: #21404 non-git projects send from the current checkout, git repos keep their mode
@@ -455,4 +461,47 @@ it("keeps project speech vocabulary on its originating project and clears it to 
     projectSettingsOverrides: { [projectId]: cleared },
   });
   expect(resolveProjectSettings(restored, projectId).settings.speechProjectCustomWords).toEqual([]);
+});
+
+it("round-trips coordinatorInstructions and preserves coordinatorThreadId across scoped edits", () => {
+  const coordinatorThreadId = ThreadId.make("thread:project-coordinator");
+  const base = decodeServerSettings({});
+  expect(base.coordinatorInstructions).toBe("");
+
+  const patch = decodeServerSettingsPatch({
+    coordinatorInstructions: "  Default coordinator rule.  ",
+    projectSettingsOverrides: {
+      [projectId]: {
+        coordinatorInstructions: "  Coordinate project workers.  ",
+        coordinatorThreadId,
+        defaultAutoPull: true,
+      },
+    },
+  });
+
+  const applied = applyServerSettingsPatch(base, patch);
+  expect(applied.coordinatorInstructions).toBe("Default coordinator rule.");
+  expect(applied.projectSettingsOverrides[projectId]).toEqual({
+    coordinatorInstructions: "Coordinate project workers.",
+    coordinatorThreadId,
+    defaultAutoPull: true,
+  });
+
+  const resolvedProject = resolveProjectSettings(applied, projectId);
+  expect(resolvedProject.settings.coordinatorInstructions).toBe("Coordinate project workers.");
+  expect(resolvedProject.sources.coordinatorInstructions).toBe("project");
+  expect(resolveProjectSettings(applied, otherProjectId).settings.coordinatorInstructions).toBe(
+    "Default coordinator rule.",
+  );
+
+  // Clearing a scoped setting preserves coordinatorThreadId on the project entry.
+  const afterClear = applyServerSettingsPatch(applied, {
+    projectSettingsOverrides: {
+      [projectId]: clearProjectSettingsOverrides(applied, projectId, ["defaultAutoPull"]),
+    },
+  });
+  expect(afterClear.projectSettingsOverrides[projectId]).toEqual({
+    coordinatorInstructions: "Coordinate project workers.",
+    coordinatorThreadId,
+  });
 });

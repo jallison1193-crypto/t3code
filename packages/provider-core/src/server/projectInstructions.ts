@@ -8,6 +8,12 @@ export const PROJECT_INSTRUCTIONS_LEAD =
 export const PROJECT_INSTRUCTIONS_TRUNCATION_NOTE =
   "\n\n[Project instructions truncated at 16 KB limit.]";
 
+export const COORDINATOR_INSTRUCTIONS_LEAD =
+  "You are this project's coordinator thread. Keep the plan and status current in project memory. Hand work to new threads with t3_thread_launch and pass notifyOnFinish: true; you will get a message when each one finishes. Review their results before starting the next step.";
+
+export const COORDINATOR_INSTRUCTIONS_TRUNCATION_NOTE =
+  "\n\n[Coordinator instructions truncated at 16 KB limit.]";
+
 export const PROJECT_MEMORY_TOOLS_NOTE =
   "Full memory and knowledge files are available through the `t3_project_memory_*` and `t3_project_knowledge_*` tools when T3 tools are available.";
 
@@ -18,6 +24,8 @@ export const PROJECT_KNOWLEDGE_TRUNCATION_NOTE =
 
 export interface ProjectContextInput {
   readonly instructions?: string | undefined;
+  /** Present only for the project's coordinator thread. */
+  readonly coordinator?: { readonly instructions?: string | undefined } | undefined;
   readonly memoryHead?: string | undefined;
   readonly knowledgeFiles?: ReadonlyArray<string> | undefined;
 }
@@ -77,6 +85,7 @@ function formatKnowledgeList(
 
 export function formatProjectContext(input: ProjectContextInput): string | undefined {
   const trimmedInstructions = input.instructions?.trim() ?? "";
+  const trimmedCoordinatorInstructions = input.coordinator?.instructions?.trim() ?? "";
   const trimmedMemory = input.memoryHead?.trim() ?? "";
   const cleanedKnowledge = (input.knowledgeFiles ?? [])
     .map((file) => file.trim())
@@ -84,6 +93,7 @@ export function formatProjectContext(input: ProjectContextInput): string | undef
 
   if (
     trimmedInstructions.length === 0 &&
+    input.coordinator === undefined &&
     trimmedMemory.length === 0 &&
     cleanedKnowledge.length === 0
   ) {
@@ -113,6 +123,35 @@ export function formatProjectContext(input: ProjectContextInput): string | undef
       const truncated = truncateUtf8ToBytes(trimmedInstructions, remainingBytes - overheadBytes);
       sections.push(`${lead}${truncated.text}${PROJECT_INSTRUCTIONS_TRUNCATION_NOTE}`);
       remainingBytes = 0;
+    }
+  }
+
+  if (input.coordinator !== undefined && remainingBytes > 0) {
+    const sepBytes = sections.length === 0 ? 0 : 2; // "\n\n"
+    const header = `## Coordinator\n\n${COORDINATOR_INSTRUCTIONS_LEAD}\n\n`;
+    const fullSection =
+      trimmedCoordinatorInstructions.length === 0
+        ? header.trimEnd()
+        : `${header}${trimmedCoordinatorInstructions}`;
+    const fullBytes = sepBytes + Buffer.byteLength(fullSection, "utf8");
+    if (fullBytes <= remainingBytes) {
+      sections.push(fullSection);
+      remainingBytes -= fullBytes;
+    } else {
+      const overheadBytes =
+        sepBytes +
+        Buffer.byteLength(header, "utf8") +
+        Buffer.byteLength(COORDINATOR_INSTRUCTIONS_TRUNCATION_NOTE, "utf8");
+      if (remainingBytes > overheadBytes) {
+        const truncated = truncateUtf8ToBytes(
+          trimmedCoordinatorInstructions,
+          remainingBytes - overheadBytes,
+        );
+        if (truncated.text.length > 0) {
+          sections.push(`${header}${truncated.text}${COORDINATOR_INSTRUCTIONS_TRUNCATION_NOTE}`);
+          remainingBytes = 0;
+        }
+      }
     }
   }
 

@@ -1184,6 +1184,7 @@ export const PROJECT_SCOPED_SERVER_SETTING_KEYS = [
   "textGenerationModelSelection",
   "threadTitleInstructions",
   "projectInstructions",
+  "coordinatorInstructions",
   "sourceControlWriterModelSelection",
   "reviewGuideModelSelection",
   "reviewGuideInstructions",
@@ -1224,6 +1225,10 @@ export const ProjectSettingsOverrides = Schema.Struct({
   threadTitleInstructions: Schema.optionalKey(TrimmedString),
   /** Fork: delivered to every thread in the project, regardless of provider. */
   projectInstructions: Schema.optionalKey(TrimmedString),
+  /** Fork: delivered only to the project's designated coordinator thread. */
+  coordinatorInstructions: Schema.optionalKey(TrimmedString),
+  /** Fork: designated coordinator thread id for this project. */
+  coordinatorThreadId: Schema.optionalKey(ThreadId),
   sourceControlWriterModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   reviewGuideModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   reviewGuideInstructions: Schema.optionalKey(TrimmedString),
@@ -1242,7 +1247,10 @@ export const ProjectSettingsOverrides = Schema.Struct({
   providerInstances: Schema.optionalKey(
     Schema.Record(ProviderInstanceId, ProjectProviderInstanceOverride),
   ),
-} satisfies Record<ProjectScopedServerSettingKey | "providerInstances", unknown>);
+} satisfies Record<
+  ProjectScopedServerSettingKey | "providerInstances" | "coordinatorThreadId",
+  unknown
+>);
 export type ProjectSettingsOverrides = typeof ProjectSettingsOverrides.Type;
 
 // Whole-entry writers must round-trip unknown keys; keep the type closed to catch misspellings.
@@ -1548,6 +1556,7 @@ export const ServerSettings = Schema.Struct({
   ),
   threadTitleInstructions: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   projectInstructions: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  coordinatorInstructions: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   branchNamingMode: BranchNamingMode.pipe(
     Schema.withDecodingDefault(Effect.succeed("static" as const)),
   ),
@@ -1946,6 +1955,7 @@ export const ServerSettingsPatch = Schema.Struct({
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
   threadTitleInstructions: Schema.optionalKey(TrimmedString),
   projectInstructions: Schema.optionalKey(TrimmedString),
+  coordinatorInstructions: Schema.optionalKey(TrimmedString),
   branchNamingMode: Schema.optionalKey(BranchNamingMode),
   branchNamePrefix: Schema.optionalKey(TrimmedString),
   branchNameInstructions: Schema.optionalKey(TrimmedString),
