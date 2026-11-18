@@ -55,6 +55,10 @@
       "types": "./src/coordinatorThread.ts",
       "default": "./src/coordinatorThread.ts"
     },
+    "./project-home": {
+      "types": "./src/projectHome.ts",
+      "default": "./src/projectHome.ts"
+    },
     "./device/stream": {
       "types": "./src/device/stream.ts",
       "default": "./src/device/stream.ts"

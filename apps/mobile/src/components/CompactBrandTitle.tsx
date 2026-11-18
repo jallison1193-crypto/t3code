@@ -42,10 +42,10 @@ export function CompactBrandTitle(
       accessibilityLabel={props.accessibilityLabel ?? "T3ther, Threads"}
       accessible
       role="heading"
-      className="flex-row items-center gap-1.5"
+      className="flex-row items-center gap-0.5"
       style={[
         { marginLeft: titleOffset },
-        Platform.OS === "android" && { gap: 5.25 * scale },
+        Platform.OS === "android" && { gap: 1.75 * scale },
         props.fit && { flexShrink: 0 },
       ]}
     >

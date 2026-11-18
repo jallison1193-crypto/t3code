@@ -58,6 +58,7 @@ import {
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
+  BotIcon,
   BugIcon,
   ChartNoAxesColumnIcon,
   CheckIcon,
@@ -1788,6 +1789,20 @@ function OpenCommandPaletteDialog(props: {
       title: "Project settings",
       description: contextualProjectGroup.displayName,
       icon: <FolderIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({
+          to: "/settings/projects",
+          search: { project: contextualProjectGroup.projectKey, machine: undefined },
+        });
+      },
+    });
+    actionItems.push({
+      kind: "action",
+      value: "action:project-home",
+      searchTerms: ["project", "home", "coordinator"],
+      title: "Open project home",
+      description: contextualProjectGroup.displayName,
+      icon: <BotIcon className={ITEM_ICON_CLASS} />,
       run: async () => {
         await navigate({
           to: "/projects/$projectKey",

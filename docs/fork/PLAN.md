@@ -78,10 +78,17 @@ Josh's pain points: hard to organize, looks plain, projects feel buried.
 
 ## Milestone 5+: Mods
 
-Phase 1 declarative `t3mod.json`: themes, skills, slash commands, instructions, MCP servers (approval-gated, proxied through T3's `/mcp`), hooks (approval-gated), panels rendered in the existing MCP Apps sandbox (`McpAppFrame.tsx` / `McpAppWebView.tsx`). User mods in T3 home; repo mods in `.t3/mods/`, disabled until approved. Share as folder or git repo.
-Phase 2: code mods in an isolated worker process; persistent panels.
-First real mod: Obsidian vault sync (project memory and status to the vault's project notes).
-Later: project templates (instructions, memory skeleton, scripts, mods).
+Goal (Josh, 2026-11-17): ask an agent for a change and get a working mod. "Make the sidebar denser", "add a pomodoro panel", "add a /standup command", "sync project memory to my vault". Mods change the look, change the UX, and add real features, not only themes.
+
+- Format: a folder with `t3mod.json`. User mods in T3 home; repo mods in `.t3/mods/`, disabled until approved. Share as folder or git repo. Enable, disable and uninstall are always one click (reverse states).
+- Authoring: an MCP toolkit (`t3_mod_create`, `t3_mod_update`, `t3_mod_list`, `t3_mod_enable`) lets any provider build, install and edit mods, the way "Ask an agent" restyles T3 today. Claude Code's mods and DeepSeek Harness's creator mode are the model to match.
+- Look: reuse T3's theme path (palette plus Custom CSS, published as an environment theme, same CSS limits). No second styling system.
+- UX and content: named UI slots (sidebar section, right panel tab, status line, toasts, composer actions, settings page) render mod UI in the existing MCP Apps sandbox (`McpAppFrame.tsx` / `McpAppWebView.tsx`). Panels run their own JS, so a mod can add real features from day one.
+- Behavior: skills, slash commands, instructions, keybindings, MCP servers (approval-gated, proxied through T3's `/mcp`), hooks (approval-gated).
+- Logic that needs files, network or schedules: mod code in an isolated server worker with a small declared API. Comes right after the first slots work, not as a someday item.
+- Read Claude Code plugins where they map cleanly (skills, slash commands, MCP servers, hooks), so existing plugins work without rewriting.
+- First real mods: Obsidian vault sync (project memory and status to the vault's project notes), then one agent-built panel as the end-to-end test of authoring.
+- Later: project templates (instructions, memory skeleton, scripts, mods).
 
 ## Prompt recipes, not features
 

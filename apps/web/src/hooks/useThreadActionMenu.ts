@@ -206,8 +206,8 @@ export function useThreadActionMenu(input: {
             logicalProjectKeyByPhysicalKey.get(derivePhysicalProjectKey(project)) ??
             deriveLogicalProjectKeyFromSettings(project, projectGroupingSettings);
           void router.navigate({
-            to: "/projects/$projectKey",
-            params: { projectKey },
+            to: "/settings/projects",
+            search: { project: projectKey, machine: undefined },
           });
           return;
         }

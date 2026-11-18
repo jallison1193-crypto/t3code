@@ -220,15 +220,13 @@ describe("ProjectMemorySettings", () => {
     );
 
     const textarea = page.getByLabelText("Project memory");
-    await userEvent.click(textarea);
-    await userEvent.type(textarea, "b");
+    await userEvent.fill(textarea, "a".repeat(PROJECT_MEMORY_MAX_BYTES) + "b");
 
     await expect.element(page.getByText(/exceeds the .* UTF-8 byte limit/i)).toBeVisible();
     await expect.element(page.getByRole("button", { name: "Save memory" })).toBeDisabled();
 
     // Now return within limit and fail RPC on save
-    await userEvent.clear(textarea);
-    await userEvent.type(textarea, "Valid content");
+    await userEvent.fill(textarea, "Valid content");
     state.setMemory.mockResolvedValueOnce({
       _tag: "Failure",
       cause: Cause.fail(
