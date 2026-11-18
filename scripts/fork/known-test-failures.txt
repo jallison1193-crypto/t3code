@@ -2,3 +2,4 @@
 # One test name (or unique part of the FAIL line) per line. Remove a line when it starts passing.
 honors the user's Cursor CLI attribution preferences
 forks a session from its original directory after the workspace root changes
+saves through a symlinked client settings file without replacing the link
