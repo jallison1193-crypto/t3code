@@ -8,6 +8,12 @@ import { openCommandPalette } from "../commandPaletteBus";
 import { useCommandPaletteStore } from "../commandPaletteStore";
 import { LAST_USED_PROJECT_STORAGE_KEY } from "../hooks/useHandleNewThread";
 import { removeLocalStorageItem } from "../hooks/useLocalStorage";
+import {
+  __resetClientSettingsPersistenceForTests,
+  __setClientSettingsForTests,
+  getClientSettings,
+} from "../hooks/useSettings";
+import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
 import { makeThreadFixture } from "../test-fixtures";
 import type { Project, Thread } from "../types";
 import { CommandPalette } from "./CommandPalette";
@@ -265,5 +271,28 @@ describe("CommandPalette open intents", () => {
         projectId: ProjectId.make("lima"),
       }),
     );
+  });
+
+  it("switches between Work mode and Code mode without changing sidebarModeFilter", async () => {
+    setup();
+    __resetClientSettingsPersistenceForTests();
+    __setClientSettingsForTests({
+      ...DEFAULT_CLIENT_SETTINGS,
+      appMode: "code",
+      sidebarModeFilter: "all",
+    });
+    await using _screen = await render(<CommandPalette>{null}</CommandPalette>);
+
+    openCommandPalette({ query: "Switch to Work mode" });
+    await page.getByRole("option", { name: /Switch to Work mode/ }).click();
+
+    await vi.waitFor(() => expect(getClientSettings().appMode).toBe("work"));
+    expect(getClientSettings().sidebarModeFilter).toBe("all");
+
+    openCommandPalette({ query: "Switch to Code mode" });
+    await page.getByRole("option", { name: /Switch to Code mode/ }).click();
+
+    await vi.waitFor(() => expect(getClientSettings().appMode).toBe("code"));
+    expect(getClientSettings().sidebarModeFilter).toBe("all");
   });
 });

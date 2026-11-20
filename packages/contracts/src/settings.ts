@@ -84,6 +84,14 @@ export const SidebarLayout = Schema.Literals(["threads", "projects"]);
 export type SidebarLayout = typeof SidebarLayout.Type;
 const DEFAULT_SIDEBAR_LAYOUT: SidebarLayout = "threads";
 
+export const AppMode = Schema.Literals(["code", "work"]);
+export type AppMode = typeof AppMode.Type;
+const DEFAULT_APP_MODE: AppMode = "code";
+
+export const SidebarModeFilter = Schema.Literals(["all", "code", "work"]);
+export type SidebarModeFilter = typeof SidebarModeFilter.Type;
+const DEFAULT_SIDEBAR_MODE_FILTER: SidebarModeFilter = "all";
+
 export const SidebarProjectGroupingMode = Schema.Literals([
   "repository",
   "repository_path",
@@ -552,6 +560,10 @@ export const ClientSettingsSchema = Schema.Struct({
   sidebarWorkingShelfEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   sidebarLayout: SidebarLayout.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_LAYOUT)),
+  ),
+  appMode: AppMode.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_APP_MODE))),
+  sidebarModeFilter: SidebarModeFilter.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_MODE_FILTER)),
   ),
   sidebarProjectGroupingMode: SidebarProjectGroupingMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_PROJECT_GROUPING_MODE)),
@@ -2131,6 +2143,8 @@ export const ClientSettingsPatch = Schema.Struct({
   threadDetailsItems: Schema.optionalKey(Schema.Record(Schema.String, Schema.Boolean)),
   sidebarWorkingShelfEnabled: Schema.optionalKey(Schema.Boolean),
   sidebarLayout: Schema.optionalKey(SidebarLayout),
+  appMode: Schema.optionalKey(AppMode),
+  sidebarModeFilter: Schema.optionalKey(SidebarModeFilter),
   sidebarProjectGroupingMode: Schema.optionalKey(SidebarProjectGroupingMode),
   sidebarProjectGroupingOverrides: Schema.optionalKey(
     Schema.Record(TrimmedNonEmptyString, SidebarProjectGroupingMode),

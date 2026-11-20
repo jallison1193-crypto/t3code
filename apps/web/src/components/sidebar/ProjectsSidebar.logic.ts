@@ -5,8 +5,10 @@ import {
   type ProjectGroupServerSettingsLookup,
 } from "@t3tools/client-runtime/project-thread-board";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
+import { filterThreadsByMode } from "@t3tools/client-runtime/state/thread-mode";
 import { toSortableTimestamp } from "@t3tools/client-runtime/state/thread-sort";
 import { isListedThreadLineage, type EnvironmentId, type ProjectId } from "@t3tools/contracts";
+import type { SidebarModeFilter } from "@t3tools/contracts/settings";
 
 export const OTHER_THREADS_LIMIT = 10;
 const PROJECTS_SIDEBAR_EXPANDED_STORAGE_KEY = "t3code:projects-sidebar-expanded-projects";
@@ -31,7 +33,10 @@ export type ProjectsSidebarThread = Pick<
   | "interactionMode"
   | "latestRun"
   | "runtime"
->;
+> & {
+  readonly tags?: ReadonlyArray<string> | undefined;
+  readonly source?: Pick<EnvironmentThreadShell["source"], "tags"> | undefined;
+};
 
 export interface ProjectsSidebarGroupMember {
   readonly environmentId: EnvironmentId;
@@ -89,9 +94,11 @@ export function buildProjectsSidebarSections<
   readonly projectGroups: ReadonlyArray<TGroup>;
   readonly threads: ReadonlyArray<TThread>;
   readonly getServerSettings: ProjectGroupServerSettingsLookup;
+  readonly modeFilter?: SidebarModeFilter;
 }): ProjectsSidebarSections<TGroup, TThread> {
   const knownProjectMemberKeys = new Set<string>();
   const projects: ProjectsSidebarProjectEntry<TGroup, TThread>[] = [];
+  const modeFilteredThreads = filterThreadsByMode(input.threads, input.modeFilter ?? "all");
 
   for (const group of input.projectGroups) {
     if (isScratchProjectGroup(group)) continue;
@@ -101,7 +108,7 @@ export function buildProjectsSidebarSections<
     if (group.archived) continue;
 
     const columns = groupProjectBoardThreadsForMembers(
-      input.threads,
+      modeFilteredThreads,
       group.memberProjects,
       input.getServerSettings,
     );
@@ -127,8 +134,9 @@ export function buildProjectsSidebarSections<
   const needsYou = eligibleThreads.filter(
     (thread) => projectThreadBoardColumn(thread) === "waiting",
   );
-  const pinned = eligibleThreads.filter((thread) => thread.pinnedAt !== null);
-  const otherThreads = eligibleThreads
+  const modeEligibleThreads = filterThreadsByMode(eligibleThreads, input.modeFilter ?? "all");
+  const pinned = modeEligibleThreads.filter((thread) => thread.pinnedAt !== null);
+  const otherThreads = modeEligibleThreads
     .filter((thread) => !knownProjectMemberKeys.has(`${thread.environmentId}:${thread.projectId}`))
     .slice(0, OTHER_THREADS_LIMIT);
 

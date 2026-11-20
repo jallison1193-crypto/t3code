@@ -4,10 +4,13 @@ import {
   ThreadId,
   type ContextMenuItem,
 } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { ThreadActionMenuId } from "../components/threadActionMenu.logic";
+
+vi.mock("gt-react", () => ({ t: (message: string) => message }));
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -20,6 +23,10 @@ function deferred<T>() {
 const state = vi.hoisted(() => ({
   granted: new Set<string>(),
   effects: [] as string[],
+  tags: [] as string[],
+  setTagCalls: [] as Array<unknown>,
+  setTagResult: null as AsyncResult.AsyncResult<unknown, unknown> | null,
+  toasts: [] as Array<unknown>,
   completed: deferred<void>(),
   show: vi.fn<
     (
@@ -58,13 +65,24 @@ vi.mock("../state/entities", () => ({
     worktreePath: null,
     runtime: null,
     latestRun: null,
+    source: { tags: state.tags },
   }),
   useProjects: () => [{ id: "project", environmentId: "secondary" }],
 }));
 vi.mock("../state/environments", () => ({ usePrimaryEnvironmentId: () => "primary" }));
-vi.mock("../state/threads", () => ({ threadEnvironment: { updateMetadata: "metadata" } }));
+vi.mock("../state/threads", () => ({
+  threadEnvironment: { updateMetadata: "metadata", setTag: "setTag" },
+}));
 vi.mock("../state/use-atom-command", () => ({
-  useAtomCommand: () => async () => {
+  useAtomCommand: (command: unknown) => async (payload: unknown) => {
+    if (command === "setTag") {
+      state.setTagCalls.push(payload);
+      const result = state.setTagResult ?? AsyncResult.success(undefined);
+      if (result._tag === "Success") {
+        recordEffect("setTag");
+      }
+      return result;
+    }
     recordEffect("metadata");
     return AsyncResult.success(undefined);
   },
@@ -96,7 +114,12 @@ vi.mock("../uiStateStore", () => ({
 }));
 vi.mock("../components/ui/toast", () => ({
   stackedThreadToast: (toast: unknown) => toast,
-  toastManager: { add: () => state.completed.resolve() },
+  toastManager: {
+    add: (toast: unknown) => {
+      state.toasts.push(toast);
+      state.completed.resolve();
+    },
+  },
 }));
 vi.mock("../components/Sidebar.snooze", () => ({
   resolveSnoozePresets: () => [
@@ -169,24 +192,83 @@ const createMenu = (options: { readonly onFind?: (threadRef: typeof target) => v
 beforeEach(() => {
   state.granted = new Set(["primary"]);
   state.effects = [];
+  state.tags = [];
+  state.setTagCalls = [];
+  state.setTagResult = null;
+  state.toasts = [];
   state.completed = deferred<void>();
   state.show.mockReset().mockResolvedValue(null);
 });
 
 describe("thread menu permissions", () => {
-  it.each(["rename", "regenerate-title", "delete", "pin", "settle", "archive"] as const)(
-    "%s rechecks after the native menu closes",
-    async (action) => {
-      state.granted.add("secondary");
-      const choice = deferred<ThreadActionMenuId | null>();
-      state.show.mockReturnValue(choice.promise);
-      createMenu().openMenu(position);
-      state.granted.delete("secondary");
-      choice.resolve(action);
-      await state.completed.promise;
-      expect(state.effects).toEqual([]);
-    },
-  );
+  it.each([
+    "rename",
+    "regenerate-title",
+    "delete",
+    "pin",
+    "settle",
+    "archive",
+    "move-to-work",
+    "move-to-code",
+  ] as const)("%s rechecks after the native menu closes", async (action) => {
+    state.granted.add("secondary");
+    const choice = deferred<ThreadActionMenuId | null>();
+    state.show.mockReturnValue(choice.promise);
+    createMenu().openMenu(position);
+    state.granted.delete("secondary");
+    choice.resolve(action);
+    await state.completed.promise;
+    expect(state.effects).toEqual([]);
+  });
+
+  it("moves a Code thread to Work and a Work thread to Code independently of appMode", async () => {
+    state.granted.add("secondary");
+    state.show.mockResolvedValue("move-to-work");
+    createMenu().openMenu(position);
+    await state.completed.promise;
+    expect(state.show.mock.calls[0]![0].find((item) => item.id === "move-to-work")).toEqual({
+      id: "move-to-work",
+      label: "Move to Work",
+    });
+    expect(state.setTagCalls).toEqual([
+      {
+        environmentId: target.environmentId,
+        input: { threadId: target.threadId, tag: "mode:work", tagged: true },
+      },
+    ]);
+
+    state.tags = ["mode:work"];
+    state.setTagCalls = [];
+    state.completed = deferred<void>();
+    state.show.mockResolvedValue("move-to-code");
+    createMenu().openMenu(position);
+    await state.completed.promise;
+    expect(state.show.mock.calls[1]![0].find((item) => item.id === "move-to-code")).toEqual({
+      id: "move-to-code",
+      label: "Move to Code",
+    });
+    expect(state.setTagCalls).toEqual([
+      {
+        environmentId: target.environmentId,
+        input: { threadId: target.threadId, tag: "mode:work", tagged: false },
+      },
+    ]);
+  });
+
+  it("shows an error toast when moving a thread between modes fails", async () => {
+    state.granted.add("secondary");
+    state.setTagResult = AsyncResult.failure(Cause.fail(new Error("tag write failed")));
+    state.show.mockResolvedValue("move-to-work");
+    createMenu().openMenu(position);
+    await state.completed.promise;
+    expect(state.toasts).toContainEqual(
+      expect.objectContaining({
+        type: "error",
+        title: "Failed to move thread",
+        description: "tag write failed",
+      }),
+    );
+  });
 
   it("offers find only to a header that can open it, without task permission", async () => {
     createMenu().openMenu(position);

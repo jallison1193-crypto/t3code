@@ -24,6 +24,7 @@ import {
   type RuntimeMode,
   type RuntimeRequestId,
   type ThreadId,
+  type ThreadTag,
   type ThreadEnvMode,
   type UploadChatAttachment,
   type GuestMessageId,
@@ -590,6 +591,22 @@ export const setThreadAutoSettle = Effect.fn("EnvironmentCommands.setThreadAutoS
     commandId: yield* allocateCommandId(input),
     threadId: input.threadId,
     enabled: input.enabled,
+  });
+});
+
+export interface SetThreadTagInput extends ThreadCommandInput {
+  readonly tag: ThreadTag;
+  readonly tagged: boolean;
+}
+export const setThreadTag = Effect.fn("EnvironmentCommands.setThreadTag")(function* (
+  input: SetThreadTagInput,
+) {
+  return yield* dispatch({
+    type: "thread.tag.set",
+    commandId: yield* allocateCommandId(input),
+    threadId: input.threadId,
+    tag: input.tag,
+    tagged: input.tagged,
   });
 });
 

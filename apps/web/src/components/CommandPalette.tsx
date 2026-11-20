@@ -1,3 +1,4 @@
+import { t } from "gt-react";
 import { ThreadContextDragGhost } from "./chat/ThreadContextDragGhost";
 import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
@@ -1825,6 +1826,19 @@ function OpenCommandPaletteDialog(props: {
     run: async () => {
       await updateClientSettings({
         sidebarLayout: clientSettings.sidebarLayout === "projects" ? "threads" : "projects",
+      });
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
+    value: "action:toggle-app-mode",
+    searchTerms: ["work", "code", "mode", "switch"],
+    title: clientSettings.appMode === "work" ? t("Switch to Code mode") : t("Switch to Work mode"),
+    icon: <PanelLeftIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await updateClientSettings({
+        appMode: clientSettings.appMode === "work" ? "code" : "work",
       });
     },
   });

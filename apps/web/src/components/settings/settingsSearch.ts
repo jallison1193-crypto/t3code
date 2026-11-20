@@ -500,6 +500,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["sidebar layout projects first needs you threads"],
   },
   {
+    id: "work-mode",
+    title: msg("Work mode"),
+    to: "/settings/general",
+    searchTerms: ["work mode code app mode new threads"],
+  },
+  {
     id: "boring-sidebar",
     title: "Boring sidebar (group by project)",
     to: "/settings/labs",

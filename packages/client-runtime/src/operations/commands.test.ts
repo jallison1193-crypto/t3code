@@ -47,6 +47,7 @@ import {
   interruptThreadTurn,
   revertThreadCheckpoint,
   resumeThreadQueue,
+  setThreadTag,
   startThreadTurn,
 } from "./commands.ts";
 
@@ -782,6 +783,44 @@ describe("V2 environment commands", () => {
           type: "thread.stop",
           commandId: "stop-outside-history-window",
           threadId: v2ThreadId,
+        },
+      ]);
+    }).pipe(Effect.provide(layerTestRandom)),
+  );
+
+  it.effect("dispatches thread.tag.set for both adding and removing a tag", () =>
+    Effect.gen(function* () {
+      const commands: OrchestrationV2Command[] = [];
+      const supervisor = yield* makeSupervisor({ commands, projects: [] });
+
+      yield* setThreadTag({
+        commandId: CommandId.make("tag-add"),
+        threadId: v2ThreadId,
+        tag: "mode:work",
+        tagged: true,
+      }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+
+      yield* setThreadTag({
+        commandId: CommandId.make("tag-remove"),
+        threadId: v2ThreadId,
+        tag: "mode:work",
+        tagged: false,
+      }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+
+      expect(commands).toEqual([
+        {
+          type: "thread.tag.set",
+          commandId: "tag-add",
+          threadId: v2ThreadId,
+          tag: "mode:work",
+          tagged: true,
+        },
+        {
+          type: "thread.tag.set",
+          commandId: "tag-remove",
+          threadId: v2ThreadId,
+          tag: "mode:work",
+          tagged: false,
         },
       ]);
     }).pipe(Effect.provide(layerTestRandom)),

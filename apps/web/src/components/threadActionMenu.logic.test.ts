@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { buildThreadActionMenuItems, type ThreadActionMenuState } from "./threadActionMenu.logic";
+
+vi.mock("gt-react", () => ({ t: (message: string) => message }));
 
 const baseState: ThreadActionMenuState = {
   canOperate: true,
@@ -102,5 +104,42 @@ describe("buildThreadActionMenuItems", () => {
       "Remove as coordinator",
     );
     expect(coordinator.find((item) => item.id === "make-coordinator")).toBeUndefined();
+  });
+
+  it("shows Move to Work or Move to Code based on threadMode and gates on canOperate", () => {
+    const omitted = buildThreadActionMenuItems(baseState);
+    expect(omitted.some((item) => item.id === "move-to-work" || item.id === "move-to-code")).toBe(
+      false,
+    );
+
+    const codeThread = buildThreadActionMenuItems({ ...baseState, threadMode: "code" });
+    expect(codeThread.find((item) => item.id === "move-to-work")).toEqual({
+      id: "move-to-work",
+      label: "Move to Work",
+    });
+    expect(codeThread.find((item) => item.id === "move-to-code")).toBeUndefined();
+
+    const codeReadOnly = buildThreadActionMenuItems({
+      ...baseState,
+      canOperate: false,
+      threadMode: "code",
+    });
+    expect(codeReadOnly.find((item) => item.id === "move-to-work")).toEqual({
+      id: "move-to-work",
+      label: "Move to Work",
+      disabled: true,
+    });
+
+    const workThread = buildThreadActionMenuItems({
+      ...baseState,
+      canOperate: false,
+      threadMode: "work",
+    });
+    expect(workThread.find((item) => item.id === "move-to-code")).toEqual({
+      id: "move-to-code",
+      label: "Move to Code",
+      disabled: true,
+    });
+    expect(workThread.find((item) => item.id === "move-to-work")).toBeUndefined();
   });
 });

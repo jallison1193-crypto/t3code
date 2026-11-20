@@ -1,3 +1,4 @@
+import { t } from "gt-react";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { requestCustomSnooze } from "../components/CustomSnoozeDialog";
 import { openGuestShareDialog } from "../components/chat/guestShareDialogState";
@@ -7,6 +8,7 @@ import {
   settlePromise,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import { threadModeOf, WORK_MODE_TAG } from "@t3tools/client-runtime/state/thread-mode";
 import { canSnooze, effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
 import {
   AuthOrchestrationOperateScope,
@@ -97,6 +99,10 @@ export function useThreadActionMenu(input: {
   const regenerateThreadTitle = useOrchestrationCommand(threadEnvironment.regenerateTitle, {
     reportFailure: false,
   });
+  const setThreadTag = useOrchestrationCommand(threadEnvironment.setTag, {
+    label: "Set thread tag",
+    reportFailure: false,
+  });
   const handleNewThread = useNewThreadHandler();
   const confirmThreadDelete = useClientSettings((s) => s.confirmThreadDelete);
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
@@ -140,6 +146,7 @@ export function useThreadActionMenu(input: {
         canFind: onFind !== undefined,
         branch: thread.branch ?? null,
         projectFilter: null,
+        threadMode: threadModeOf(thread),
         isPinned: thread.pinnedAt != null,
         isCoordinator: coordinator.isCoordinator,
         isSettled: supports.settlement && thread.settledOverride === "settled",
@@ -286,6 +293,19 @@ export function useThreadActionMenu(input: {
           }
           return;
         }
+        case "move-to-work":
+        case "move-to-code":
+          await reportFailure(t("Failed to move thread"), () =>
+            setThreadTag({
+              environmentId: threadRef.environmentId,
+              input: {
+                threadId: threadRef.threadId,
+                tag: WORK_MODE_TAG,
+                tagged: action === "move-to-work",
+              },
+            }),
+          );
+          return;
         case "copy-path": {
           const workspacePath = thread.worktreePath ?? projectCwd;
           if (!workspacePath) {

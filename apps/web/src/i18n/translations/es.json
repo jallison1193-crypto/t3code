@@ -1,4 +1,11 @@
 {
+  "589b8f1cb1900c1e": "Cambiar al modo Código",
+  "4c1a3630fcdb3815": "Cambiar al modo Trabajo",
+  "81e970ec32df90c6": "No se pudo mover el hilo",
+  "0e96841e5685bd64": "Mover a Trabajo",
+  "01067955af5887c8": "Mover a Código",
+  "df102dd8d6c4a4f3": "No se pudo marcar el hilo como Trabajo",
+  "8db96e557240d6c1": "Puedes moverlo a Trabajo desde el menú del hilo.",
   "5502179740811b1f": "Se entrega únicamente al hilo coordinador designado de este proyecto.",
   "011a880d28ad813b": "Mixto. Escribe instrucciones para aplicarlas a todos los destinos seleccionados.",
   "f86d1b3defd75cea": "Ninguno",
@@ -67,6 +74,8 @@
   "cd5452cc9e13c818": "Agrupación de proyectos",
   "6147d6fc04079525": "Orden de proyectos",
   "bdf39fd139a04325": "Sección Working",
+  "f50838bfc00bd76a": "Barra lateral de proyectos",
+  "3e9421c27defc5de": "Modo Trabajo",
   "76f3c3e2f8dd0120": "Confirmaciones",
   "859e386f8af841f0": "Confirmar al desfijar hilos",
   "de0d79b74d3e4af6": "Confirmar al archivar hilos",
@@ -80,6 +89,8 @@
   "83ca942c7163904f": "Combina los repositorios coincidentes de distintos entornos.",
   "609da998ca13521e": "Orden de los proyectos en el selector de la barra lateral y en la paleta de comandos.",
   "b4c541137a76b351": "Agrupa los hilos en curso y en seguimiento en una sección Working. Vuelven arriba de la bandeja de entrada cuando te necesitan. La boring sidebar de Labs no tiene sección Working.",
+  "45317ab9071ad89d": "Muestra los proyectos primero, con solo los hilos en curso o que te necesitan debajo de cada uno.",
+  "3e7849bb053d9af6": "Inicia los hilos nuevos en modo Trabajo en lugar de modo Código.",
   "e815f49e5abedcfd": "Pregunta antes de desfijar un hilo de la sección de fijados.",
   "41210f99adeeba78": "Pide un segundo clic en la acción de archivar antes de archivar un hilo.",
   "84f3d2cefc8d2a74": "Pregunta antes de eliminar un hilo y su historial de chat.",
@@ -129,5 +140,8 @@
   "858561b97fdd72f2": "Buscar ajustes",
   "fed2d32de2b0c566": "Borrar búsqueda de ajustes",
   "833639e235c97484": "Resultados de búsqueda de ajustes",
-  "be82bbfef472ab44": "No se encontraron ajustes"
+  "be82bbfef472ab44": "No se encontraron ajustes",
+  "045741aa62df51f8": "Todos",
+  "48cbd77fffac4713": "Trabajo",
+  "5bd161b76a64fd39": "Filtro de modo de hilos"
 }

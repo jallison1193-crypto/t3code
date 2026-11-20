@@ -87,6 +87,13 @@ describe("searchSettings", () => {
     });
   });
 
+  it("finds the Work mode setting under General", () => {
+    expect(searchSettings("work mode")[0]).toMatchObject({
+      id: "work-mode",
+      to: "/settings/general",
+    });
+  });
+
   it("finds project instructions, memory, and knowledge files under project settings", () => {
     expect(searchSettings("project instructions")[0]).toMatchObject({
       id: "project-instructions",

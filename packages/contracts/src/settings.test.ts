@@ -565,3 +565,21 @@ describe("ClientSettings.sidebarLayout", () => {
     });
   });
 });
+
+describe("ClientSettings.appMode and sidebarModeFilter", () => {
+  it("defaults independently to code and all, accepts patches, and rejects invalid values", () => {
+    const defaults = decodeClientSettings({});
+    expect(defaults.appMode).toBe("code");
+    expect(defaults.sidebarModeFilter).toBe("all");
+    expect(decodeClientSettings({ appMode: "work", sidebarModeFilter: "code" })).toMatchObject({
+      appMode: "work",
+      sidebarModeFilter: "code",
+    });
+    expect(decodeClientSettingsPatch({ appMode: "work" })).toEqual({ appMode: "work" });
+    expect(decodeClientSettingsPatch({ sidebarModeFilter: "work" })).toEqual({
+      sidebarModeFilter: "work",
+    });
+    expect(() => decodeClientSettingsPatch({ appMode: "invalid" })).toThrow();
+    expect(() => decodeClientSettingsPatch({ sidebarModeFilter: "invalid" })).toThrow();
+  });
+});

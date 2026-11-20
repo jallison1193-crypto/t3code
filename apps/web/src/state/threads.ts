@@ -1,7 +1,15 @@
+import { t } from "gt-react";
 import { createChildThreadApprovalsAtom } from "@t3tools/client-runtime/state/thread-requests";
 import { useAtomValue } from "@effect/atom-react";
 import { enabledEnvironmentIds } from "@t3tools/client-runtime/state/connections";
 import { arrayElementsEqual } from "@t3tools/client-runtime/state/entities";
+import {
+  type AtomCommand,
+  isAtomCommandInterrupted,
+  runAtomCommand,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import { WORK_MODE_TAG } from "@t3tools/client-runtime/state/thread-mode";
 import {
   createEnvironmentThreadDetailAtoms,
   createEnvironmentThreadShellAtoms,
@@ -12,7 +20,13 @@ import {
   createThreadEnvironmentAtoms,
   createThreadFamilyAtoms,
 } from "@t3tools/client-runtime/state/threads";
-import type { EnvironmentId, OrchestrationV2ThreadShell, ThreadId } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  OrchestrationV2ThreadShell,
+  ThreadId,
+  ThreadTag,
+} from "@t3tools/contracts";
+import type { AppMode } from "@t3tools/contracts/settings";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
 
@@ -29,10 +43,109 @@ export const olderSettledThreads = createOlderSettledThreadAtoms(
   connectionAtomRuntime,
   environmentShell.stateAtom,
 );
-export const threadEnvironment = createThreadEnvironmentAtoms(
+const baseThreadEnvironment = createThreadEnvironmentAtoms(
   connectionAtomRuntime,
   threadFamilies.snapshotAtom,
 );
+
+let cachedReadAppMode: (() => AppMode) | null = null;
+
+// Lazy imports keep this state module free of hook/UI cycles for partial test mocks.
+function readDefaultAppMode(): AppMode | Promise<AppMode> {
+  if (cachedReadAppMode !== null) return cachedReadAppMode();
+  return import("../hooks/useSettings").then(({ getClientSettings }) => {
+    cachedReadAppMode = () => getClientSettings().appMode;
+    return cachedReadAppMode();
+  });
+}
+
+async function notifyWorkModeTagFailure(error: unknown): Promise<void> {
+  const { stackedThreadToast, toastManager } = await import("../components/ui/toast");
+  toastManager.add(
+    stackedThreadToast({
+      type: "error",
+      title: t("Failed to tag thread for Work mode"),
+      description:
+        error instanceof Error
+          ? `${error.message} ${t("You can move it to Work from the thread menu.")}`
+          : t("You can move it to Work from the thread menu."),
+    }),
+  );
+}
+
+export function wrapNewThreadWorkTag<
+  Target extends {
+    readonly environmentId: EnvironmentId;
+    readonly input: { readonly threadId: ThreadId };
+  },
+  A,
+  E,
+>(input: {
+  readonly command: AtomCommand<Target, A, E>;
+  readonly setTag: AtomCommand<
+    {
+      readonly environmentId: EnvironmentId;
+      readonly input: {
+        readonly threadId: ThreadId;
+        readonly tag: ThreadTag;
+        readonly tagged: boolean;
+      };
+    },
+    unknown,
+    unknown
+  >;
+  readonly shouldTag: (target: Target) => boolean;
+  readonly readAppMode?: () => AppMode | Promise<AppMode>;
+  readonly onTagFailure?: (error: unknown) => void | Promise<void>;
+}): AtomCommand<Target, A, E> {
+  const readAppMode = input.readAppMode ?? readDefaultAppMode;
+  const onTagFailure = input.onTagFailure ?? notifyWorkModeTagFailure;
+  return {
+    label: input.command.label,
+    run: async (registry, target) => {
+      // Snapshot intended mode before async creation so switching modes mid-flight cannot misclassify the new thread.
+      let tagAsWork = false;
+      if (input.shouldTag(target)) {
+        const mode = readAppMode();
+        tagAsWork = (typeof mode === "string" ? mode : await mode) === "work";
+      }
+      const result = await input.command.run(registry, target);
+      if (result._tag === "Success" && tagAsWork) {
+        const tagResult = await runAtomCommand(
+          registry,
+          input.setTag,
+          {
+            environmentId: target.environmentId,
+            input: {
+              threadId: target.input.threadId,
+              tag: WORK_MODE_TAG,
+              tagged: true,
+            },
+          },
+          { reportFailure: false },
+        );
+        if (tagResult._tag === "Failure" && !isAtomCommandInterrupted(tagResult)) {
+          await onTagFailure(squashAtomCommandFailure(tagResult));
+        }
+      }
+      return result;
+    },
+  };
+}
+
+export const threadEnvironment = {
+  ...baseThreadEnvironment,
+  create: wrapNewThreadWorkTag({
+    command: baseThreadEnvironment.create,
+    setTag: baseThreadEnvironment.setTag,
+    shouldTag: () => true,
+  }),
+  startTurn: wrapNewThreadWorkTag({
+    command: baseThreadEnvironment.startTurn,
+    setTag: baseThreadEnvironment.setTag,
+    shouldTag: (target) => target.input.bootstrap?.createThread !== undefined,
+  }),
+};
 const environmentThreads = createEnvironmentThreadStateAtoms(connectionAtomRuntime);
 export const environmentThreadDetails = createEnvironmentThreadDetailAtoms(
   environmentThreads.stateAtom,

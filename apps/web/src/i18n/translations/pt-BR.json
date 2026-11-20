@@ -1,4 +1,11 @@
 {
+  "589b8f1cb1900c1e": "Mudar para o modo Código",
+  "4c1a3630fcdb3815": "Mudar para o modo Trabalho",
+  "81e970ec32df90c6": "Não foi possível mover a conversa",
+  "0e96841e5685bd64": "Mover para Trabalho",
+  "01067955af5887c8": "Mover para Código",
+  "df102dd8d6c4a4f3": "Não foi possível marcar a conversa como Trabalho",
+  "8db96e557240d6c1": "Você pode movê-la para Trabalho pelo menu da conversa.",
   "5502179740811b1f": "Enviado apenas para a thread coordenadora designada deste projeto.",
   "011a880d28ad813b": "Misto. Digite as instruções para aplicar a todos os destinos selecionados.",
   "f86d1b3defd75cea": "Nenhuma",
@@ -67,6 +74,8 @@
   "cd5452cc9e13c818": "Agrupamento de projetos",
   "6147d6fc04079525": "Ordem dos projetos",
   "bdf39fd139a04325": "Seção Working",
+  "f50838bfc00bd76a": "Barra lateral de projetos",
+  "3e9421c27defc5de": "Modo Trabalho",
   "76f3c3e2f8dd0120": "Confirmações",
   "859e386f8af841f0": "Confirmar ao desafixar conversas",
   "de0d79b74d3e4af6": "Confirmar ao arquivar conversas",
@@ -80,6 +89,8 @@
   "83ca942c7163904f": "Combina repositórios correspondentes entre ambientes.",
   "609da998ca13521e": "Ordem dos projetos no seletor da barra lateral e na paleta de comandos.",
   "b4c541137a76b351": "Agrupa as conversas em andamento e em monitoramento em uma seção Working. Elas voltam ao topo da caixa de entrada quando precisam de você. A boring sidebar do Labs não tem seção Working.",
+  "45317ab9071ad89d": "Lista os projetos primeiro, mostrando abaixo de cada um apenas as conversas em andamento ou que precisam de você.",
+  "3e7849bb053d9af6": "Inicia novas conversas no modo Trabalho em vez do modo Código.",
   "e815f49e5abedcfd": "Pergunta antes de desafixar uma conversa da seção de fixadas.",
   "41210f99adeeba78": "Exige um segundo clique na ação de arquivar antes de arquivar uma conversa.",
   "84f3d2cefc8d2a74": "Pergunta antes de excluir uma conversa e o histórico do chat.",
@@ -129,5 +140,8 @@
   "858561b97fdd72f2": "Pesquisar configurações",
   "fed2d32de2b0c566": "Limpar pesquisa de configurações",
   "833639e235c97484": "Resultados da pesquisa de configurações",
-  "be82bbfef472ab44": "Nenhuma configuração encontrada"
+  "be82bbfef472ab44": "Nenhuma configuração encontrada",
+  "045741aa62df51f8": "Todas",
+  "48cbd77fffac4713": "Trabalho",
+  "5bd161b76a64fd39": "Filtro de modo de conversas"
 }

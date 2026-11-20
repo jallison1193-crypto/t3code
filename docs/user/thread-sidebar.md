@@ -167,6 +167,19 @@ command palette) to list projects first, with a **Needs you** section at the top
 waiting on approvals or input, expandable active threads under each project, **Pinned**, and up
 to 10 **Other threads** outside your project groups. Each device keeps its own choice.
 
+### Work and Code threads
+
+Threads are either **Code** threads (the default) or **Work** threads. Turn on
+**Settings → General → Work mode** (or run **Switch to Work mode** / **Switch to Code mode** in
+the command palette) so new threads start as Work threads instead of Code threads. Changing this
+setting only affects threads created afterward.
+
+In the Projects sidebar, use the **All / Code / Work** filter below Search to show all threads,
+only Code threads, or only Work threads in **Projects**, **Pinned**, and **Other threads**.
+**Needs you** always shows every waiting thread regardless of the filter.
+
+To reclassify an existing thread, open its menu and choose **Move to Work** or **Move to Code**.
+
 ## Settle finished work
 
 Choose **Settle thread** from its menu to move finished work out of the active list

@@ -1,4 +1,6 @@
+import { t } from "gt-react";
 import type { ContextMenuItem } from "@t3tools/contracts";
+import type { ThreadMode } from "@t3tools/client-runtime/state/thread-mode";
 import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled";
 
 export type ThreadActionMenuId =
@@ -6,6 +8,8 @@ export type ThreadActionMenuId =
   | "new-thread-on-branch"
   | "filter-by-project"
   | "turn-into-project"
+  | "move-to-work"
+  | "move-to-code"
   | "project-settings"
   | "pin"
   | "unpin"
@@ -77,6 +81,7 @@ export interface ThreadActionMenuState {
     readonly label: string;
     readonly isActive: boolean;
   } | null;
+  readonly threadMode?: ThreadMode | null;
   readonly isPinned: boolean;
   readonly isCoordinator?: boolean;
   readonly isSettled: boolean;
@@ -216,6 +221,11 @@ export function buildThreadActionMenuItems(
           },
         ]
       : []),
+    ...(state.threadMode === "code"
+      ? [{ id: "move-to-work" as const, label: t("Move to Work") }]
+      : state.threadMode === "work"
+        ? [{ id: "move-to-code" as const, label: t("Move to Code") }]
+        : []),
     ...(state.supports.autoSettleOptOut
       ? [
           {

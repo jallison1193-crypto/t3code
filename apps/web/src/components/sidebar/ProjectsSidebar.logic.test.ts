@@ -302,3 +302,78 @@ describe("expanded project persistence", () => {
     ).not.toThrow();
   });
 });
+
+describe("buildProjectsSidebarSections mode filtering", () => {
+  it("filters every section by mode except Needs you", () => {
+    const groups = [makeGroup("proj-a", "Alpha")];
+    const threads: ProjectsSidebarThread[] = [
+      makeThread("code-waiting", {
+        projectId: ProjectId.make("proj-a"),
+        hasPendingApprovals: true,
+        source: { tags: [] },
+      }),
+      makeThread("work-waiting", {
+        projectId: ProjectId.make("proj-a"),
+        hasPendingUserInput: true,
+        pinnedAt: "2026-04-01T09:00:00.000Z",
+        source: { tags: ["mode:work"] },
+      }),
+      makeThread("work-orphan", {
+        projectId: ProjectId.make("orphan-project"),
+        tags: ["mode:work"],
+      }),
+    ];
+
+    const defaultSections = buildProjectsSidebarSections({
+      projectGroups: groups,
+      threads,
+      getServerSettings: emptyServerSettings,
+    });
+    expect(defaultSections.needsYou.map((t) => t.id)).toEqual([
+      ThreadId.make("code-waiting"),
+      ThreadId.make("work-waiting"),
+    ]);
+    expect(defaultSections.projects[0]?.activeThreads.map((t) => t.id)).toEqual([
+      ThreadId.make("code-waiting"),
+      ThreadId.make("work-waiting"),
+    ]);
+    expect(defaultSections.projects[0]?.attentionCount).toBe(2);
+    expect(defaultSections.projects[0]?.attentionTone).toBe("waiting");
+
+    const workSections = buildProjectsSidebarSections({
+      projectGroups: groups,
+      threads,
+      getServerSettings: emptyServerSettings,
+      modeFilter: "work",
+    });
+    expect(workSections.needsYou.map((t) => t.id)).toEqual([
+      ThreadId.make("code-waiting"),
+      ThreadId.make("work-waiting"),
+    ]);
+    expect(workSections.projects[0]?.activeThreads.map((t) => t.id)).toEqual([
+      ThreadId.make("work-waiting"),
+    ]);
+    expect(workSections.projects[0]?.attentionCount).toBe(1);
+    expect(workSections.projects[0]?.attentionTone).toBe("waiting");
+    expect(workSections.pinned.map((t) => t.id)).toEqual([ThreadId.make("work-waiting")]);
+    expect(workSections.otherThreads.map((t) => t.id)).toEqual([ThreadId.make("work-orphan")]);
+
+    const codeSections = buildProjectsSidebarSections({
+      projectGroups: groups,
+      threads,
+      getServerSettings: emptyServerSettings,
+      modeFilter: "code",
+    });
+    expect(codeSections.needsYou.map((t) => t.id)).toEqual([
+      ThreadId.make("code-waiting"),
+      ThreadId.make("work-waiting"),
+    ]);
+    expect(codeSections.projects[0]?.activeThreads.map((t) => t.id)).toEqual([
+      ThreadId.make("code-waiting"),
+    ]);
+    expect(codeSections.projects[0]?.attentionCount).toBe(1);
+    expect(codeSections.projects[0]?.attentionTone).toBe("waiting");
+    expect(codeSections.pinned).toEqual([]);
+    expect(codeSections.otherThreads).toEqual([]);
+  });
+});

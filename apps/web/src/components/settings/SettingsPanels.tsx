@@ -499,6 +499,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.sidebarLayout !== DEFAULT_UNIFIED_SETTINGS.sidebarLayout
       ? ["Projects sidebar"]
       : []),
+    ...(settings.appMode !== DEFAULT_UNIFIED_SETTINGS.appMode ? ["Work mode"] : []),
     ...(settings.sidebarAutoSettleAfterDays !== DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays
       ? ["Auto-settle inactive threads"]
       : []),
@@ -684,6 +685,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarProjectSortOrder: DEFAULT_UNIFIED_SETTINGS.sidebarProjectSortOrder,
       sidebarWorkingShelfEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled,
       sidebarLayout: DEFAULT_UNIFIED_SETTINGS.sidebarLayout,
+      appMode: DEFAULT_UNIFIED_SETTINGS.appMode,
+      sidebarModeFilter: DEFAULT_UNIFIED_SETTINGS.sidebarModeFilter,
       sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
       sidebarAutoSettleKeepPullRequests: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleKeepPullRequests,
       sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
@@ -964,6 +967,29 @@ export function GeneralSettingsPanel() {
                 updateSettings({ sidebarLayout: checked ? "projects" : "threads" })
               }
               aria-label={gt("Projects sidebar")}
+            />
+          }
+        />
+        <SettingsRow
+          {...setting("work-mode")}
+          description={<T>Start new threads in Work mode instead of Code mode.</T>}
+          resetAction={
+            settings.appMode !== DEFAULT_UNIFIED_SETTINGS.appMode ? (
+              <SettingResetButton
+                label="work mode"
+                onClick={() =>
+                  updateSettings({
+                    appMode: DEFAULT_UNIFIED_SETTINGS.appMode,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.appMode === "work"}
+              onCheckedChange={(checked) => updateSettings({ appMode: checked ? "work" : "code" })}
+              aria-label={gt("Work mode")}
             />
           }
         />
