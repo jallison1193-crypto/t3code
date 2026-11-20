@@ -15,6 +15,7 @@ import {
 } from "@t3tools/contracts";
 import type { MenuAction } from "@react-native-menu/menu";
 import { Atom } from "effect/reactivity";
+import { useGT } from "gt-react-native";
 import { useCallback, useMemo } from "react";
 
 import * as Dialog from "../../components/ui/Dialog";
@@ -45,6 +46,7 @@ export function useCoordinatorThreadRowAction(
   thread: EnvironmentThreadShell,
   onPinThread: (thread: EnvironmentThreadShell) => void,
 ) {
+  const gt = useGT();
   const coordinatorThreadId = useAtomValue(
     projectCoordinatorThreadIdFamily(`${thread.environmentId}\0${thread.projectId}`),
   );
@@ -61,10 +63,10 @@ export function useCoordinatorThreadRowAction(
     if (!coordinatorSupported || !thread.projectId) return [];
     return [
       isCoordinator
-        ? { id: "remove-coordinator", title: "Remove as coordinator", image: "cpu" }
-        : { id: "make-coordinator", title: "Make project coordinator", image: "cpu" },
+        ? { id: "remove-coordinator", title: gt("Remove as coordinator"), image: "cpu" }
+        : { id: "make-coordinator", title: gt("Make project coordinator"), image: "cpu" },
     ];
-  }, [coordinatorSupported, isCoordinator, thread.projectId]);
+  }, [coordinatorSupported, gt, isCoordinator, thread.projectId]);
 
   const handleCoordinatorMenuAction = useCallback(
     (eventId: string) => {
@@ -74,7 +76,10 @@ export function useCoordinatorThreadRowAction(
         serverEnvironment.configValueAtom(thread.environmentId),
       )?.settings;
       if (!settings) {
-        Dialog.alert("Could not update coordinator thread", "Server settings are not loaded yet.");
+        Dialog.alert(
+          gt("Could not update coordinator thread"),
+          gt("Server settings are not loaded yet."),
+        );
         return true;
       }
       const patch = buildCoordinatorPatch(settings, thread.projectId, targetThreadId);
@@ -87,8 +92,8 @@ export function useCoordinatorThreadRowAction(
           if (!isAtomCommandInterrupted(result)) {
             const error = squashAtomCommandFailure(result);
             Dialog.alert(
-              "Could not update coordinator thread",
-              error instanceof Error ? error.message : "Try again.",
+              gt("Could not update coordinator thread"),
+              error instanceof Error ? error.message : gt("Try again."),
             );
           }
           return;
@@ -103,7 +108,7 @@ export function useCoordinatorThreadRowAction(
       })();
       return true;
     },
-    [onPinThread, thread, updateSettings],
+    [gt, onPinThread, thread, updateSettings],
   );
 
   return { isCoordinator, coordinatorMenuItems, handleCoordinatorMenuAction };

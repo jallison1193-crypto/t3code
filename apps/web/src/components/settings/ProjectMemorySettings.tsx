@@ -6,7 +6,7 @@ import {
 } from "@t3tools/client-runtime/project-memory";
 import { PROJECT_MEMORY_MAX_BYTES, type EnvironmentId, type ProjectId } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
-import { useGT, useMessages } from "gt-react";
+import { useGT } from "gt-react";
 import { useState } from "react";
 
 import { projectEnvironment } from "../../state/projects";
@@ -16,7 +16,7 @@ import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import { SettingsRow } from "./settingsLayout";
 import { useOptionalSettingsScope } from "./SettingsScopeContext";
-import { searchableSetting } from "./settingsSearch";
+import { useSearchableSetting } from "./settingsSearch";
 
 function ProjectMemoryEditor({
   environmentId,
@@ -26,7 +26,7 @@ function ProjectMemoryEditor({
   readonly projectId: ProjectId;
 }) {
   const gt = useGT();
-  const m = useMessages();
+  const searchableSetting = useSearchableSetting();
   const setting = searchableSetting("project-memory");
   const memoryAtom = projectEnvironment.memoryGet({
     environmentId,
@@ -98,7 +98,7 @@ function ProjectMemoryEditor({
   return (
     <SettingsRow
       id={setting.id}
-      title={m(setting.title)}
+      title={setting.title}
       description={gt(
         "Markdown notes stored in MEMORY.md for this project. Agents in this project also read and update this file.",
       )}
@@ -120,7 +120,7 @@ function ProjectMemoryEditor({
         ) : (
           <>
             <Textarea
-              aria-label={m(setting.title)}
+              aria-label={setting.title}
               rows={8}
               value={currentText}
               disabled={!canEdit || isSaving}
@@ -204,7 +204,7 @@ function ProjectMemoryEditor({
 
 export function ProjectMemorySettings() {
   const gt = useGT();
-  const m = useMessages();
+  const searchableSetting = useSearchableSetting();
   const scopeContext = useOptionalSettingsScope();
   if (scopeContext === null) return null;
   if (scopeContext.scope.kind !== "project" && scopeContext.scope.kind !== "checkout") return null;
@@ -219,7 +219,7 @@ export function ProjectMemorySettings() {
     return (
       <SettingsRow
         id={setting.id}
-        title={m(setting.title)}
+        title={setting.title}
         description={gt("Reconnect the selected environment to view and edit project memory.")}
       />
     );

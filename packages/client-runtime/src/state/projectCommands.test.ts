@@ -210,7 +210,7 @@ const makeHarness = Effect.fn("TestProjectCommands.makeHarness")(function* () {
       permissions: [AuthFilesystemWriteScope, AuthOrchestrationOperateScope],
     }),
   );
-  const openScratch = Effect.promise(() =>
+  const openScratch = Effect.exit(
     commands.openScratch.run(registry, { environmentId: ENVIRONMENT_ID, input: {} }),
   );
   return { registry, storedProject, openScratch, commands, metadataRequests, readResponse };
@@ -377,7 +377,7 @@ describe("writeFile metadata", () => {
         { suspendOnWaiting: true },
       ).pipe(Effect.forkChild);
       yield* Deferred.await(started);
-      const write = yield* Effect.promise(() =>
+      const write = yield* Effect.exit(
         h.commands.writeFile.run(h.registry, {
           environmentId: ENVIRONMENT_ID,
           input: { cwd: "/repo", relativePath: "foo", contents: "new" },
@@ -412,7 +412,7 @@ describe("writeFile metadata", () => {
         { kind: "file", byteLength: 5 },
         { kind: "file", byteLength: 5 },
       ]);
-      const result = yield* Effect.promise(() =>
+      const result = yield* Effect.exit(
         h.commands.writeFile.run(h.registry, {
           environmentId: ENVIRONMENT_ID,
           input: { cwd: "/repo", relativePath: "./foo", contents: "new" },
@@ -459,7 +459,7 @@ describe("project memory and knowledge RPCs", () => {
       });
       expect(initial).toMatchObject({ exists: false, content: "" });
 
-      const saved = yield* Effect.promise(() =>
+      const saved = yield* Effect.exit(
         commands.memorySet.run(registry, {
           environmentId: ENVIRONMENT_ID,
           input: { projectId: PROJECT_ID, content: "# Notes\nRemember tests." },
@@ -493,7 +493,7 @@ describe("project memory and knowledge RPCs", () => {
         { projectId: PROJECT_ID, files: [] },
       );
 
-      const added = yield* Effect.promise(() =>
+      const added = yield* Effect.exit(
         commands.knowledgeAdd.run(registry, {
           environmentId: ENVIRONMENT_ID,
           input: { projectId: PROJECT_ID, name: "guide.md", content: "# Guide" },
@@ -513,7 +513,7 @@ describe("project memory and knowledge RPCs", () => {
         content: "# Guide",
       });
 
-      const removed = yield* Effect.promise(() =>
+      const removed = yield* Effect.exit(
         commands.knowledgeDelete.run(registry, {
           environmentId: ENVIRONMENT_ID,
           input: { projectId: PROJECT_ID, name: "guide.md" },

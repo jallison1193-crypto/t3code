@@ -10,7 +10,7 @@ import {
 } from "@t3tools/client-runtime/project-thread-board";
 import type { SidebarModeFilter } from "@t3tools/contracts/settings";
 import { useMatch, useNavigate } from "@tanstack/react-router";
-import { msg, useGT, useMessages } from "gt-react";
+import { msg, T, useGT, useMessages } from "gt-react";
 import { ChevronDownIcon, FolderPlusIcon, SearchIcon, SquarePenIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -186,16 +186,16 @@ export function ProjectsSidebar() {
             className="flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium text-sidebar-muted-foreground outline-none hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70"
           >
             <SearchIcon className="size-4 shrink-0 text-(--sidebar-icon-color)" />
-            Search
+            <T>Search</T>
           </button>
           <SidebarHeaderIconButton
-            label="Add project"
+            label={gt("Add project")}
             onClick={() => openCommandPalette({ open: "add-project" })}
           >
             <FolderPlusIcon />
           </SidebarHeaderIconButton>
           <SidebarHeaderIconButton
-            label="New thread"
+            label={gt("New thread")}
             onClick={() => {
               if (isMobile) setOpenMobile(false);
               openCommandPalette({ open: "new-thread-in" });
@@ -230,7 +230,7 @@ export function ProjectsSidebar() {
       <SidebarContent>
         {sections.needsYou.length > 0 ? (
           <SidebarGroup>
-            <SidebarSectionHeading label="Needs you" />
+            <SidebarSectionHeading label={gt("Needs you")} />
             <SidebarMenu>
               {sections.needsYou.map((thread) => (
                 <ThreadNavRow
@@ -249,10 +249,10 @@ export function ProjectsSidebar() {
         ) : null}
 
         <SidebarGroup>
-          <SidebarSectionHeading label="Projects" />
+          <SidebarSectionHeading label={gt("Projects")} />
           {sections.projects.length === 0 ? (
             <p className="px-(--sidebar-row-content-inset) py-1 text-xs text-sidebar-muted-foreground">
-              No projects yet
+              <T>No projects yet</T>
             </p>
           ) : (
             <SidebarMenu>
@@ -295,8 +295,8 @@ export function ProjectsSidebar() {
                         aria-expanded={isExpanded}
                         aria-label={
                           isExpanded
-                            ? `Collapse ${group.displayName}`
-                            : `Expand ${group.displayName}`
+                            ? gt("Collapse {name}", { name: group.displayName })
+                            : gt("Expand {name}", { name: group.displayName })
                         }
                         onClick={() => toggleProject(group.projectKey)}
                         className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-(--control-radius) text-sidebar-muted-foreground outline-none hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
@@ -328,7 +328,7 @@ export function ProjectsSidebar() {
                         </SidebarMenuSub>
                       ) : (
                         <p className="py-1 pl-8 pr-2 text-xs text-sidebar-muted-foreground">
-                          No active threads
+                          <T>No active threads</T>
                         </p>
                       )
                     ) : null}
@@ -341,7 +341,7 @@ export function ProjectsSidebar() {
 
         {sections.pinned.length > 0 ? (
           <SidebarGroup>
-            <SidebarSectionHeading label="Pinned" />
+            <SidebarSectionHeading label={gt("Pinned")} />
             <SidebarMenu>
               {sections.pinned.map((thread) => (
                 <ThreadNavRow
@@ -361,7 +361,7 @@ export function ProjectsSidebar() {
 
         {sections.otherThreads.length > 0 ? (
           <SidebarGroup>
-            <SidebarSectionHeading label="Other threads" />
+            <SidebarSectionHeading label={gt("Other threads")} />
             <SidebarMenu>
               {sections.otherThreads.map((thread) => (
                 <ThreadNavRow

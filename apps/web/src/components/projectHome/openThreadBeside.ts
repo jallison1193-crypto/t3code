@@ -24,6 +24,6 @@ export function openThreadBesideCoordinator(
   }
   const settings = appAtomRegistry.get(serverEnvironment.settingsValueAtom(fromRef.environmentId));
   if (coordinatorThreadIdOf(settings, fromProjectId) !== fromRef.threadId) return false;
-  useRightPanelStore.getState().openSideChat(fromRef, targetRef.threadId, "thread");
+  useRightPanelStore.getState().openThread(fromRef, targetRef.threadId, "thread");
   return true;
 }

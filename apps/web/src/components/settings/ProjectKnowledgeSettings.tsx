@@ -16,7 +16,7 @@ import {
   type ProjectKnowledgeFileSummary,
 } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
-import { useGT, useMessages } from "gt-react";
+import { useGT } from "gt-react";
 import { FileTextIcon, Trash2Icon, UploadIcon } from "lucide-react";
 import { useRef, useState } from "react";
 
@@ -38,7 +38,7 @@ import {
 import { extractPdfTextAsMarkdown } from "./projectKnowledgePdf";
 import { SettingsRow } from "./settingsLayout";
 import { useOptionalSettingsScope } from "./SettingsScopeContext";
-import { searchableSetting } from "./settingsSearch";
+import { useSearchableSetting } from "./settingsSearch";
 
 function formatUpdatedTimestamp(iso: string): string {
   const date = new Date(iso);
@@ -140,7 +140,7 @@ function ProjectKnowledgeManager({
   readonly projectId: ProjectId;
 }) {
   const gt = useGT();
-  const m = useMessages();
+  const searchableSetting = useSearchableSetting();
   const setting = searchableSetting("project-knowledge");
   const listAtom = projectEnvironment.knowledgeList({
     environmentId,
@@ -322,7 +322,7 @@ function ProjectKnowledgeManager({
   return (
     <SettingsRow
       id={setting.id}
-      title={m(setting.title)}
+      title={setting.title}
       description={gt(
         "Reference documents available to agents in this project. Upload Markdown, text, JSON, CSV, code files, or PDFs (converted to Markdown).",
       )}
@@ -532,7 +532,7 @@ function ProjectKnowledgeManager({
 
 export function ProjectKnowledgeSettings() {
   const gt = useGT();
-  const m = useMessages();
+  const searchableSetting = useSearchableSetting();
   const scopeContext = useOptionalSettingsScope();
   if (scopeContext === null) return null;
   if (scopeContext.scope.kind !== "project" && scopeContext.scope.kind !== "checkout") return null;
@@ -547,7 +547,7 @@ export function ProjectKnowledgeSettings() {
     return (
       <SettingsRow
         id={setting.id}
-        title={m(setting.title)}
+        title={setting.title}
         description={gt("Reconnect the selected environment to view and manage knowledge files.")}
       />
     );

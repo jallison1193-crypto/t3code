@@ -148,7 +148,7 @@ export function CoordinatorSettings(props: {
     .join(",");
   const displayTargets =
     pendingWrites > 0 && pendingTargets !== null ? pendingTargets : settingsTargets;
-  const managedReason = managedSettingReason(settingsTargets, "coordinatorInstructions");
+  const managedReason = managedSettingReason(settingsTargets, ["coordinatorInstructions"]);
   const disabled = !canWriteSettings || pendingWrites > 0 || managedReason !== undefined;
   const instructions = uniformMobileSetting(displayTargets, "coordinatorInstructions");
   const source = resolveCoordinatorInstructionsSource(displayTargets);

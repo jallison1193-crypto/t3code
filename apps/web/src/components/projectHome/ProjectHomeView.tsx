@@ -32,6 +32,7 @@ import {
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { resolveNewThreadModelSelection } from "@t3tools/shared/usageLimits";
 import { Atom } from "effect/reactivity";
+import { T, useGT } from "gt-react";
 import { AlertCircleIcon, BotIcon, FolderIcon, LockIcon, WifiOffIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -101,6 +102,7 @@ function resolveCoordinatorCreateDefaults(environmentId: EnvironmentId, projectI
 }
 
 export function ProjectHomeView({ projectKey }: { readonly projectKey: string }) {
+  const gt = useGT();
   const navigate = useNavigate();
   const projectGroups = useSettingsProjectGroups();
   const { isReady: environmentsReady, presentationById } = useEnvironments();
@@ -191,7 +193,7 @@ export function ProjectHomeView({ projectKey }: { readonly projectKey: string })
           input: {
             threadId: createdThreadId,
             projectId,
-            title: "Coordinator",
+            title: gt("Coordinator"),
             modelSelection: defaults.modelSelection,
             runtimeMode: defaults.runtimeMode,
             interactionMode: defaults.interactionMode,
@@ -226,7 +228,7 @@ export function ProjectHomeView({ projectKey }: { readonly projectKey: string })
             toastManager.add(
               stackedThreadToast({
                 type: "error",
-                title: "Failed to pin coordinator thread",
+                title: gt("Failed to pin coordinator thread"),
                 description: failure instanceof Error ? failure.message : String(failure),
               }),
             );
@@ -272,7 +274,7 @@ export function ProjectHomeView({ projectKey }: { readonly projectKey: string })
       (error: unknown) => {
         if (cancelled) return;
         const message =
-          error instanceof Error ? error.message : "Failed to create coordinator thread.";
+          error instanceof Error ? error.message : gt("Failed to create coordinator thread.");
         setCreationError({ key: targetKey, message });
       },
     );
@@ -282,6 +284,7 @@ export function ProjectHomeView({ projectKey }: { readonly projectKey: string })
   }, [
     ensureCoordinatorThread,
     existingThreadId,
+    gt,
     navigate,
     selectedEnvironmentId,
     selectedProjectId,
@@ -308,7 +311,7 @@ export function ProjectHomeView({ projectKey }: { readonly projectKey: string })
     if (!environmentsReady) {
       body = (
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          Loading project…
+          <T>Loading project…</T>
         </div>
       );
     } else {
@@ -318,14 +321,16 @@ export function ProjectHomeView({ projectKey }: { readonly projectKey: string })
             <EmptyMedia variant="icon">
               <FolderIcon />
             </EmptyMedia>
-            <EmptyTitle>Project not found</EmptyTitle>
+            <EmptyTitle>
+              <T>Project not found</T>
+            </EmptyTitle>
             <EmptyDescription>
-              This project could not be found in your connected environments.
+              <T>This project could not be found in your connected environments.</T>
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <Button variant="outline" size="sm" onClick={openProjectSettings}>
-              Open project settings
+              <T>Open project settings</T>
             </Button>
           </EmptyContent>
         </Empty>
@@ -338,16 +343,18 @@ export function ProjectHomeView({ projectKey }: { readonly projectKey: string })
           <EmptyMedia variant="icon">
             <AlertCircleIcon />
           </EmptyMedia>
-          <EmptyTitle>Couldn&apos;t start coordinator</EmptyTitle>
+          <EmptyTitle>
+            <T>Couldn&apos;t start coordinator</T>
+          </EmptyTitle>
           <EmptyDescription>{activeCreationError}</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={handleRetryCreation}>
-              Retry
+              <T>Retry</T>
             </Button>
             <Button variant="ghost" size="sm" onClick={openProjectSettings}>
-              Project settings
+              <T>Project settings</T>
             </Button>
           </div>
         </EmptyContent>
@@ -362,14 +369,16 @@ export function ProjectHomeView({ projectKey }: { readonly projectKey: string })
               <EmptyMedia variant="icon">
                 <WifiOffIcon />
               </EmptyMedia>
-              <EmptyTitle>Environment offline</EmptyTitle>
+              <EmptyTitle>
+                <T>Environment offline</T>
+              </EmptyTitle>
               <EmptyDescription>
-                Connect one of this project&apos;s environments to open its coordinator.
+                <T>Connect one of this project&apos;s environments to open its coordinator.</T>
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
               <Button variant="outline" size="sm" onClick={openProjectSettings}>
-                Open project settings
+                <T>Open project settings</T>
               </Button>
             </EmptyContent>
           </Empty>
@@ -382,14 +391,16 @@ export function ProjectHomeView({ projectKey }: { readonly projectKey: string })
               <EmptyMedia variant="icon">
                 <BotIcon />
               </EmptyMedia>
-              <EmptyTitle>Coordinator unavailable</EmptyTitle>
+              <EmptyTitle>
+                <T>Coordinator unavailable</T>
+              </EmptyTitle>
               <EmptyDescription>
-                This environment does not support project coordinator settings yet.
+                <T>This environment does not support project coordinator settings yet.</T>
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
               <Button variant="outline" size="sm" onClick={openProjectSettings}>
-                Open project settings
+                <T>Open project settings</T>
               </Button>
             </EmptyContent>
           </Empty>
@@ -402,15 +413,19 @@ export function ProjectHomeView({ projectKey }: { readonly projectKey: string })
               <EmptyMedia variant="icon">
                 <LockIcon />
               </EmptyMedia>
-              <EmptyTitle>Permission required</EmptyTitle>
+              <EmptyTitle>
+                <T>Permission required</T>
+              </EmptyTitle>
               <EmptyDescription>
-                You don&apos;t have permission to create or configure this project&apos;s
-                coordinator thread.
+                <T>
+                  You don&apos;t have permission to create or configure this project&apos;s
+                  coordinator thread.
+                </T>
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
               <Button variant="outline" size="sm" onClick={openProjectSettings}>
-                Open project settings
+                <T>Open project settings</T>
               </Button>
             </EmptyContent>
           </Empty>
@@ -423,12 +438,14 @@ export function ProjectHomeView({ projectKey }: { readonly projectKey: string })
               <EmptyMedia variant="icon">
                 <AlertCircleIcon />
               </EmptyMedia>
-              <EmptyTitle>Couldn&apos;t load coordinator</EmptyTitle>
+              <EmptyTitle>
+                <T>Couldn&apos;t load coordinator</T>
+              </EmptyTitle>
               <EmptyDescription>{coordinatorState.message}</EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
               <Button variant="outline" size="sm" onClick={openProjectSettings}>
-                Open project settings
+                <T>Open project settings</T>
               </Button>
             </EmptyContent>
           </Empty>
@@ -440,8 +457,8 @@ export function ProjectHomeView({ projectKey }: { readonly projectKey: string })
         body = (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
             {coordinatorState.kind === "needs-create"
-              ? "Starting coordinator…"
-              : "Opening coordinator…"}
+              ? gt("Starting coordinator…")
+              : gt("Opening coordinator…")}
           </div>
         );
         break;
@@ -454,7 +471,9 @@ export function ProjectHomeView({ projectKey }: { readonly projectKey: string })
         <WorkspacePageHeader electron={isElectron} className="bg-background">
           <div className="flex min-w-0 items-center gap-2">
             <BotIcon className="size-4 shrink-0 text-muted-foreground" />
-            <h1 className="truncate text-sm font-medium text-foreground">Coordinator</h1>
+            <h1 className="truncate text-sm font-medium text-foreground">
+              <T>Coordinator</T>
+            </h1>
           </div>
         </WorkspacePageHeader>
         {body}

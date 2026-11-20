@@ -1,10 +1,10 @@
-import { useGT, useMessages } from "gt-react";
+import { useGT } from "gt-react";
 import { useRef } from "react";
 
 import { Textarea } from "../ui/textarea";
 import { SettingsRow } from "./settingsLayout";
 import { useOptionalSettingsScope, useSettingsScope } from "./SettingsScopeContext";
-import { searchableSetting } from "./settingsSearch";
+import { useSearchableSetting } from "./settingsSearch";
 import {
   useClearScopedSettings,
   useScopedSettingSource,
@@ -15,7 +15,7 @@ import {
 
 function ProjectInstructionsRow() {
   const gt = useGT();
-  const m = useMessages();
+  const searchableSetting = useSearchableSetting();
   const settings = useScopedSettings();
   const { targets } = useSettingsScope();
   const scopeKey = targets.map((target) => `${target.environmentId}:${target.projectId}`).join(",");
@@ -31,13 +31,13 @@ function ProjectInstructionsRow() {
       serverScoped
       settingKeys={["projectInstructions"]}
       id={setting.id}
-      title={m(setting.title)}
+      title={setting.title}
       description={gt("Shared with every thread in this project, whatever the provider.")}
     >
       <div className="mt-3 max-w-2xl pb-3.5">
         <Textarea
           key={`${scopeKey}:${mixed}:${source}:${settings.projectInstructions}`}
-          aria-label={m(setting.title)}
+          aria-label={setting.title}
           onChange={() => {
             edited.current = true;
           }}

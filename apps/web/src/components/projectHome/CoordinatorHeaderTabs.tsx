@@ -7,6 +7,7 @@ import {
 } from "@t3tools/client-runtime/state/project-grouping";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
+import { T, useGT } from "gt-react";
 
 import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { serverEnvironment } from "~/state/server";
@@ -32,6 +33,7 @@ export function ProjectViewTabs({
   readonly projectKey: string;
   readonly active: ProjectView;
 }) {
+  const gt = useGT();
   const navigate = useNavigate();
   const { openCount } = useProjectThreadBoard(projectKey);
   const open = (view: ProjectView) => {
@@ -50,7 +52,7 @@ export function ProjectViewTabs({
   return (
     <div className="shrink-0 [-webkit-app-region:no-drag]">
       <ToggleGroup
-        aria-label="Project view"
+        aria-label={gt("Project view")}
         variant="segmented"
         size="segmented"
         value={[active]}
@@ -59,14 +61,18 @@ export function ProjectViewTabs({
           if (view) open(view);
         }}
       >
-        <Toggle value="conversation">Conversation</Toggle>
+        <Toggle value="conversation">
+          <T>Conversation</T>
+        </Toggle>
         <Toggle value="threads">
-          Threads
+          <T>Threads</T>
           {openCount > 0 ? (
             <span className="text-muted-foreground tabular-nums">{openCount}</span>
           ) : null}
         </Toggle>
-        <Toggle value="settings">Settings</Toggle>
+        <Toggle value="settings">
+          <T>Settings</T>
+        </Toggle>
       </ToggleGroup>
     </div>
   );

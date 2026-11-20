@@ -15,7 +15,10 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 
+import { msg } from "gt-react";
+
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
+import { m } from "../i18n/messages";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { readEnvironment } from "../state/environments";
 import { serverEnvironment } from "../state/server";
@@ -27,7 +30,7 @@ function failureToast(title: string, error: unknown) {
     stackedThreadToast({
       type: "error",
       title,
-      description: error instanceof Error ? error.message : "An error occurred.",
+      description: error instanceof Error ? error.message : m(msg("An error occurred.")),
     }),
   );
 }

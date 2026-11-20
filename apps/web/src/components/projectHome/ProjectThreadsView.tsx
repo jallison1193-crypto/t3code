@@ -6,6 +6,7 @@ import {
   type ProjectThreadBoardColumn,
 } from "@t3tools/client-runtime/project-thread-board";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import { msg, T, useMessages, Var } from "gt-react";
 import { FolderIcon, ListTodoIcon } from "lucide-react";
 
 import { isElectron } from "~/env";
@@ -23,14 +24,15 @@ const COLUMN_PRESENTATION: Record<
   ProjectThreadBoardColumn,
   { readonly label: string; readonly dotClass: string }
 > = {
-  review: { label: "Ready for review", dotClass: "bg-emerald-500 dark:bg-emerald-300/90" },
-  waiting: { label: "Waiting on you", dotClass: "bg-amber-500 dark:bg-amber-300/90" },
-  working: { label: "Working", dotClass: "bg-sky-500 dark:bg-sky-300/80" },
-  idle: { label: "Idle", dotClass: "bg-muted-foreground" },
-  done: { label: "Done", dotClass: "bg-border" },
+  review: { label: msg("Ready for review"), dotClass: "bg-emerald-500 dark:bg-emerald-300/90" },
+  waiting: { label: msg("Waiting on you"), dotClass: "bg-amber-500 dark:bg-amber-300/90" },
+  working: { label: msg("Working"), dotClass: "bg-sky-500 dark:bg-sky-300/80" },
+  idle: { label: msg("Idle"), dotClass: "bg-muted-foreground" },
+  done: { label: msg("Done"), dotClass: "bg-border" },
 };
 
 export function ProjectThreadsView({ projectKey }: { readonly projectKey: string }) {
+  const m = useMessages();
   const navigate = useNavigate();
   const { isReady } = useEnvironments();
   const { group, columns, openCount } = useProjectThreadBoard(projectKey);
@@ -48,7 +50,7 @@ export function ProjectThreadsView({ projectKey }: { readonly projectKey: string
     }
     useRightPanelStore
       .getState()
-      .openSideChat(scopeThreadRef(thread.environmentId, coordinatorId), thread.id, "thread");
+      .openThread(scopeThreadRef(thread.environmentId, coordinatorId), thread.id, "thread");
     void navigate({
       to: "/$environmentId/$threadId",
       params: { environmentId: thread.environmentId, threadId: coordinatorId },
@@ -63,15 +65,17 @@ export function ProjectThreadsView({ projectKey }: { readonly projectKey: string
           <EmptyMedia variant="icon">
             <FolderIcon />
           </EmptyMedia>
-          <EmptyTitle>Project not found</EmptyTitle>
+          <EmptyTitle>
+            <T>Project not found</T>
+          </EmptyTitle>
           <EmptyDescription>
-            This project could not be found in your connected environments.
+            <T>This project could not be found in your connected environments.</T>
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
     ) : (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Loading project…
+        <T>Loading project…</T>
       </div>
     );
   } else if (openCount === 0 && columns.done.length === 0) {
@@ -81,9 +85,14 @@ export function ProjectThreadsView({ projectKey }: { readonly projectKey: string
           <EmptyMedia variant="icon">
             <ListTodoIcon />
           </EmptyMedia>
-          <EmptyTitle>No threads yet</EmptyTitle>
+          <EmptyTitle>
+            <T>No threads yet</T>
+          </EmptyTitle>
           <EmptyDescription>
-            Threads you or the coordinator start in {group.displayName} show up here by state.
+            <T>
+              Threads you or the coordinator start in <Var>{group.displayName}</Var> show up here by
+              state.
+            </T>
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -94,7 +103,7 @@ export function ProjectThreadsView({ projectKey }: { readonly projectKey: string
         {PROJECT_THREAD_BOARD_COLUMNS.map((column) => (
           <section
             key={column}
-            aria-label={COLUMN_PRESENTATION[column].label}
+            aria-label={m(COLUMN_PRESENTATION[column].label)}
             className="flex min-h-0 min-w-48 flex-1 basis-0 flex-col"
           >
             <h2 className="mb-2 flex shrink-0 items-center gap-2 px-1 text-xs font-medium text-muted-foreground">
@@ -102,7 +111,7 @@ export function ProjectThreadsView({ projectKey }: { readonly projectKey: string
                 aria-hidden
                 className={cn("size-2 rounded-full", COLUMN_PRESENTATION[column].dotClass)}
               />
-              {COLUMN_PRESENTATION[column].label}
+              {m(COLUMN_PRESENTATION[column].label)}
               <span className="tabular-nums">{columns[column].length}</span>
             </h2>
             <ul className="flex min-h-0 flex-col gap-1.5 overflow-y-auto">
@@ -135,7 +144,9 @@ export function ProjectThreadsView({ projectKey }: { readonly projectKey: string
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
         <WorkspacePageHeader electron={isElectron} className="bg-background">
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <h1 className="truncate text-sm font-medium text-foreground">Threads</h1>
+            <h1 className="truncate text-sm font-medium text-foreground">
+              <T>Threads</T>
+            </h1>
           </div>
           <ProjectViewTabs projectKey={projectKey} active="threads" />
         </WorkspacePageHeader>

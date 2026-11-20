@@ -1,14 +1,8 @@
-import { t } from "gt-react";
 import { createChildThreadApprovalsAtom } from "@t3tools/client-runtime/state/thread-requests";
 import { useAtomValue } from "@effect/atom-react";
 import { enabledEnvironmentIds } from "@t3tools/client-runtime/state/connections";
 import { arrayElementsEqual } from "@t3tools/client-runtime/state/entities";
-import {
-  type AtomCommand,
-  isAtomCommandInterrupted,
-  runAtomCommand,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+import type { AtomCommand } from "@t3tools/client-runtime/state/runtime";
 import { WORK_MODE_TAG } from "@t3tools/client-runtime/state/thread-mode";
 import {
   createEnvironmentThreadDetailAtoms,
@@ -27,11 +21,16 @@ import type {
   ThreadTag,
 } from "@t3tools/contracts";
 import type { AppMode } from "@t3tools/contracts/settings";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
+import { msg } from "gt-react";
 
 import { environmentCatalog } from "../connection/catalog";
 import { connectionAtomRuntime } from "../connection/runtime";
+import { m } from "../i18n/messages";
 import { serverEnvironment } from "./server";
 import { environmentShell } from "./shell";
 
@@ -64,11 +63,11 @@ async function notifyWorkModeTagFailure(error: unknown): Promise<void> {
   toastManager.add(
     stackedThreadToast({
       type: "error",
-      title: t("Failed to tag thread for Work mode"),
+      title: m(msg("Failed to tag thread for Work mode")),
       description:
         error instanceof Error
-          ? `${error.message} ${t("You can move it to Work from the thread menu.")}`
-          : t("You can move it to Work from the thread menu."),
+          ? `${error.message} ${m(msg("You can move it to Work from the thread menu."))}`
+          : m(msg("You can move it to Work from the thread menu.")),
     }),
   );
 }
@@ -80,6 +79,7 @@ export function wrapNewThreadWorkTag<
   },
   A,
   E,
+  TagError,
 >(input: {
   readonly command: AtomCommand<Target, A, E>;
   readonly setTag: AtomCommand<
@@ -92,7 +92,7 @@ export function wrapNewThreadWorkTag<
       };
     },
     unknown,
-    unknown
+    TagError
   >;
   readonly shouldTag: (target: Target) => boolean;
   readonly readAppMode?: () => AppMode | Promise<AppMode>;
@@ -102,34 +102,36 @@ export function wrapNewThreadWorkTag<
   const onTagFailure = input.onTagFailure ?? notifyWorkModeTagFailure;
   return {
     label: input.command.label,
-    run: async (registry, target) => {
+    run: Effect.fn("wrapNewThreadWorkTag.run")(function* (registry, target) {
       // Snapshot intended mode before async creation so switching modes mid-flight cannot misclassify the new thread.
       let tagAsWork = false;
       if (input.shouldTag(target)) {
-        const mode = readAppMode();
-        tagAsWork = (typeof mode === "string" ? mode : await mode) === "work";
+        const modeOrPromise = readAppMode();
+        const mode =
+          typeof modeOrPromise === "string"
+            ? modeOrPromise
+            : yield* Effect.promise(() => modeOrPromise);
+        tagAsWork = mode === "work";
       }
-      const result = await input.command.run(registry, target);
-      if (result._tag === "Success" && tagAsWork) {
-        const tagResult = await runAtomCommand(
-          registry,
-          input.setTag,
-          {
+      const value = yield* input.command.run(registry, target);
+      if (tagAsWork) {
+        const tagExit = yield* Effect.exit(
+          input.setTag.run(registry, {
             environmentId: target.environmentId,
             input: {
               threadId: target.input.threadId,
               tag: WORK_MODE_TAG,
               tagged: true,
             },
-          },
-          { reportFailure: false },
+          }),
         );
-        if (tagResult._tag === "Failure" && !isAtomCommandInterrupted(tagResult)) {
-          await onTagFailure(squashAtomCommandFailure(tagResult));
+        if (Exit.isFailure(tagExit) && !Cause.hasInterruptsOnly(tagExit.cause)) {
+          const error = Cause.squash(tagExit.cause);
+          yield* Effect.promise(() => Promise.resolve(onTagFailure(error)));
         }
       }
-      return result;
-    },
+      return value;
+    }),
   };
 }
 

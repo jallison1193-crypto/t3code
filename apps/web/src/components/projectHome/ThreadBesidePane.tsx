@@ -1,6 +1,7 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { ScopedThreadRef, ThreadId } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { ChevronRightIcon, Maximize2Icon, XIcon } from "lucide-react";
 import { Option } from "effect";
 import { useEffect } from "react";
@@ -23,6 +24,7 @@ export default function ThreadBesidePane(props: {
   readonly onClose: () => void;
 }) {
   const { parentRef, threadId } = props;
+  const gt = useGT();
   const navigate = useNavigate();
   const threadRef = scopeThreadRef(parentRef.environmentId, threadId);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- registers the parent panel as host in the panel store
@@ -45,14 +47,16 @@ export default function ThreadBesidePane(props: {
     <div data-side-chat-pane={threadId} className="flex h-full min-h-0 flex-col">
       <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border pr-1 pl-3">
         <span className="flex min-w-0 flex-1 items-center gap-1 text-xs">
-          <span className="shrink-0 text-muted-foreground">Threads</span>
+          <span className="shrink-0 text-muted-foreground">
+            <T>Threads</T>
+          </span>
           <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 truncate font-medium">{title ?? "Thread"}</span>
+          <span className="min-w-0 truncate font-medium">{title ?? gt("Thread")}</span>
         </span>
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label="Open full size"
+          aria-label={gt("Open full size")}
           onClick={() =>
             void navigate({
               to: "/$environmentId/$threadId",
@@ -62,7 +66,12 @@ export default function ThreadBesidePane(props: {
         >
           <Maximize2Icon />
         </Button>
-        <Button variant="ghost" size="icon-xs" aria-label="Close thread" onClick={props.onClose}>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label={gt("Close thread")}
+          onClick={props.onClose}
+        >
           <XIcon />
         </Button>
       </div>

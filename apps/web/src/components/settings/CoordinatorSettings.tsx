@@ -4,7 +4,7 @@ import {
 } from "@t3tools/client-runtime/coordinator-thread";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, ProjectId } from "@t3tools/contracts";
-import { useGT, useMessages } from "gt-react";
+import { useGT } from "gt-react";
 import { useRef, useState } from "react";
 
 import { useThreadShell } from "../../state/entities";
@@ -14,7 +14,7 @@ import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import { SettingsRow } from "./settingsLayout";
 import { useOptionalSettingsScope, useSettingsScope } from "./SettingsScopeContext";
-import { searchableSetting } from "./settingsSearch";
+import { useSearchableSetting } from "./settingsSearch";
 import {
   useClearScopedSettings,
   useScopedSettingSource,
@@ -26,7 +26,7 @@ import {
 
 function CoordinatorInstructionsRow() {
   const gt = useGT();
-  const m = useMessages();
+  const searchableSetting = useSearchableSetting();
   const settings = useScopedSettings();
   const { targets } = useSettingsScope();
   const scopeKey = targets.map((target) => `${target.environmentId}:${target.projectId}`).join(",");
@@ -42,13 +42,13 @@ function CoordinatorInstructionsRow() {
       serverScoped
       settingKeys={["coordinatorInstructions"]}
       id={setting.id}
-      title={m(setting.title)}
+      title={setting.title}
       description={gt("Delivered only to this project's designated coordinator thread.")}
     >
       <div className="mt-3 max-w-2xl pb-3.5">
         <Textarea
           key={`${scopeKey}:${mixed}:${source}:${settings.coordinatorInstructions}`}
-          aria-label={m(setting.title)}
+          aria-label={setting.title}
           onChange={() => {
             edited.current = true;
           }}

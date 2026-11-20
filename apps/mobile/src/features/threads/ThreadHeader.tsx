@@ -1,8 +1,7 @@
-import { useGT } from "gt-react-native";
+import { useGT, useMessages } from "gt-react-native";
 
 import { AppBar } from "../../components/ui/AppBar";
 import type { AppBarAction, AppBarMenu } from "../../components/ui/AppBar.types";
-import { I18nProvider } from "../../i18n/I18nProvider";
 import {
   useAdaptiveWorkspaceLayout,
   useWorkspacePaneState,
@@ -27,26 +26,23 @@ export interface ThreadHeaderProps {
   readonly onOpenProjectThreads?: () => void;
 }
 
-function ThreadHeaderContent(
-  props: ThreadHeaderProps & {
-    readonly coordinatorMenuTitle?: string;
-    readonly projectThreadsTitle?: string;
-  },
-) {
+export function ThreadHeader(props: ThreadHeaderProps) {
+  const gt = useGT();
+  const m = useMessages();
   const goBack = useWorkspaceBackNavigation();
   const { toggleAuxiliaryPane, startNewTask } = useAdaptiveWorkspaceLayout();
   const { panes } = useWorkspacePaneState();
   const gitMenu = useThreadGitMenuDefinition(props.gitControls);
-  const terminalMenu = threadTerminalMenu(props.gitControls);
+  const terminalMenu = threadTerminalMenu(props.gitControls, m);
   const coordinatorMenu: AppBarMenu | null = props.onOpenProjectThreads
     ? {
-        title: props.coordinatorMenuTitle ?? "Coordinator",
+        title: gt("Coordinator"),
         icon: "robot",
         separateBackground: false,
         items: [
           {
             id: "project-threads",
-            title: props.projectThreadsTitle ?? "Project threads",
+            title: gt("Project threads"),
             icon: "text.bubble",
             onPress: props.onOpenProjectThreads,
           },
@@ -57,7 +53,7 @@ function ThreadHeaderContent(
   const actions: AppBarAction[] = props.hasThreadCwd
     ? [
         {
-          accessibilityLabel: filesVisible ? "Close files" : "Open files",
+          accessibilityLabel: filesVisible ? gt("Close files") : gt("Open files"),
           icon: "folder",
           selected: filesVisible,
           disabled: !props.gitControls.canOpenFiles,
@@ -79,7 +75,7 @@ function ThreadHeaderContent(
       backInSplitView={
         props.onReturnToThread
           ? {
-              accessibilityLabel: "Return to chat",
+              accessibilityLabel: gt("Return to chat"),
               icon: "chevron.left",
               onPress: props.onReturnToThread,
             }
@@ -89,35 +85,5 @@ function ThreadHeaderContent(
       menus={menus}
       hideBottomBorder
     />
-  );
-}
-
-function TranslatedThreadHeader(props: ThreadHeaderProps) {
-  const gt = useGT();
-  return (
-    <ThreadHeaderContent
-      {...props}
-      coordinatorMenuTitle={gt("Coordinator")}
-      projectThreadsTitle={gt("Project threads")}
-    />
-  );
-}
-
-export function ThreadHeader(props: ThreadHeaderProps) {
-  if (!props.onOpenProjectThreads) {
-    return <ThreadHeaderContent {...props} />;
-  }
-  return (
-    <I18nProvider
-      fallback={
-        <ThreadHeaderContent
-          {...props}
-          coordinatorMenuTitle="Coordinator"
-          projectThreadsTitle="Project threads"
-        />
-      }
-    >
-      <TranslatedThreadHeader {...props} />
-    </I18nProvider>
   );
 }

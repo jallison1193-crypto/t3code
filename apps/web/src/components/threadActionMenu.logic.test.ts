@@ -1,8 +1,6 @@
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { buildThreadActionMenuItems, type ThreadActionMenuState } from "./threadActionMenu.logic";
-
-vi.mock("gt-react", () => ({ t: (message: string) => message }));
 
 const baseState: ThreadActionMenuState = {
   canOperate: true,
@@ -141,5 +139,10 @@ describe("buildThreadActionMenuItems", () => {
       disabled: true,
     });
     expect(workThread.find((item) => item.id === "move-to-work")).toBeUndefined();
+  });
+
+  it("disables only rename where no inline title editor exists", () => {
+    const items = buildThreadActionMenuItems({ ...baseState, canRename: false });
+    expect(items.filter((item) => item.disabled).map((item) => item.id)).toEqual(["rename"]);
   });
 });
