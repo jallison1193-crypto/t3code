@@ -3,3 +3,5 @@
 honors the user's Cursor CLI attribution preferences
 forks a session from its original directory after the workspace root changes
 saves through a symlinked client settings file without replacing the link
+opens a model added to the account after its workspace already ran an agent
+recovers a historical Pi fork recorded before turns stored the session file
