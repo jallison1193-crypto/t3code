@@ -1,3 +1,4 @@
+import { useAtomValue } from "@effect/atom-react";
 import {
   scopedProjectKey,
   scopedThreadKey,
@@ -8,21 +9,32 @@ import {
   projectThreadBoardColumn,
   type ProjectThreadBoardColumn,
 } from "@t3tools/client-runtime/project-thread-board";
+import type { ScopedThreadRef } from "@t3tools/contracts";
 import type { SidebarModeFilter } from "@t3tools/contracts/settings";
 import { useMatch, useNavigate } from "@tanstack/react-router";
 import { msg, T, useGT, useMessages } from "gt-react";
-import { ChevronDownIcon, FolderPlusIcon, SearchIcon, SquarePenIcon } from "lucide-react";
-import { useState } from "react";
+import {
+  ChevronDownIcon,
+  EllipsisIcon,
+  FolderIcon,
+  FolderInputIcon,
+  FolderPlusIcon,
+  SearchIcon,
+  SquarePenIcon,
+} from "lucide-react";
+import { type ReactNode, useState } from "react";
 
 import { openCommandPalette } from "~/commandPaletteBus";
 import { isElectron } from "~/env";
 import { persistClientSettingsPatch, useClientSettings } from "~/hooks/useSettings";
 import { useShownThreadRouteTarget } from "~/hooks/useShownThreadRouteTarget";
 import { cn } from "~/lib/utils";
-import { useQuietThreadShells } from "~/state/entities";
+import { useHiddenThreadKeys, useQuietThreadShells } from "~/state/entities";
 import { useEnvironments } from "~/state/environments";
 import { ProjectFavicon, type ProjectFaviconProject } from "../ProjectFavicon";
 import { useSettingsProjectGroups } from "../settings/useSettingsProjectGroups";
+import { Button } from "../ui/button";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import {
   SidebarContent,
   SidebarGroup,
@@ -34,6 +46,7 @@ import {
   useSidebar,
 } from "../ui/sidebar";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   buildProjectsSidebarSections,
   readExpandedProjectKeys,
@@ -43,6 +56,13 @@ import {
 } from "./ProjectsSidebar.logic";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./SidebarChrome";
 import { SidebarHeaderIconButton } from "./SidebarThreadHeader";
+import { openThreadFolderDialog } from "./threadFolderDialogState";
+import { resolveThreadFolderMembers, threadFolders } from "./threadFolders.logic";
+import {
+  readThreadFolderSource,
+  readableThreadFolderSourcesAtom,
+  threadFolderHomesAtom,
+} from "./threadFoldersState";
 
 const THREAD_DOT_CLASS: Record<ProjectThreadBoardColumn, string> = {
   review: "bg-emerald-500 dark:bg-emerald-300/90",
@@ -76,12 +96,14 @@ function ThreadNavRow({
   project = null,
   isActive,
   nested = false,
+  onChangeFolder,
   onSelect,
 }: {
   readonly thread: ProjectsSidebarThread;
   readonly project?: ProjectFaviconProject | null;
   readonly isActive: boolean;
   readonly nested?: boolean;
+  readonly onChangeFolder: () => void;
   readonly onSelect: (thread: ProjectsSidebarThread) => void;
 }) {
   const column = projectThreadBoardColumn(thread);
@@ -96,10 +118,34 @@ function ThreadNavRow({
       <span className="min-w-0 flex-1 truncate">{thread.title}</span>
     </SidebarMenuButton>
   );
-  if (nested) {
-    return <SidebarMenuSubItem>{button}</SidebarMenuSubItem>;
-  }
-  return <SidebarMenuItem>{button}</SidebarMenuItem>;
+  const Item = nested ? SidebarMenuSubItem : SidebarMenuItem;
+  return (
+    <Item>
+      <ThreadFolderMemberControls onChangeFolder={onChangeFolder}>
+        {button}
+      </ThreadFolderMemberControls>
+    </Item>
+  );
+}
+
+function ThreadFolderMemberControls({
+  children,
+  onChangeFolder,
+}: {
+  readonly children: ReactNode;
+  readonly onChangeFolder: () => void;
+}) {
+  const gt = useGT();
+  return (
+    <div className="group/folder-member flex min-w-0 items-center">
+      <div className="min-w-0 flex-1">{children}</div>
+      <div className="shrink-0 opacity-100 pointer-fine:opacity-0 group-hover/folder-member:opacity-100 group-focus-within/folder-member:opacity-100">
+        <SidebarHeaderIconButton label={gt("Change thread folder")} onClick={onChangeFolder}>
+          <FolderInputIcon />
+        </SidebarHeaderIconButton>
+      </div>
+    </div>
+  );
 }
 
 export function ProjectsSidebar() {
@@ -151,13 +197,20 @@ export function ProjectsSidebar() {
       scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
     ) ?? null;
 
-  const openThread = (thread: ProjectsSidebarThread) => {
+  const openScopedThread = (ref: ScopedThreadRef) => {
     if (isMobile) setOpenMobile(false);
     void navigate({
       to: "/$environmentId/$threadId",
-      params: { environmentId: thread.environmentId, threadId: thread.id },
+      params: { environmentId: ref.environmentId, threadId: ref.threadId },
     });
   };
+  const openThread = (thread: ProjectsSidebarThread) =>
+    openScopedThread(scopeThreadRef(thread.environmentId, thread.id));
+  const changeFolder = (thread: ProjectsSidebarThread) =>
+    openThreadFolderDialog({
+      kind: "membership",
+      thread: scopeThreadRef(thread.environmentId, thread.id),
+    });
 
   const openProject = (projectKey: string) => {
     if (isMobile) setOpenMobile(false);
@@ -242,11 +295,19 @@ export function ProjectsSidebar() {
                     scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))
                   }
                   onSelect={openThread}
+                  onChangeFolder={() => changeFolder(thread)}
                 />
               ))}
             </SidebarMenu>
           </SidebarGroup>
         ) : null}
+
+        <ThreadFoldersSidebar
+          threads={threads}
+          mode={sidebarModeFilter}
+          activeThreadKey={activeThreadKey}
+          onSelect={openScopedThread}
+        />
 
         <SidebarGroup>
           <SidebarSectionHeading label={gt("Projects")} />
@@ -323,6 +384,7 @@ export function ProjectsSidebar() {
                                 scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))
                               }
                               onSelect={openThread}
+                              onChangeFolder={() => changeFolder(thread)}
                             />
                           ))}
                         </SidebarMenuSub>
@@ -353,6 +415,7 @@ export function ProjectsSidebar() {
                     scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))
                   }
                   onSelect={openThread}
+                  onChangeFolder={() => changeFolder(thread)}
                 />
               ))}
             </SidebarMenu>
@@ -373,6 +436,7 @@ export function ProjectsSidebar() {
                     scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))
                   }
                   onSelect={openThread}
+                  onChangeFolder={() => changeFolder(thread)}
                 />
               ))}
             </SidebarMenu>
@@ -381,5 +445,169 @@ export function ProjectsSidebar() {
       </SidebarContent>
       <SidebarChromeFooter />
     </>
+  );
+}
+
+function ThreadFoldersSidebar({
+  threads,
+  mode,
+  activeThreadKey,
+  onSelect,
+}: {
+  readonly threads: readonly ProjectsSidebarThread[];
+  readonly mode: SidebarModeFilter;
+  readonly activeThreadKey: string | null;
+  readonly onSelect: (ref: ScopedThreadRef) => void;
+}) {
+  const gt = useGT();
+  const homes = useAtomValue(threadFolderHomesAtom);
+  const readableSources = useAtomValue(readableThreadFolderSourcesAtom);
+  const hiddenKeys = useHiddenThreadKeys();
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const hasMembers = homes.some((home) =>
+    Object.values(home.sections).some((folder) => (folder.members?.length ?? 0) > 0),
+  );
+  const threadsByKey = new Map(
+    (hasMembers ? threads : []).map((thread) => [
+      scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+      thread,
+    ]),
+  );
+  return (
+    <SidebarGroup>
+      <div className="flex items-center justify-between pr-1">
+        <SidebarSectionHeading label={gt("Thread folders")} />
+        <SidebarHeaderIconButton
+          label={gt("New thread folder")}
+          onClick={() => openThreadFolderDialog({ kind: "create" })}
+        >
+          <FolderPlusIcon />
+        </SidebarHeaderIconButton>
+      </div>
+      <SidebarMenu>
+        {homes.flatMap((home) =>
+          threadFolders(home.sections).map((folder) => {
+            const key = `${home.id}:${folder.id}`;
+            const expanded = !collapsed.has(key);
+            const rows = expanded
+              ? resolveThreadFolderMembers(
+                  folder.members ?? [],
+                  threadsByKey,
+                  readableSources,
+                  hiddenKeys,
+                  mode,
+                )
+              : [];
+            return (
+              <SidebarMenuItem key={key}>
+                <div className="flex items-center gap-1 pr-1">
+                  <div className="min-w-0 flex-1">
+                    <SidebarMenuButton
+                      aria-expanded={expanded}
+                      onClick={() => {
+                        setCollapsed((current) => {
+                          const next = new Set(current);
+                          if (!next.delete(key)) next.add(key);
+                          return next;
+                        });
+                      }}
+                    >
+                      <FolderIcon aria-hidden />
+                      <span className="min-w-0 flex-1 truncate">{folder.name}</span>
+                      {homes.length > 1 ? (
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <span className="max-w-[40%] truncate text-xs text-sidebar-muted-foreground" />
+                            }
+                          >
+                            {home.label}
+                          </TooltipTrigger>
+                          <TooltipPopup>{home.label}</TooltipPopup>
+                        </Tooltip>
+                      ) : null}
+                      <ChevronDownIcon aria-hidden className={cn(!expanded && "-rotate-90")} />
+                    </SidebarMenuButton>
+                  </div>
+                  <Menu>
+                    <MenuTrigger
+                      aria-label={gt("Folder actions for {name}", { name: folder.name })}
+                      render={<Button variant="ghost" size="icon-xs" />}
+                    >
+                      <EllipsisIcon />
+                    </MenuTrigger>
+                    <MenuPopup align="end">
+                      <MenuItem
+                        onClick={() =>
+                          openThreadFolderDialog({
+                            kind: "rename",
+                            homeId: home.id,
+                            sectionId: folder.id,
+                            name: folder.name,
+                          })
+                        }
+                      >
+                        <T>Rename folder</T>
+                      </MenuItem>
+                      <MenuItem
+                        variant="destructive"
+                        onClick={() =>
+                          openThreadFolderDialog({
+                            kind: "delete",
+                            homeId: home.id,
+                            sectionId: folder.id,
+                            name: folder.name,
+                          })
+                        }
+                      >
+                        <T>Delete folder</T>
+                      </MenuItem>
+                    </MenuPopup>
+                  </Menu>
+                </div>
+                {expanded ? (
+                  rows.length > 0 ? (
+                    <SidebarMenuSub>
+                      {rows.map(({ ref, key, thread }) => {
+                        const changeFolder = () =>
+                          openThreadFolderDialog({
+                            kind: "membership",
+                            thread: ref,
+                            homeId: home.id,
+                          });
+                        return thread ? (
+                          <ThreadNavRow
+                            key={key}
+                            thread={thread}
+                            nested
+                            isActive={activeThreadKey === key}
+                            onChangeFolder={changeFolder}
+                            onSelect={() => {
+                              if (readThreadFolderSource(ref)) onSelect(ref);
+                            }}
+                          />
+                        ) : (
+                          <SidebarMenuSubItem key={key}>
+                            <ThreadFolderMemberControls onChangeFolder={changeFolder}>
+                              <p className="truncate px-2 text-xs text-sidebar-muted-foreground">
+                                <T>Thread unavailable</T>
+                              </p>
+                            </ThreadFolderMemberControls>
+                          </SidebarMenuSubItem>
+                        );
+                      })}
+                    </SidebarMenuSub>
+                  ) : (
+                    <p className="py-1 pl-8 pr-2 text-xs text-sidebar-muted-foreground">
+                      <T>No threads to show</T>
+                    </p>
+                  )
+                ) : null}
+              </SidebarMenuItem>
+            );
+          }),
+        )}
+      </SidebarMenu>
+    </SidebarGroup>
   );
 }

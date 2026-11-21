@@ -2,6 +2,7 @@ import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { requestCustomSnooze } from "../components/CustomSnoozeDialog";
 import { openGuestShareDialog } from "../components/chat/guestShareDialogState";
+import { openThreadFolderDialog } from "../components/sidebar/threadFolderDialogState";
 import {
   type AtomCommandResult,
   isAtomCommandInterrupted,
@@ -210,6 +211,9 @@ export function useThreadActionMenu(input: {
         }
       };
       switch (action) {
+        case "thread-folder":
+          openThreadFolderDialog({ kind: "membership", thread: threadRef });
+          return;
         case "find":
           onFind?.(threadRef);
           return;

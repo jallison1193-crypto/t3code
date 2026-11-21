@@ -2001,6 +2001,9 @@ export const ServerSettingsPatch = Schema.Struct({
   threadSections: Schema.optionalKey(
     Schema.Record(ThreadSectionId, Schema.NullOr(ThreadSectionMetadata)),
   ),
+  renameThreadSection: Schema.optionalKey(
+    Schema.Struct({ id: ThreadSectionId, ...ThreadSectionMetadata.fields }),
+  ),
   guestSharingEnabled: Schema.optionalKey(Schema.Boolean),
   linkedEnvironmentsEnabled: Schema.optionalKey(Schema.Boolean),
   promptSuggestionsEnabled: Schema.optionalKey(Schema.Boolean),

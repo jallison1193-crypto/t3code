@@ -271,6 +271,7 @@ import { ProjectFilePicker } from "./files/ProjectFilePicker";
 import { openLinkPullRequestDialog } from "./pullRequest/LinkPullRequestDialog";
 import { canShareWithGuestAtom } from "./chat/guestShareAvailability";
 import { openGuestShareDialog } from "./chat/guestShareDialogState";
+import { openThreadFolderDialog } from "./sidebar/threadFolderDialogState";
 import { openUseInAnotherApp } from "./mcp/UseInAnotherAppDialog";
 import { ProjectContentSearchDialog } from "./search/ProjectContentSearchDialog";
 import { settingsForThisPlatform, SETTINGS_SECTION_LABELS } from "./settings/settingsSearch";
@@ -1552,6 +1553,18 @@ function OpenCommandPaletteDialog(props: {
 
   if (activeThread !== null) {
     const thread = activeThread;
+    actionItems.push({
+      kind: "action",
+      value: "action:thread-folder",
+      searchTerms: ["add", "move", "remove", "thread", "folder"],
+      title: gt("Change thread folder"),
+      icon: <FolderIcon className={ITEM_ICON_CLASS} />,
+      run: async () =>
+        openThreadFolderDialog({
+          kind: "membership",
+          thread: scopeThreadRef(thread.environmentId, thread.id),
+        }),
+    });
     actionItems.push({
       kind: "action",
       value: "action:restart-agent-session",

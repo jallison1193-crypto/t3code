@@ -12,6 +12,7 @@ export type ThreadActionMenuId =
   | "turn-into-project"
   | "move-to-work"
   | "move-to-code"
+  | "thread-folder"
   | "project-settings"
   | "pin"
   | "unpin"
@@ -137,6 +138,7 @@ export interface ThreadActionMenuState {
 export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean {
   return ![
     "find",
+    "thread-folder",
     "new-thread-on-branch",
     "make-coordinator",
     "remove-coordinator",
@@ -159,6 +161,7 @@ export function buildThreadActionMenuItems(
     ...(state.canFind
       ? [{ id: "find" as const, label: resolve(msg("Find in thread")), icon: "text-search" }]
       : []),
+    { id: "thread-folder", label: resolve(msg("Change thread folder")), icon: "folder" },
     ...(state.branch
       ? [
           {

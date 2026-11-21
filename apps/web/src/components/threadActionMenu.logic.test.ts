@@ -58,6 +58,10 @@ describe("buildThreadActionMenuItems", () => {
             "delete",
           ];
       expect(items.filter((item) => item.disabled).map((item) => item.id)).toEqual(expected);
+      expect(items.find((item) => item.id === "thread-folder")).toMatchObject({
+        label: "Change thread folder",
+      });
+      expect(items.find((item) => item.id === "thread-folder")?.disabled).toBeFalsy();
       expect(
         items.find((item) => item.id === "snooze")?.children?.every((child) => child.disabled) ??
           true,

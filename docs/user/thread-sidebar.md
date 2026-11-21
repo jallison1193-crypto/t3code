@@ -167,6 +167,17 @@ command palette) to list projects first, with a **Needs you** section at the top
 waiting on approvals or input, expandable active threads under each project, **Pinned**, and up
 to 10 **Other threads** outside your project groups. Each device keeps its own choice.
 
+Use **New thread folder** beside **Thread folders** to group conversations across projects and
+connected servers. In a thread’s menu or in the command palette, choose **Change thread folder**.
+Pick a folder to add or move the thread, or pick **No folder** to remove it. The Projects sidebar
+also offers this action beside each thread.
+
+If several servers are connected, choose a **Home server**. Each device connected to that home
+sees its folders, and each home keeps its own assignments. Opening a folder member takes you
+to the server where the conversation lives. In **All**, unavailable members appear as
+**Thread unavailable** and can still be removed through **Change thread folder**. Use a folder’s
+menu to rename or delete it. Deleting a folder keeps its threads.
+
 ### Work and Code threads
 
 Threads are either **Code** threads (the default) or **Work** threads. Turn on
@@ -186,7 +197,8 @@ filter unchanged. Direct links to a thread, project, or Settings stay where you 
 switching between Work mode and Code mode keeps your current thread and draft open.
 
 In the Projects sidebar, use the **All / Code / Work** filter below Search to show all threads,
-only Code threads, or only Work threads in **Projects**, **Pinned**, and **Other threads**.
+only Code threads, or only Work threads in **Thread folders**, **Projects**, **Pinned**, and
+**Other threads**.
 **Needs you** always shows every waiting thread regardless of the filter.
 
 To reclassify an existing thread, open its menu and choose **Move to Work** or **Move to Code**.

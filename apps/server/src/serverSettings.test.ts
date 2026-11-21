@@ -170,7 +170,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
       assert.equal(created.responseStreamingMode, "turn");
       assert.isTrue(created.defaultAutoPull);
 
-      yield* service.updateSettings({ threadSections: { [inbox]: { name: "Triage" } } });
+      yield* service.updateSettings({ renameThreadSection: { id: inbox, name: "Triage" } });
       const renamed = yield* readPersisted;
       assert.deepEqual(renamed.threadSections, {
         [inbox]: { name: "Triage" },
@@ -178,6 +178,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
       });
 
       yield* service.updateSettings({ threadSections: { [inbox]: null } });
+      // A second client submitted its rename before it received the deletion.
+      yield* service.updateSettings({ renameThreadSection: { id: inbox, name: "Stale rename" } });
       const removed = yield* readPersisted;
       assert.deepEqual(removed.threadSections, { [reading]: { name: "Reading" } });
       assert.equal(removed.responseStreamingMode, "turn");

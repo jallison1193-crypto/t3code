@@ -403,6 +403,7 @@ export function applyServerSettingsPatch(
     worktreeCleanup: worktreeCleanupPatch,
     // Per-entry patches use null for deletion, which deepMerge would retain.
     threadSections: threadSectionsPatch,
+    renameThreadSection,
     usageLimitSources: usageLimitSourcesPatch,
     textGenerators: textGeneratorsPatch,
     secretProviders: secretProvidersPatch,
@@ -504,6 +505,26 @@ export function applyServerSettingsPatch(
     };
   }
   const next = deepMerge(current, patchForMerge);
+  let threadSections = current.threadSections;
+  if (threadSectionsPatch !== undefined) {
+    threadSections = mergeSettingsEntries(
+      threadSections,
+      threadSectionsPatch,
+      (section, { name }) => ({
+        ...section,
+        name,
+      }),
+    );
+  }
+  if (renameThreadSection && threadSections[renameThreadSection.id]) {
+    threadSections = {
+      ...threadSections,
+      [renameThreadSection.id]: {
+        ...threadSections[renameThreadSection.id],
+        name: renameThreadSection.name,
+      },
+    };
+  }
   const nextWithReplacementsBase = {
     ...next,
     favorites,
@@ -614,15 +635,7 @@ export function applyServerSettingsPatch(
     ...(patch.defaultProjectScripts !== undefined
       ? { defaultProjectScripts: patch.defaultProjectScripts }
       : {}),
-    ...(threadSectionsPatch !== undefined
-      ? {
-          threadSections: mergeSettingsEntries(
-            current.threadSections,
-            threadSectionsPatch,
-            (section, { name }) => ({ ...section, name }),
-          ),
-        }
-      : {}),
+    threadSections,
     ...(usageLimitSourcesPatch !== undefined
       ? {
           usageLimitSources: mergeSettingsEntries(
