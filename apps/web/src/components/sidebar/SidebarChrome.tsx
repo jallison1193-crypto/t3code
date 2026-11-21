@@ -1,11 +1,17 @@
-import { ArrowLeftIcon, ArrowRightIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  ChartNoAxesColumnIcon,
+  LibraryIcon,
+  SettingsIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { T, useGT } from "gt-react";
 import { memo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
 import { useAtomValue } from "@effect/atom-react";
-import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
+import { useClientSettings, useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { shortcutLabelForCommand } from "../../keybindings";
 import {
   navigateHistory,
@@ -26,6 +32,7 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {
   SidebarFooter,
+  SidebarGroup,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -61,41 +68,74 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
       : null;
 
   return (
-    <div
-      className={cn(
-        "relative flex h-[var(--workspace-topbar-height)] shrink-0 flex-row items-center gap-2 pr-3",
-        isElectron && "drag-region",
-      )}
-    >
-      {backdropVariant ? <SidebarStageBackdrop variant={backdropVariant} /> : null}
-      <div className="relative top-[calc(var(--workspace-controls-top)-env(safe-area-inset-top))] z-10 ml-[calc(var(--workspace-controls-left)+1px-env(safe-area-inset-left))] flex shrink-0 items-center md:hidden">
-        <SidebarTrigger
-          variant={backdropVariant ? "media-navigation" : "ghost"}
-          className="relative top-auto translate-y-0"
-          aria-label={gt("Toggle main sidebar")}
-        />
-      </div>
-      <div className="relative z-10 flex h-8 min-w-0 flex-1 flex-wrap content-start items-center gap-x-2 overflow-hidden py-0.5">
-        <div className="flex shrink-0 items-center gap-1">
-          <SidebarBrand onBackdrop={backdropVariant !== null} />
-          {isElectron ? (
-            <div className="hidden items-center md:flex">
-              <HistoryNavigationButton direction="back" onBackdrop={backdropVariant !== null} />
-              <HistoryNavigationButton direction="forward" onBackdrop={backdropVariant !== null} />
+    <>
+      <div
+        className={cn(
+          "relative flex h-[var(--workspace-topbar-height)] shrink-0 flex-row items-center gap-2 pr-3",
+          isElectron && "drag-region",
+        )}
+      >
+        {backdropVariant ? <SidebarStageBackdrop variant={backdropVariant} /> : null}
+        <div className="relative top-[calc(var(--workspace-controls-top)-env(safe-area-inset-top))] z-10 ml-[calc(var(--workspace-controls-left)+1px-env(safe-area-inset-left))] flex shrink-0 items-center md:hidden">
+          <SidebarTrigger
+            variant={backdropVariant ? "media-navigation" : "ghost"}
+            className="relative top-auto translate-y-0"
+            aria-label={gt("Toggle main sidebar")}
+          />
+        </div>
+        <div className="relative z-10 flex h-8 min-w-0 flex-1 flex-wrap content-start items-center gap-x-2 overflow-hidden py-0.5">
+          <div className="flex shrink-0 items-center gap-1">
+            <SidebarBrand onBackdrop={backdropVariant !== null} />
+            {isElectron ? (
+              <div className="hidden items-center md:flex">
+                <HistoryNavigationButton direction="back" onBackdrop={backdropVariant !== null} />
+                <HistoryNavigationButton
+                  direction="forward"
+                  onBackdrop={backdropVariant !== null}
+                />
+              </div>
+            ) : null}
+          </div>
+          {pillLabel ? (
+            <div className="ml-1 flex h-7 items-center">
+              <Badge data-environment-identification="pill" size="sm" variant="secondary">
+                {pillLabel}
+              </Badge>
             </div>
           ) : null}
         </div>
-        {pillLabel ? (
-          <div className="ml-1 flex h-7 items-center">
-            <Badge data-environment-identification="pill" size="sm" variant="secondary">
-              {pillLabel}
-            </Badge>
-          </div>
-        ) : null}
       </div>
-    </div>
+      <WorkLibraryLink />
+    </>
   );
 });
+
+function WorkLibraryLink() {
+  const workMode = useClientSettings((settings) => settings.appMode === "work");
+  const active = useLocation({ select: (location) => location.pathname === "/library" });
+  const { isMobile, setOpenMobile } = useSidebar();
+  if (!workMode) return null;
+  return (
+    <SidebarGroup>
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            isActive={active}
+            render={<Link to="/library" />}
+            onClick={() => {
+              if (isMobile) setOpenMobile(false);
+            }}
+          >
+            <LibraryIcon />
+            <span>
+              <T>HTML Library</T>
+            </span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </SidebarGroup>
+  );
+}
 
 export function SidebarBrandWidthProbe({
   isElectron,
@@ -234,6 +274,7 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   });
   const pullRequestsSupported = usePullRequestsSupported();
   const issuesSupported = useIssuesSupported();
+  const workMode = useClientSettings((settings) => settings.appMode === "work");
   const closeMobileSidebar = () => {
     if (isMobile) {
       setOpenMobile(false);
@@ -306,6 +347,16 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
           />
         </>
       )}
+      {!workMode ? (
+        <SidebarUtilityItem
+          icon={<LibraryIcon />}
+          label={gt("HTML Library")}
+          onClick={() => {
+            closeMobileSidebar();
+            void navigate({ to: "/library" });
+          }}
+        />
+      ) : null}
       <SidebarThreadUndoNotice />
       <SidebarUpdatePill />
     </SidebarMenu>

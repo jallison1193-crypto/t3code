@@ -23,9 +23,8 @@ export function useIsProjectCoordinator(
   return coordinatorThreadIdOf(serverSettings, projectId) === threadId;
 }
 
-type ProjectView = "conversation" | "threads" | "settings";
+type ProjectView = "conversation" | "threads" | "library" | "settings";
 
-/** The project's views: its coordinator conversation, its threads board, and its settings. */
 export function ProjectViewTabs({
   projectKey,
   active,
@@ -45,6 +44,8 @@ export function ProjectViewTabs({
       });
     } else if (view === "threads") {
       void navigate({ to: "/projects/$projectKey/threads", params: { projectKey } });
+    } else if (view === "library") {
+      void navigate({ to: "/projects/$projectKey/library", params: { projectKey } });
     } else {
       void navigate({ to: "/projects/$projectKey", params: { projectKey } });
     }
@@ -69,6 +70,9 @@ export function ProjectViewTabs({
           {openCount > 0 ? (
             <span className="text-muted-foreground tabular-nums">{openCount}</span>
           ) : null}
+        </Toggle>
+        <Toggle value="library">
+          <T>Library</T>
         </Toggle>
         <Toggle value="settings">
           <T>Settings</T>

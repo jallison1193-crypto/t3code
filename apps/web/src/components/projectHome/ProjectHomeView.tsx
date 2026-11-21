@@ -64,6 +64,7 @@ import {
 } from "../ui/empty";
 import { SidebarInset } from "../ui/sidebar";
 import { stackedThreadToast, toastManager } from "../ui/toast";
+import { ProjectViewTabs } from "./CoordinatorHeaderTabs";
 
 const FALSE_PERMISSION_ATOM = Atom.make(false);
 const EMPTY_PROVIDERS: ReadonlyArray<ServerProvider> = [];
@@ -469,12 +470,15 @@ export function ProjectHomeView({ projectKey }: { readonly projectKey: string })
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
         <WorkspacePageHeader electron={isElectron} className="bg-background">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             <BotIcon className="size-4 shrink-0 text-muted-foreground" />
             <h1 className="truncate text-sm font-medium text-foreground">
               <T>Coordinator</T>
             </h1>
           </div>
+          {projectGroup !== null ? (
+            <ProjectViewTabs projectKey={projectKey} active="conversation" />
+          ) : null}
         </WorkspacePageHeader>
         {body}
       </div>

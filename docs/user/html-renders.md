@@ -10,6 +10,12 @@ Before publishing, agents check their work with screenshots from a small headles
 
 Previews can load public resources such as CDN scripts, but nothing on your local network. The machine running the environment looks up each name, and previews block names that resolve to private or reserved addresses. Clash or Mihomo in fake-IP DNS mode can return these addresses, so external resources can fail there. The preview's console messages can identify affected hostnames. Inline the resource, add its host to `fake-ip-filter`, or switch that machine's proxy DNS to `redir-host`.
 
+## Find visual replies
+
+On web and desktop, open **HTML Library** from the sidebar to find pages across your environments. Open a project's **Library** tab to see pages from that project. Use **All**, **Code**, or **Work** to filter by the source thread's mode.
+
+Select a page to open it full screen, or use **Open source thread** to return to the conversation. When the library shows **Load more**, it can still find pages further back. A notice lists environments it could not search.
+
 ## MCP apps
 
 Some MCP servers return an interactive app with their tool results, following the [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) standard. When an agent calls one of those tools, the app appears in the thread below the tool call, on web, desktop, and mobile. The tool call keeps its input and result, so you can still read them when an app shows nothing. Codex and Claude support this today, for any MCP server you have configured for them. Claude needs Claude Code 2.1.301 or newer; older versions and other providers show these calls as ordinary tool calls.

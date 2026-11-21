@@ -10,9 +10,9 @@ import {
   type ProjectThreadBoardColumn,
 } from "@t3tools/client-runtime/project-thread-board";
 import type { ScopedThreadRef } from "@t3tools/contracts";
-import type { SidebarModeFilter } from "@t3tools/contracts/settings";
+import type { SidebarModeFilter as Mode } from "@t3tools/contracts/settings";
 import { useMatch, useNavigate } from "@tanstack/react-router";
-import { msg, T, useGT, useMessages } from "gt-react";
+import { T, useGT } from "gt-react";
 import {
   ChevronDownIcon,
   EllipsisIcon,
@@ -26,7 +26,7 @@ import { type ReactNode, useState } from "react";
 
 import { openCommandPalette } from "~/commandPaletteBus";
 import { isElectron } from "~/env";
-import { persistClientSettingsPatch, useClientSettings } from "~/hooks/useSettings";
+import { useClientSettings } from "~/hooks/useSettings";
 import { useShownThreadRouteTarget } from "~/hooks/useShownThreadRouteTarget";
 import { cn } from "~/lib/utils";
 import { useHiddenThreadKeys, useQuietThreadShells } from "~/state/entities";
@@ -45,7 +45,6 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "../ui/sidebar";
-import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   buildProjectsSidebarSections,
@@ -55,6 +54,7 @@ import {
   type ProjectsSidebarThread,
 } from "./ProjectsSidebar.logic";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./SidebarChrome";
+import { SidebarModeFilter } from "./SidebarModeFilter";
 import { SidebarHeaderIconButton } from "./SidebarThreadHeader";
 import { openThreadFolderDialog } from "./threadFolderDialogState";
 import { resolveThreadFolderMembers, threadFolders } from "./threadFolders.logic";
@@ -76,12 +76,6 @@ const ATTENTION_DOT_CLASS = {
   waiting: "bg-amber-500 dark:bg-amber-300/90",
   review: "bg-emerald-500 dark:bg-emerald-300/90",
 } as const;
-
-const MODE_FILTER_OPTIONS = [
-  { value: "all", label: msg("All") },
-  { value: "code", label: msg("Code") },
-  { value: "work", label: msg("Work") },
-] as const satisfies ReadonlyArray<{ readonly value: SidebarModeFilter; readonly label: string }>;
 
 function SidebarSectionHeading({ label }: { readonly label: string }) {
   return (
@@ -150,7 +144,6 @@ function ThreadFolderMemberControls({
 
 export function ProjectsSidebar() {
   const gt = useGT();
-  const m = useMessages();
   const navigate = useNavigate();
   const { isMobile, setOpenMobile } = useSidebar();
   const projectGroups = useSettingsProjectGroups();
@@ -162,11 +155,18 @@ export function ProjectsSidebar() {
     from: "/_chat/projects/$projectKey_/threads",
     shouldThrow: false,
   });
+  const projectLibraryMatch = useMatch({
+    from: "/_chat/projects/$projectKey_/library",
+    shouldThrow: false,
+  });
 
   const activeThreadKey =
     shownTarget?.kind === "server" ? scopedThreadKey(shownTarget.threadRef) : null;
   const activeProjectKey =
-    projectHomeMatch?.params.projectKey ?? projectThreadsMatch?.params.projectKey ?? null;
+    projectHomeMatch?.params.projectKey ??
+    projectThreadsMatch?.params.projectKey ??
+    projectLibraryMatch?.params.projectKey ??
+    null;
 
   const [expandedByProjectKey, setExpandedByProjectKey] = useState<Record<string, boolean>>(() =>
     readExpandedProjectKeys(),
@@ -258,26 +258,7 @@ export function ProjectsSidebar() {
           </SidebarHeaderIconButton>
         </div>
         <div className="mt-1 px-1">
-          <ToggleGroup
-            aria-label={gt("Thread mode filter")}
-            variant="segmented"
-            size="segmented"
-            value={[sidebarModeFilter]}
-            onValueChange={(next) => {
-              const nextOption = MODE_FILTER_OPTIONS.find(
-                (option) => option.value !== sidebarModeFilter && next.includes(option.value),
-              );
-              if (nextOption) {
-                void persistClientSettingsPatch({ sidebarModeFilter: nextOption.value });
-              }
-            }}
-          >
-            {MODE_FILTER_OPTIONS.map((option) => (
-              <Toggle key={option.value} value={option.value}>
-                {m(option.label)}
-              </Toggle>
-            ))}
-          </ToggleGroup>
+          <SidebarModeFilter label={gt("Thread mode filter")} />
         </div>
       </SidebarGroup>
       <SidebarContent>
@@ -455,7 +436,7 @@ function ThreadFoldersSidebar({
   onSelect,
 }: {
   readonly threads: readonly ProjectsSidebarThread[];
-  readonly mode: SidebarModeFilter;
+  readonly mode: Mode;
   readonly activeThreadKey: string | null;
   readonly onSelect: (ref: ScopedThreadRef) => void;
 }) {

@@ -45,6 +45,7 @@ import { AuthMcpClientAccess } from "./auth.ts";
 import { ChatAttachment } from "./chatAttachment.ts";
 import { ThreadGuestShare } from "./guestShare.ts";
 import { StoredThreadTags, ThreadTag } from "./threadTags.ts";
+import { AppMode, SidebarModeFilter } from "./settings.ts";
 import { ThreadTitleRegenerationOutcome } from "./threadTitle.ts";
 import {
   OrchestrationSearchThreadsInput,
@@ -3905,6 +3906,7 @@ export const ORCHESTRATION_V2_WS_METHODS = {
   getTurnDiff: "orchestration.getTurnDiff",
   getFullThreadDiff: "orchestration.getFullThreadDiff",
   searchThreads: "orchestration.searchThreads",
+  listHtmlLibrary: "orchestration.listHtmlLibrary",
   searchThread: "orchestration.searchThread",
   searchThreadStream: "orchestration.searchThreadStream",
   getArchivedShellSnapshot: "orchestration.getArchivedShellSnapshot",
@@ -4482,6 +4484,49 @@ export const OrchestrationV2GetTurnItemResult = Schema.Struct({
   item: Schema.NullOr(OrchestrationV2TurnItem),
 });
 export type OrchestrationV2GetTurnItemResult = typeof OrchestrationV2GetTurnItemResult.Type;
+
+const HtmlLibraryCursor = Schema.Struct({
+  updatedAt: IsoDateTime.check(Schema.isMaxLength(64)),
+  itemId: TurnItemId,
+});
+
+export const OrchestrationV2ListHtmlLibraryInput = Schema.Struct({
+  projectIds: Schema.optionalKey(Schema.Array(ProjectId).check(Schema.isMaxLength(100))),
+  mode: Schema.optionalKey(SidebarModeFilter),
+  limit: Schema.optionalKey(PositiveInt.check(Schema.isLessThanOrEqualTo(50))),
+  cursor: Schema.optionalKey(HtmlLibraryCursor),
+});
+export type OrchestrationV2ListHtmlLibraryInput = typeof OrchestrationV2ListHtmlLibraryInput.Type;
+
+const HtmlLibraryEntry = Schema.Struct({
+  attachmentId: Schema.String,
+  title: Schema.String,
+  height: Schema.Number,
+  heights: Schema.optionalKey(Schema.Array(Schema.Tuple([Schema.Number, Schema.Number]))),
+  updatedAt: IsoDateTime,
+  itemId: TurnItemId,
+  threadId: ThreadId,
+  threadTitle: Schema.String,
+  projectId: ProjectId,
+  projectTitle: Schema.String,
+  mode: AppMode,
+});
+
+export const OrchestrationV2ListHtmlLibraryResult = Schema.Struct({
+  entries: Schema.Array(HtmlLibraryEntry),
+  // Sparse filters can produce an empty page with more candidates to examine.
+  nextCursor: Schema.NullOr(HtmlLibraryCursor),
+});
+export type OrchestrationV2ListHtmlLibraryResult = typeof OrchestrationV2ListHtmlLibraryResult.Type;
+
+export class OrchestrationV2ListHtmlLibraryError extends Schema.TaggedError<OrchestrationV2ListHtmlLibraryError>()(
+  "OrchestrationV2ListHtmlLibraryError",
+  { cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return "Failed to load the HTML library.";
+  }
+}
 
 const WORKFLOW_SCRIPT_ERROR_MESSAGES = {
   "invalid-path": "Workflow scripts must be absolute .js paths.",

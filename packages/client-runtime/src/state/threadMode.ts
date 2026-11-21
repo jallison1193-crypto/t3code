@@ -1,6 +1,7 @@
 import type { AppMode, SidebarModeFilter } from "@t3tools/contracts/settings";
+import { WORK_MODE_TAG } from "@t3tools/contracts";
 
-export const WORK_MODE_TAG = "mode:work" as const;
+export { WORK_MODE_TAG };
 
 export type ThreadMode = AppMode;
 

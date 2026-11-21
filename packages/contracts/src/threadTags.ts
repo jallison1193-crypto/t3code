@@ -3,6 +3,8 @@ import * as Schema from "effect/Schema";
 
 import { TrimmedNonEmptyString } from "./baseSchemas.ts";
 
+export const WORK_MODE_TAG = "mode:work" as const;
+
 /** Tags match by exact spelling and case after trimming. */
 export const ThreadTag = TrimmedNonEmptyString.check(
   Schema.isMaxLength(64),

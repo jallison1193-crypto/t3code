@@ -112,12 +112,51 @@ it("requires operate permission for tool updates even alongside a read-only chec
 });
 
 describe("RPC scope middleware", () => {
-  const tested = [WS_METHODS.serverProbe, WS_METHODS.serverRetryResourceTelemetry] as const;
+  const tested = [
+    WS_METHODS.serverProbe,
+    WS_METHODS.serverRetryResourceTelemetry,
+    ORCHESTRATION_V2_WS_METHODS.listHtmlLibrary,
+  ] as const;
   const group = WsRpcGroup.omit(
     ...[...WsRpcGroup.requests.keys()].filter(
       (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, (typeof tested)[number]> =>
         !(tested as ReadonlyArray<string>).includes(tag),
     ),
+  );
+
+  it.effect.each([
+    { scopes: [AuthOrchestrationReadScope], authorized: true },
+    { scopes: [AuthDiagnosticsReadScope], authorized: false },
+  ])(
+    "enforces orchestration read access before listing HTML ($authorized)",
+    ({ scopes, authorized }) =>
+      Effect.gen(function* () {
+        const client = yield* RpcTest.makeClient(group).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              group.toLayerHandler(WS_METHODS.serverProbe, () => Effect.die("unused")),
+              group.toLayerHandler(WS_METHODS.serverRetryResourceTelemetry, () =>
+                Effect.die("unused"),
+              ),
+              group.toLayerHandler(ORCHESTRATION_V2_WS_METHODS.listHtmlLibrary, () =>
+                authorized
+                  ? Effect.succeed({ entries: [], nextCursor: null })
+                  : Effect.die("unauthorized"),
+              ),
+              RpcAuthorization.layer(scopes),
+            ),
+          ),
+        );
+        const list = client[ORCHESTRATION_V2_WS_METHODS.listHtmlLibrary]({});
+        if (authorized) {
+          expect(yield* list).toEqual({ entries: [], nextCursor: null });
+        } else {
+          expect(yield* list.pipe(Effect.flip)).toMatchObject({
+            _tag: "EnvironmentAuthorizationError",
+            requiredPermission: AuthOrchestrationReadScope,
+          });
+        }
+      }),
   );
 
   it.effect.each([
@@ -135,6 +174,9 @@ describe("RPC scope middleware", () => {
             group.toLayerHandler(WS_METHODS.serverProbe, () => Effect.succeed({})),
             group.toLayerHandler(WS_METHODS.serverRetryResourceTelemetry, () =>
               Effect.sync(() => handled.push("retry")).pipe(Effect.andThen(Effect.never)),
+            ),
+            group.toLayerHandler(ORCHESTRATION_V2_WS_METHODS.listHtmlLibrary, () =>
+              Effect.die("unused"),
             ),
             RpcAuthorization.layer(scopes),
           ),
