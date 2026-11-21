@@ -412,6 +412,7 @@ import {
   DatabaseStorageStatus,
   ServerSettings,
   ServerSettingsError,
+  SetThreadSectionMembership,
   ClientServerSettingsPatch,
   ListTextGeneratorModelsInput,
   ListTextGeneratorModelsResult,
@@ -585,6 +586,7 @@ export const WS_METHODS = {
   peerLinksPairClient: "peerLinks.pairClient",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
+  serverSetThreadSectionMembership: "server.setThreadSectionMembership",
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverCheckSecretSource: "server.checkSecretSource",
   serverSearchAcpRegistry: "server.searchAcpRegistry",
@@ -989,6 +991,15 @@ const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSettings, {
   success: ServerSettings,
   error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
 });
+
+const WsServerSetThreadSectionMembershipRpc = Rpc.make(
+  WS_METHODS.serverSetThreadSectionMembership,
+  {
+    payload: SetThreadSectionMembership,
+    success: Schema.Void,
+    error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
+  },
+);
 
 const WsServerDiscoverSourceControlRpc = Rpc.make(WS_METHODS.serverDiscoverSourceControl, {
   payload: Schema.Struct({}),
@@ -2404,6 +2415,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetSettingsRpc,
   WsServerReclaimDatabaseSpaceRpc,
   WsServerUpdateSettingsRpc,
+  WsServerSetThreadSectionMembershipRpc,
   WsPeerLinksListRpc,
   WsPeerLinksNamesRpc,
   WsPeerLinksLinkRpc,

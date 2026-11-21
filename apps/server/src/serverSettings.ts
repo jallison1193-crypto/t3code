@@ -1,5 +1,6 @@
 import {
   DEFAULT_SERVER_SETTINGS,
+  type EnvironmentId,
   ModelSelection,
   ProjectId,
   ProjectScript,
@@ -16,6 +17,7 @@ import {
   ServerSettings,
   ServerSettingsError,
   type ServerSettingsPatch,
+  type SetThreadSectionMembership,
   type ManagedPolicySummary,
   globalIdleCompaction,
   isSecretReference,
@@ -252,6 +254,46 @@ function ensureProviderInstanceMutationAllowed(
   return Effect.void;
 }
 
+const applyThreadSectionMembership = Effect.fn("serverSettings.applyThreadSectionMembership")(
+  function* (
+    current: ServerSettings,
+    serverEnvironmentId: EnvironmentId,
+    { homeEnvironmentId, thread, sectionId }: SetThreadSectionMembership,
+    settingsPath: string,
+  ) {
+    if (homeEnvironmentId !== serverEnvironmentId) {
+      return yield* new ServerSettingsError({
+        settingsPath,
+        operation: "thread-section-home-mismatch",
+      });
+    }
+    if (sectionId !== null && !Object.hasOwn(current.threadSections, sectionId)) {
+      return yield* new ServerSettingsError({
+        settingsPath,
+        operation: "thread-section-not-found",
+        threadSectionId: sectionId,
+      });
+    }
+
+    const threadSections = new Map(Object.entries(current.threadSections));
+    for (const [id, section] of threadSections) {
+      const members = section.members ?? [];
+      const remaining = members.filter(
+        (member) =>
+          member.environmentId !== thread.environmentId || member.threadId !== thread.threadId,
+      );
+      if (id === sectionId) {
+        if (members.length - remaining.length !== 1) {
+          threadSections.set(id, { ...section, members: [...remaining, thread] });
+        }
+      } else if (remaining.length !== members.length) {
+        threadSections.set(id, { ...section, members: remaining });
+      }
+    }
+    return { ...current, threadSections: Object.fromEntries(threadSections) };
+  },
+);
+
 export class ServerSettingsService extends Context.Service<
   ServerSettingsService,
   {
@@ -267,6 +309,11 @@ export class ServerSettingsService extends Context.Service<
     readonly updateSettings: (
       patch: ServerSettingsPatch,
     ) => Effect.Effect<ServerSettings, ServerSettingsError>;
+
+    readonly setThreadSectionMembership: (
+      serverEnvironmentId: EnvironmentId,
+      input: SetThreadSectionMembership,
+    ) => Effect.Effect<void, ServerSettingsError>;
 
     readonly updateProviderInstance: (
       mutation: ProviderInstanceMutation,
@@ -330,6 +377,10 @@ const makeTest = Effect.fn("serverSettings.makeTest")(function* (
       updateTestSettings((currentSettings) =>
         Effect.succeed(applyServerSettingsPatch(currentSettings, patch)),
       ),
+    setThreadSectionMembership: (serverEnvironmentId, input) =>
+      updateTestSettings((current) =>
+        applyThreadSectionMembership(current, serverEnvironmentId, input, "test settings"),
+      ).pipe(Effect.asVoid),
     updateProviderInstance: (mutation, patch = {}) =>
       updateTestSettings((currentSettings) =>
         Effect.gen(function* () {
@@ -1420,6 +1471,10 @@ const make = Effect.gen(function* () {
           Effect.as(applyServerSettingsPatch(current, patch)),
         ),
       ),
+    setThreadSectionMembership: (serverEnvironmentId, input) =>
+      updateAndPersistSettings({}, (current) =>
+        applyThreadSectionMembership(current, serverEnvironmentId, input, settingsPath),
+      ).pipe(Effect.asVoid),
     updateProviderInstance: (mutation, patch = {}) =>
       updateAndPersistSettings(patch, (current) =>
         Effect.gen(function* () {

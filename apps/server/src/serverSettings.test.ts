@@ -3,6 +3,7 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   DEFAULT_SERVER_SETTINGS,
+  EnvironmentId,
   globalIdleCompaction,
   type ManagedPolicyDocument,
   ModelSelection,
@@ -15,6 +16,7 @@ import {
   SecretProviderId,
   ServerSettings,
   ServerSettingsPatch,
+  ThreadId,
   ThreadSectionId,
   UsageLimitSourceId,
   type SimlockDeviceHostConfig,
@@ -181,6 +183,115 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
       assert.equal(removed.responseStreamingMode, "turn");
       assert.isTrue(removed.defaultAutoPull);
     }).pipe(Effect.provide(layerServerSettings())),
+  );
+
+  it.effect("moves scoped members atomically and preserves them on rename and reload", () =>
+    Effect.gen(function* () {
+      const service = yield* ServerSettingsModule.ServerSettingsService;
+      const home = EnvironmentId.make("home");
+      const inbox = ThreadSectionId.make("2ad737d0-09bd-4d13-8a0a-faa748efade1");
+      const reading = ThreadSectionId.make("27edb145-0c94-4f32-99f8-a3a00764bd96");
+      const threadId = ThreadId.make("same-thread-id");
+      const local = { environmentId: home, threadId };
+      const remote = { environmentId: EnvironmentId.make("offline-source"), threadId };
+      const other = { ...remote, threadId: ThreadId.make("another-thread") };
+      const setMembership = (thread: typeof local, sectionId: ThreadSectionId | null) =>
+        service.setThreadSectionMembership(home, { homeEnvironmentId: home, thread, sectionId });
+
+      yield* service.updateSettings({
+        threadSections: { [inbox]: { name: "Inbox" }, [reading]: { name: "Reading" } },
+      });
+      yield* setMembership(local, inbox);
+      yield* setMembership(remote, inbox);
+      yield* setMembership(other, inbox);
+      yield* Effect.all([setMembership(remote, reading), setMembership(other, reading)], {
+        concurrency: "unbounded",
+      });
+      yield* service.updateSettings({ threadSections: { [reading]: { name: "Reference" } } });
+      yield* setMembership(remote, reading);
+
+      const reloaded = yield* Effect.gen(function* () {
+        const fresh = yield* ServerSettingsModule.ServerSettingsService;
+        return yield* fresh.getSettings;
+      }).pipe(
+        Effect.provide(
+          Layer.fresh(ServerSettingsModule.layer).pipe(
+            Layer.provide(Layer.merge(ServerSecretStore.layer, ManagedPolicy.layerTest())),
+          ),
+        ),
+      );
+      assert.deepEqual(reloaded.threadSections[inbox], { name: "Inbox", members: [local] });
+      assert.equal(reloaded.threadSections[reading]?.name, "Reference");
+      assert.sameDeepMembers(
+        [...(reloaded.threadSections[reading]?.members ?? [])],
+        [remote, other],
+      );
+
+      yield* setMembership(remote, null);
+      const unassigned = yield* service.getSettings;
+      assert.deepEqual(unassigned.threadSections[inbox]?.members, [local]);
+      assert.deepEqual(unassigned.threadSections[reading]?.members, [other]);
+    }).pipe(Effect.provide(layerServerSettings())),
+  );
+
+  it.effect(
+    "rejects wrong-home and missing destinations and serializes assignment with deletion",
+    () =>
+      Effect.gen(function* () {
+        const service = yield* ServerSettingsModule.ServerSettingsService;
+        const home = EnvironmentId.make("home");
+        const remote = EnvironmentId.make("remote");
+        const inbox = ThreadSectionId.make("2ad737d0-09bd-4d13-8a0a-faa748efade1");
+        const reading = ThreadSectionId.make("27edb145-0c94-4f32-99f8-a3a00764bd96");
+        const thread = { environmentId: remote, threadId: ThreadId.make("thread-one") };
+        yield* service.updateSettings({ threadSections: { [inbox]: { name: "Inbox" } } });
+        yield* service.setThreadSectionMembership(home, {
+          homeEnvironmentId: home,
+          thread,
+          sectionId: inbox,
+        });
+
+        const wrongHome = yield* service
+          .setThreadSectionMembership(home, {
+            homeEnvironmentId: remote,
+            thread,
+            sectionId: null,
+          })
+          .pipe(Effect.flip);
+        assert.equal(wrongHome.operation, "thread-section-home-mismatch");
+
+        const assignToReading = service.setThreadSectionMembership(home, {
+          homeEnvironmentId: home,
+          thread,
+          sectionId: reading,
+        });
+        const missing = yield* assignToReading.pipe(Effect.flip);
+        assert.equal(missing.operation, "thread-section-not-found");
+        assert.equal(missing.threadSectionId, reading);
+        assert.deepEqual((yield* service.getSettings).threadSections[inbox]?.members, [thread]);
+
+        yield* service.updateSettings({ threadSections: { [reading]: { name: "Reading" } } });
+        const [assignment] = yield* Effect.all(
+          [
+            Effect.result(assignToReading),
+            service.updateSettings({ threadSections: { [reading]: null } }),
+          ],
+          { concurrency: "unbounded" },
+        );
+        if (assignment._tag === "Failure") {
+          assert.equal(assignment.failure.operation, "thread-section-not-found");
+        }
+        assert.deepEqual((yield* service.getSettings).threadSections, {
+          [inbox]:
+            assignment._tag === "Failure"
+              ? { name: "Inbox", members: [thread] }
+              : { name: "Inbox", members: [] },
+        });
+        yield* service.updateSettings({ threadSections: { [reading]: { name: "New folder" } } });
+        assert.deepEqual((yield* service.getSettings).threadSections[reading], {
+          name: "New folder",
+        });
+      }).pipe(Effect.provide(layerServerSettings())),
   );
 
   it.effect("serializes concurrent model preference edits without cancelling duplicate adds", () =>

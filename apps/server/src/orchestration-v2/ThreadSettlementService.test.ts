@@ -670,6 +670,7 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
   };
 
   const serverSettings = ServerSettings.ServerSettingsService.of({
+    setThreadSectionMembership: () => Effect.die("Unexpected thread folder membership mutation"),
     start: Effect.void,
     ready: Effect.void,
     getSettings: Ref.update(settingsReadCount, (count) => count + 1).pipe(

@@ -2815,6 +2815,12 @@ export const layerWsRpc = (
               : serverSettings.updateProviderInstance(providerInstanceMutation, nextPatch);
             return ServerSettings.redactServerSettingsForClient(settings, settingsClient);
           }),
+        [WS_METHODS.serverSetThreadSectionMembership]: (input) =>
+          serverEnvironment.getEnvironmentId.pipe(
+            Effect.flatMap((environmentId) =>
+              serverSettings.setThreadSectionMembership(environmentId, input),
+            ),
+          ),
         [WS_METHODS.serverDiscoverSourceControl]: (_input) => sourceControlDiscovery.discover,
         [WS_METHODS.serverCheckSecretSource]: (input) => secretCheck.check(input.source),
         [WS_METHODS.serverGetTraceDiagnostics]: (_input) =>

@@ -398,6 +398,33 @@ it.effect.each([WS_METHODS.subscribeVcsBranch, WS_METHODS.subscribeVcsStatus] as
 );
 
 describe("settings mutation authorization", () => {
+  it.effect("requires the settings grant to change thread folder membership", () =>
+    Effect.gen(function* () {
+      const method = WS_METHODS.serverSetThreadSectionMembership;
+      const group = WsRpcGroup.omit(
+        ...[...WsRpcGroup.requests.keys()].filter(
+          (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, typeof method> => tag !== method,
+        ),
+      );
+      const handlers = group.toLayerHandler(method, () => Effect.void);
+      const input = {
+        homeEnvironmentId: EnvironmentId.make("home"),
+        thread: { environmentId: EnvironmentId.make("remote"), threadId: ThreadId.make("thread") },
+        sectionId: null,
+      };
+      const providerManager = yield* RpcTest.makeClient(group).pipe(
+        Effect.provide(Layer.merge(handlers, RpcAuthorization.layer([AuthProvidersManageScope]))),
+      );
+      expect(yield* providerManager[method](input).pipe(Effect.flip)).toMatchObject({
+        requiredPermission: AuthSettingsWriteScope,
+      });
+      const settingsWriter = yield* RpcTest.makeClient(group).pipe(
+        Effect.provide(Layer.merge(handlers, RpcAuthorization.layer([AuthSettingsWriteScope]))),
+      );
+      yield* settingsWriter[method](input);
+    }),
+  );
+
   const group = WsRpcGroup.omit(
     ...[...WsRpcGroup.requests.keys()].filter(
       (

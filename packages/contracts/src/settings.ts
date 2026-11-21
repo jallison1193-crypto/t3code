@@ -26,7 +26,12 @@ import { UsageLimitSourceId } from "./usageLimitSourceId.ts";
 import { UsageModelFilter } from "./usage.ts";
 import { SecretProviderId, SecretProviderSlug } from "./secretReference.ts";
 import { containsSecretReference, SettingsSecretValue } from "./settingsSecretValue.ts";
-import { EnvironmentMachineKind, ThreadEnvMode, WorktreeSubmodules } from "./environment.ts";
+import {
+  EnvironmentMachineKind,
+  ScopedThreadRef,
+  ThreadEnvMode,
+  WorktreeSubmodules,
+} from "./environment.ts";
 import { KeybindingShortcut } from "./keybindings.ts";
 import {
   CustomModelSetting,
@@ -1408,9 +1413,21 @@ export const ThreadSectionId = Schema.String.check(Schema.isUUID()).pipe(
 );
 export type ThreadSectionId = typeof ThreadSectionId.Type;
 
-const ThreadSection = Schema.Struct({
+const ThreadSectionMetadata = Schema.Struct({
   name: TrimmedNonEmptyString.check(Schema.isPattern(/^[^\r\n\v\f\u0085\u2028\u2029]+$/u)),
 });
+
+const ThreadSection = Schema.Struct({
+  ...ThreadSectionMetadata.fields,
+  members: Schema.optionalKey(Schema.Array(ScopedThreadRef)),
+});
+
+export const SetThreadSectionMembership = Schema.Struct({
+  homeEnvironmentId: EnvironmentId,
+  thread: ScopedThreadRef,
+  sectionId: Schema.NullOr(ThreadSectionId),
+});
+export type SetThreadSectionMembership = typeof SetThreadSectionMembership.Type;
 
 export const ServerSettings = Schema.Struct({
   // Null means unmigrated; empty is authoritative and must not resurrect cleared preferences.
@@ -1800,6 +1817,8 @@ export const ServerSettingsOperation = Schema.Literals([
   "write-secret",
   "write-secret-provider",
   "write-file",
+  "thread-section-home-mismatch",
+  "thread-section-not-found",
   "prepare-directory",
   "write-managed-setting",
   "use-disallowed-provider",
@@ -1817,6 +1836,7 @@ export class ServerSettingsError extends Schema.TaggedError<ServerSettingsError>
     operation: ServerSettingsOperation,
     providerInstanceId: Schema.optional(Schema.String),
     environmentVariable: Schema.optional(Schema.String),
+    threadSectionId: Schema.optionalKey(ThreadSectionId),
     /** For `write-managed-setting`: the locked dot path and who manages it. */
     managedSetting: Schema.optional(Schema.String),
     managedBy: Schema.optional(Schema.String),
@@ -1826,6 +1846,12 @@ export class ServerSettingsError extends Schema.TaggedError<ServerSettingsError>
   },
 ) {
   override get message(): string {
+    if (this.operation === "thread-section-home-mismatch") {
+      return "This server does not own the requested thread folder catalog.";
+    }
+    if (this.operation === "thread-section-not-found") {
+      return "The destination thread folder no longer exists.";
+    }
     if (this.operation === "write-managed-setting") {
       return `${this.managedSetting ?? "This setting"} is managed by ${this.managedBy ?? "your organization"} and cannot be changed.`;
     }
@@ -1972,7 +1998,9 @@ export const ServerSettingsPatch = Schema.Struct({
   snoozePresets: Schema.optionalKey(SnoozePresetSettings),
   hiddenThreadTags: Schema.optionalKey(Schema.Array(Schema.String)),
   hideTaggedThreads: Schema.optionalKey(Schema.Boolean),
-  threadSections: Schema.optionalKey(Schema.Record(ThreadSectionId, Schema.NullOr(ThreadSection))),
+  threadSections: Schema.optionalKey(
+    Schema.Record(ThreadSectionId, Schema.NullOr(ThreadSectionMetadata)),
+  ),
   guestSharingEnabled: Schema.optionalKey(Schema.Boolean),
   linkedEnvironmentsEnabled: Schema.optionalKey(Schema.Boolean),
   promptSuggestionsEnabled: Schema.optionalKey(Schema.Boolean),

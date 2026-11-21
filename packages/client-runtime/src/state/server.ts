@@ -1772,6 +1772,12 @@ export function createServerEnvironmentAtoms<R, E>(
       concurrency: configConcurrency,
     }),
     updateSettings,
+    setThreadSectionMembership: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:set-thread-section-membership",
+      tag: WS_METHODS.serverSetThreadSectionMembership,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
     mutateProviderInstance: updateSettings,
     prepareAcpRegistryAgent: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:acp-registry:prepare",

@@ -238,13 +238,14 @@ function mergeModelSelectionOptionsById(input: {
 function mergeSettingsEntries<Value>(
   current: Readonly<Record<string, Value>>,
   patch: Readonly<Record<string, Value | null>>,
+  merge: (stored: Value | undefined, incoming: Value) => Value = (_stored, incoming) => incoming,
 ): Record<string, Value> {
   const next = new Map(Object.entries(current));
   for (const [id, config] of Object.entries(patch)) {
     if (config === null) {
       next.delete(id);
     } else {
-      next.set(id, config);
+      next.set(id, merge(next.get(id), config));
     }
   }
   return Object.fromEntries(next);
@@ -614,7 +615,13 @@ export function applyServerSettingsPatch(
       ? { defaultProjectScripts: patch.defaultProjectScripts }
       : {}),
     ...(threadSectionsPatch !== undefined
-      ? { threadSections: mergeSettingsEntries(current.threadSections, threadSectionsPatch) }
+      ? {
+          threadSections: mergeSettingsEntries(
+            current.threadSections,
+            threadSectionsPatch,
+            (section, { name }) => ({ ...section, name }),
+          ),
+        }
       : {}),
     ...(usageLimitSourcesPatch !== undefined
       ? {

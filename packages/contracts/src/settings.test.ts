@@ -70,6 +70,15 @@ describe("thread sections", () => {
     expect(() => decodeServerSettings(deletion)).toThrow();
   });
 
+  it("round trips scoped members while keeping folder settings patches name-only", () => {
+    const members = [{ environmentId: "remote-environment", threadId: "thread-one" }];
+    const input = { threadSections: { [id]: { name: "Inbox", members } } };
+    expect(encodeServerSettings(decodeServerSettings(input))).toMatchObject(input);
+    expect(decodeClientServerSettingsPatch(input)).toEqual({
+      threadSections: { [id]: { name: "Inbox" } },
+    });
+  });
+
   it.each(["", "  ", "Line\nBreak", "Line\rBreak", "Line\u0085Break", "Line\u2028Break"])(
     "rejects an invalid folder name %j",
     (name) => {
