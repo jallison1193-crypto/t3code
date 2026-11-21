@@ -50,6 +50,7 @@ interface ChatShortcutsInput {
   readonly commands: ChatShortcutCommands;
   /** Handles commands not in `commands`, such as project scripts. */
   readonly fallback: (command: KeybindingCommand) => ChatShortcutHandler | undefined;
+  readonly isCommandBlocked?: ((command: KeybindingCommand) => boolean) | undefined;
 }
 
 /**
@@ -92,7 +93,12 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
     const command = resolveChatShortcutCommand(event, keybindings, input.scriptKeybindings, {
       context: shortcutContext,
     });
-    if (!command || (inSideChatPane && !SIDE_CHAT_PANE_COMMANDS.has(command))) return;
+    if (
+      !command ||
+      input.isCommandBlocked?.(command) === true ||
+      (inSideChatPane && !SIDE_CHAT_PANE_COMMANDS.has(command))
+    )
+      return;
     const run =
       input.commands[command] ??
       composerShortcutCommands(input.composerRef, input.branchToolbarRef)[command] ??
@@ -122,9 +128,8 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
     const command = resolveChatShortcutCommand(event, input.keybindings, input.scriptKeybindings, {
       context: input.getShortcutContext(event.target),
     });
-    const run = command
-      ? composerShortcutCommands(input.composerRef, input.branchToolbarRef)[command]
-      : undefined;
+    if (!command || input.isCommandBlocked?.(command) === true) return;
+    const run = composerShortcutCommands(input.composerRef, input.branchToolbarRef)[command];
     if (!run || run({ event, terminalFocusOwner: null }) === false) return;
     event.preventDefault();
     event.stopPropagation();

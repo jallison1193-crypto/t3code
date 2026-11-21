@@ -22,6 +22,7 @@ const state = vi.hoisted(() => ({
   granted: new Set<string>(),
   effects: [] as string[],
   tags: [] as string[],
+  appMode: "code" as "code" | "work",
   setTagCalls: [] as Array<unknown>,
   setTagResult: null as AsyncResult.AsyncResult<unknown, unknown> | null,
   toasts: [] as Array<unknown>,
@@ -137,6 +138,7 @@ vi.mock("./useSettings", () => ({
       confirmThreadDelete: true,
       confirmThreadArchive: true,
       timestampFormat: "12-hour",
+      appMode: state.appMode,
     }),
 }));
 vi.mock("./useThreadActions", () => ({
@@ -191,6 +193,7 @@ beforeEach(() => {
   state.granted = new Set(["primary"]);
   state.effects = [];
   state.tags = [];
+  state.appMode = "code";
   state.setTagCalls = [];
   state.setTagResult = null;
   state.toasts = [];
@@ -287,5 +290,23 @@ describe("thread menu permissions", () => {
     createMenu().openMenu(position);
     await state.completed.promise;
     expect(state.effects).toEqual(["make-coordinator"]);
+  });
+
+  it("hides branch actions in Work mode and restores them in Code mode", async () => {
+    state.appMode = "work";
+    createMenu().openMenu(position);
+    const workItems = state.show.mock.calls[0]![0];
+    const workCopyChildren = workItems.find((item) => item.id === "copy")?.children ?? [];
+    expect(workItems.some((item) => item.id === "new-thread-on-branch")).toBe(false);
+    expect(workCopyChildren.some((item) => item.id === "copy-branch")).toBe(false);
+    expect(workCopyChildren.some((item) => item.id === "copy-path")).toBe(true);
+    expect(workItems.some((item) => item.id === "move-to-work")).toBe(true);
+
+    state.appMode = "code";
+    createMenu().openMenu(position);
+    const codeItems = state.show.mock.calls[1]![0];
+    const codeCopyChildren = codeItems.find((item) => item.id === "copy")?.children ?? [];
+    expect(codeItems.some((item) => item.id === "new-thread-on-branch")).toBe(true);
+    expect(codeCopyChildren.some((item) => item.id === "copy-branch")).toBe(true);
   });
 });

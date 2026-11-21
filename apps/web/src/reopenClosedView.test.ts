@@ -287,6 +287,12 @@ describe("planNextReopen", () => {
       [],
       null,
     ],
+    [
+      "skips but keeps a surface hidden in the current app mode",
+      [{ ...known, surfaceVisible: false }, known],
+      [],
+      "b",
+    ],
     ["drops a tab that is already open", [{ ...known, panel: openDiff }, known], ["a"], "b"],
     [
       "restores a tab whose panel is hidden",

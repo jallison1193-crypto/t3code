@@ -27,15 +27,16 @@ import { AppRoot } from "~/AppRoot";
 import "~/components/ChatView";
 import { DraftId, useComposerDraftStore } from "~/composerDraftStore";
 import { selectThreadDiffPanelSelection, useDiffPanelStore } from "~/diffPanelStore";
-import { __setClientSettingsForTests } from "~/hooks/useSettings";
+import { __setClientSettingsForTests, persistClientSettingsPatch } from "~/hooks/useSettings";
 import stylesheet from "~/index.css?inline";
 import { environmentContextRecord } from "~/lib/composerContextRecords";
 import { startWorkspaceFocus } from "~/lib/workspaceFocus";
 import { usePromptStashStore } from "~/promptStashStore";
-import { useRightPanelStore } from "~/rightPanelStore";
+import { selectThreadRightPanelState, useRightPanelStore } from "~/rightPanelStore";
 import { getRouter } from "~/router";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { environmentThreadDetails } from "~/state/threads";
+import { selectThreadTerminalUiState, useTerminalUiStateStore } from "~/terminalUiStateStore";
 import {
   ENVIRONMENT_ID,
   PROJECT_ID,
@@ -935,4 +936,116 @@ it("/side sends the draft's attachments and context, and keeps them when it does
       "/side what is this?",
     ]),
   );
+});
+
+it("hides coding chrome in Work mode based on appMode while preserving side chat, draft, panel, and terminal state", async () => {
+  const style = document.createElement("style");
+  style.textContent = stylesheet;
+  document.head.append(style);
+  using _style = { [Symbol.dispose]: () => style.remove() };
+  await page.viewport(1400, 900);
+  // Keep parent and child in the same thread family whether this test runs alone or after earlier shell tests.
+  const parent = {
+    ...threadWithHistory("work-chrome-parent", 1),
+    olderSettled: true as const,
+  };
+  const child = {
+    ...threadWithHistory("work-chrome-child", 1),
+    sideChatOf: parent.id,
+    olderSettled: true as const,
+  };
+  const keybindings = mergeWithDefaultKeybindings(
+    compileResolvedKeybindingsConfig([
+      { key: "ctrl+alt+d", command: "diff.toggle" },
+      { key: "ctrl+alt+j", command: "terminal.toggle" },
+    ]),
+  );
+  using _environment = installFakeEnvironment([parent, child], { keybindings });
+  const parentRef = scopeThreadRef(ENVIRONMENT_ID, parent.id);
+  useRightPanelStore.getState().openThread(parentRef, child.id);
+  useRightPanelStore.getState().open(parentRef, "diff");
+  useTerminalUiStateStore.getState().setTerminalOpen(parentRef, true);
+  __setClientSettingsForTests({
+    ...DEFAULT_CLIENT_SETTINGS,
+    onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+    appMode: "code",
+    sidebarModeFilter: "code",
+  });
+
+  const router = getRouter(
+    createMemoryHistory({ initialEntries: [`/${ENVIRONMENT_ID}/${parent.id}`] }),
+  );
+  await router.load();
+  await using screen = await render(<AppRoot router={router} />, {
+    // AppRoot brings its own router.
+    router: false,
+  });
+
+  const terminalToggle = screen.getByRole("button", { name: "Toggle terminal drawer" });
+  const diffTab = screen.getByRole("button", { name: "Diff", exact: true });
+  const childTab = screen.getByRole("button", { name: child.title, exact: true });
+  const mainEditor = screen.getByRole("textbox", { name: `Message ${parent.title}`, exact: true });
+  const terminalDrawer = () =>
+    screen.container.querySelector<HTMLElement>(
+      '[data-thread-terminal-drawer][data-terminal-owner="drawer"]',
+    );
+  await expect.element(terminalToggle).toBeVisible();
+  await expect.element(diffTab).toBeVisible();
+  await expect.element(childTab).toBeVisible();
+  await vi.waitFor(() => expect(terminalDrawer()).not.toBeNull());
+  await expect.element(terminalDrawer()!).toBeVisible();
+  await userEvent.click(mainEditor);
+  await insertText("keep draft across modes");
+  await expect.element(mainEditor).toHaveTextContent("keep draft across modes");
+
+  // Switch appMode to Work while keeping sidebarModeFilter on Code and an untagged Code thread open.
+  await act(async () => {
+    await persistClientSettingsPatch(
+      { appMode: "work", sidebarModeFilter: "code" },
+      async () => {},
+    );
+  });
+
+  await expect.element(terminalToggle).not.toBeInTheDocument();
+  await expect.element(diffTab).not.toBeInTheDocument();
+  // The drawer stays mounted (preserving PTY state) while hidden visually.
+  expect(terminalDrawer()).not.toBeNull();
+  await expect.element(terminalDrawer()!).not.toBeVisible();
+  await expect.element(childTab).toBeVisible();
+  const childEditor = screen.getByRole("textbox", { name: `Message ${child.title}`, exact: true });
+  await expect.element(childEditor).toBeVisible();
+  await expect.element(screen.getByText(`Answer 0 for ${parent.id}.`)).toBeVisible();
+  await expect.element(mainEditor).toHaveTextContent("keep draft across modes");
+
+  // Coding shortcuts do not open hidden surfaces or flip stored terminal state in Work mode.
+  await userEvent.click(mainEditor);
+  await userEvent.keyboard("{Control>}{Alt>}DJ{/Alt}{/Control}");
+  await expect.element(diffTab).not.toBeInTheDocument();
+
+  const storedPanelInWork = selectThreadRightPanelState(
+    useRightPanelStore.getState().byThreadKey,
+    parentRef,
+  );
+  expect(storedPanelInWork.surfaces.map((surface) => surface.kind)).toEqual(["thread", "diff"]);
+  expect(storedPanelInWork.activeSurfaceId).toBe("diff");
+  expect(
+    selectThreadTerminalUiState(
+      useTerminalUiStateStore.getState().terminalUiStateByThreadKey,
+      parentRef,
+    ).terminalOpen,
+  ).toBe(true);
+
+  // Switch back to Code mode even while sidebarModeFilter is Work: coding chrome and stored tabs restore.
+  await act(async () => {
+    await persistClientSettingsPatch(
+      { appMode: "code", sidebarModeFilter: "work" },
+      async () => {},
+    );
+  });
+
+  await expect.element(terminalToggle).toBeVisible();
+  await expect.element(diffTab).toBeVisible();
+  await expect.element(childTab).toBeVisible();
+  await expect.element(terminalDrawer()!).toBeVisible();
+  await expect.element(mainEditor).toHaveTextContent("keep draft across modes");
 });

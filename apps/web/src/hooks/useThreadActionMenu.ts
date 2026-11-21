@@ -109,6 +109,7 @@ export function useThreadActionMenu(input: {
   const confirmThreadDelete = useClientSettings((s) => s.confirmThreadDelete);
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
   const timestampFormat = useClientSettings((s) => s.timestampFormat);
+  const isWorkMode = useClientSettings((s) => s.appMode === "work");
   const { copyToClipboard: copyPathToClipboard } = useCopyToClipboard<{ path: string }>({
     onError: (error) => failureToast(m(msg("Failed to copy path")), error),
   });
@@ -153,7 +154,7 @@ export function useThreadActionMenu(input: {
       const items = buildThreadActionMenuItems({
         canOperate: readEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope),
         canFind: onFind !== undefined,
-        branch: thread.branch ?? null,
+        branch: isWorkMode ? null : (thread.branch ?? null),
         projectFilter: null,
         threadMode: threadModeOf(thread),
         isPinned: thread.pinnedAt != null,

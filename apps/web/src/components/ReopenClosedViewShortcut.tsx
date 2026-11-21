@@ -15,6 +15,8 @@ import { isCommandPaletteOpen } from "../commandPaletteBus";
 import { useClosedViewStore } from "../closedViewStore";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { environmentCatalog } from "../connection/catalog";
+import { getClientSettings, useClientSettings } from "../hooks/useSettings";
+import { isHiddenRightPanelSurfaceInWorkMode } from "./chat/workModeChrome.logic";
 import { effectiveShortcutsForCommand, resolveShortcutCommand } from "../keybindings";
 import { isEditableFocused } from "../lib/editableFocus";
 import { isPreviewFocused } from "../lib/previewFocus";
@@ -83,10 +85,12 @@ export function ReopenClosedViewShortcut() {
       : draft
         ? (draft.promotedTo ?? scopeThreadRef(draft.environmentId, draft.threadId))
         : null;
-  const terminalOpen = useTerminalUiStateStore(
+  const isWorkMode = useClientSettings((settings) => settings.appMode === "work");
+  const rawTerminalOpen = useTerminalUiStateStore(
     (state) =>
       selectThreadTerminalUiState(state.terminalUiStateByThreadKey, threadRef).terminalOpen,
   );
+  const terminalOpen = !isWorkMode && rawTerminalOpen;
   const previewOpen = useRightPanelStore(
     (state) => selectActiveRightPanel(state.byThreadKey, threadRef) === "preview",
   );
@@ -99,15 +103,21 @@ export function ReopenClosedViewShortcut() {
     const catalog = appAtomRegistry.get(environmentCatalog.catalogValueAtom);
     const drafts = useComposerDraftStore.getState();
     const panelsByThread = useRightPanelStore.getState().byThreadKey;
+    const appMode = getClientSettings().appMode;
     const { drop, restore } = planNextReopen(useClosedViewStore.getState().entries, (entry) => {
       const ref = entry.threadRef;
       const panel = selectThreadRightPanelState(panelsByThread, ref);
+      const surfaceVisible =
+        appMode !== "work" ||
+        entry.kind !== "panel-tab" ||
+        !isHiddenRightPanelSurfaceInWorkMode(entry.surface);
       if (isGlobalPullRequests(ref) || isGlobalIssues(ref)) {
         return {
           environmentKnown: true,
           catalogReady: true,
           ownerExists: true,
           sideChatExists: true,
+          surfaceVisible,
           shellLive: true,
           panel,
         };
@@ -124,6 +134,7 @@ export function ReopenClosedViewShortcut() {
           // The shell leaves idle subagents out, so one it does not list may still exist.
           appAtomRegistry.get(serverEnvironment.configValueAtom(ref.environmentId))
             ?.shellThreadFamilies === true,
+        surfaceVisible,
         shellLive:
           appAtomRegistry.get(environmentShell.stateValueAtom(ref.environmentId)).status === "live",
         panel,
@@ -186,7 +197,7 @@ export function ReopenClosedViewShortcut() {
         return;
       const command = resolveShortcutCommand(event, keybindings, {
         context: {
-          terminalFocus: isTerminalFocused(),
+          terminalFocus: !isWorkMode && isTerminalFocused(),
           terminalOpen,
           previewFocus: isPreviewFocused(),
           previewOpen,
@@ -207,7 +218,7 @@ export function ReopenClosedViewShortcut() {
       window.removeEventListener("keydown", onKeyDown, true);
       unsubscribe?.();
     };
-  }, [keybindings, previewOpen, terminalOpen]);
+  }, [isWorkMode, keybindings, previewOpen, terminalOpen]);
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- registers forwarded shortcut chords with the desktop preview bridge and clears them on cleanup
   useEffect(() => {

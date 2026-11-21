@@ -125,7 +125,13 @@ function setup(input: {
   };
 }
 
-function Panel({ fixture }: { fixture: ReturnType<typeof setup> }) {
+function Panel({
+  fixture,
+  showCodingChrome = true,
+}: {
+  fixture: ReturnType<typeof setup>;
+  showCodingChrome?: boolean;
+}) {
   const noop = () => {};
   const scriptResult = async () => ({ ok: true }) as never;
   return (
@@ -161,6 +167,7 @@ function Panel({ fixture }: { fixture: ReturnType<typeof setup> }) {
         gitCwd={state.folder}
         workspaceMutationId={null}
         isGitRepo={false}
+        showCodingChrome={showCodingChrome}
         envLocked
         availableEnvironments={[]}
         onEnvModeChange={noop}
@@ -214,4 +221,25 @@ it("offers no Initialize Git before the server config says where No project live
   await expect
     .element(page.getByRole("button", { name: "Initialize Git" }))
     .not.toBeInTheDocument();
+});
+
+it("hides coding git controls in Work mode while keeping linked pull requests visible", async () => {
+  using fixture = setup({
+    workspaceRoot: "/work/plain",
+    folder: "/work/plain",
+    pullRequests: [linkedPullRequest],
+  });
+  await using screen = await render(<Panel fixture={fixture} showCodingChrome={false} />);
+  await expect
+    .element(page.getByLabelText("Run context: Workspace", { exact: true }))
+    .toBeVisible();
+  await expect.element(page.getByRole("region", { name: "Workspace" })).toBeVisible();
+  await expect.element(page.getByText("#27513")).toBeVisible();
+  await expect
+    .element(page.getByRole("button", { name: "Initialize Git" }))
+    .not.toBeInTheDocument();
+
+  await screen.rerender(<Panel fixture={fixture} showCodingChrome />);
+  await expect.element(page.getByLabelText("Run context: plain", { exact: true })).toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Initialize Git" })).toBeVisible();
 });

@@ -62,6 +62,12 @@ import { armFreshSession, disarmFreshSession, useFreshSessionArmed } from "./cha
 import { useUsageLimitsPanel } from "./chat/useUsageLimitsPanel";
 import { useWorktreeSetup } from "./chat/useWorktreeSetup";
 import { useChatShortcuts } from "./chat/useChatShortcuts";
+import {
+  isCodingChromeVisible,
+  isHiddenChatShortcutInWorkMode,
+  mapVisibleRightPanelMoveIndex,
+  resolveWorkModeRightPanelPresentation,
+} from "./chat/workModeChrome.logic";
 import { ChatBannerLane } from "./chat/ChatBannerLane";
 import * as Schema from "effect/Schema";
 import {
@@ -179,7 +185,6 @@ import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
 import { PopoverCreateHandle } from "./ui/popover";
 import {
   selectActiveRightPanel,
-  selectActiveRightPanelSurface,
   selectThreadPanelOpen,
   selectThreadRightPanelState,
   useRightPanelStore,
@@ -598,6 +603,8 @@ export default function ChatView(props: ChatViewProps) {
     return ids;
   })();
   const settings = useEnvironmentSettings(environmentId);
+  const appMode = useClientSettings((clientSettings) => clientSettings.appMode);
+  const showCodingChrome = isCodingChromeVisible(appMode);
   const clientSettingsHydrated = useClientSettingsHydrated();
   const timestampFormat = settings.timestampFormat;
   const navigate = useNavigate();
@@ -787,6 +794,7 @@ export default function ChatView(props: ChatViewProps) {
   const terminalUiState = useTerminalUiStateStore((state) =>
     selectThreadTerminalUiState(state.terminalUiStateByThreadKey, routeThreadRef),
   );
+  const terminalDrawerOpen = showCodingChrome && Boolean(terminalUiState.terminalOpen);
 
   const fallbackDraftProjectRef = draftThread
     ? scopeProjectRef(draftThread.environmentId, draftThread.projectId)
@@ -1109,14 +1117,33 @@ export default function ChatView(props: ChatViewProps) {
   const activeRightPanelKind = useRightPanelStore((state) =>
     selectActiveRightPanel(state.byThreadKey, activeThreadRef),
   );
-  const diffOpen = activeRightPanelKind === "diff";
+  const diffOpen = showCodingChrome && activeRightPanelKind === "diff";
   const rightPanelState = useRightPanelStore((state) =>
     selectThreadRightPanelState(state.byThreadKey, activeThreadRef),
   );
-  const shouldUsePlanSidebarSheet = prefersPlanSidebarSheet && rightPanelState.maximized !== true;
-  const activeRightPanelSurface = useRightPanelStore((state) =>
-    selectActiveRightPanelSurface(state.byThreadKey, activeThreadRef),
-  );
+  const [workModeEmptyLauncherThreadKey, setWorkModeEmptyLauncherThreadKey] = useState<
+    string | null
+  >(null);
+  const rightPanelPresentation = resolveWorkModeRightPanelPresentation({
+    appMode,
+    isOpen: rightPanelState.isOpen,
+    surfaces: rightPanelState.surfaces,
+    activeSurfaceId: rightPanelState.activeSurfaceId,
+    maximized: rightPanelState.maximized === true,
+    emptyLauncherOpen:
+      workModeEmptyLauncherThreadKey !== null && workModeEmptyLauncherThreadKey === activeThreadKey,
+  });
+  if (
+    workModeEmptyLauncherThreadKey !== null &&
+    (showCodingChrome ||
+      workModeEmptyLauncherThreadKey !== activeThreadKey ||
+      !rightPanelPresentation.hasOnlyHiddenSurfaces)
+  ) {
+    setWorkModeEmptyLauncherThreadKey(null);
+  }
+  const visibleRightPanelSurfaces = rightPanelPresentation.surfaces;
+  const visibleActiveRightPanelSurface = rightPanelPresentation.activeSurface;
+  const shouldUsePlanSidebarSheet = prefersPlanSidebarSheet && !rightPanelPresentation.maximized;
   const activePreviewState = useThreadPreviewState(activeThreadRef);
   const activePreviewServerEpoch = activePreviewState.serverEpoch;
   const resolvePreviewRuntimeTabId = activeThreadRef
@@ -1131,13 +1158,13 @@ export default function ChatView(props: ChatViewProps) {
     ),
   );
   const canReuseTerminal = activeThreadKnownSessionsRaw !== null;
-  const previewPanelOpen = activeRightPanelKind === "preview" && browserAvailable;
-  const rightPanelOpen = rightPanelState.isOpen;
+  const previewPanelOpen = visibleActiveRightPanelSurface?.kind === "preview" && browserAvailable;
+  const rightPanelOpen = rightPanelPresentation.open;
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
   const rightPanelPresenceValue = {
-    activeSurface: activeRightPanelSurface,
-    surfaces: rightPanelState.surfaces,
+    activeSurface: visibleActiveRightPanelSurface,
+    surfaces: visibleRightPanelSurfaces,
   };
   const rightPanelPresence = usePanelPresence(
     rightPanelOpen && activeThreadRef !== null,
@@ -1156,10 +1183,10 @@ export default function ChatView(props: ChatViewProps) {
     activePreviewMiniPlayer?.source ?? null,
     renderedRightPanelSurface,
   );
-  const canMaximizeRightPanel = rightPanelOpen;
+  const canMaximizeRightPanel = rightPanelOpen && !rightPanelPresentation.hasOnlyHiddenSurfaces;
   // An embedded side chat has no panel; a stale maximized flag would hide its own column.
   const rightPanelMaximized =
-    !embedded && canMaximizeRightPanel && rightPanelState.maximized === true;
+    !embedded && canMaximizeRightPanel && rightPanelPresentation.maximized;
   const inlineRightPanelOwnsTitleBar = rightPanelOpen && !shouldUsePlanSidebarSheet;
   const [threadPanelPopoverHandle] = useState(PopoverCreateHandle);
   const [chatCanvasStore] = useState(createChatCanvasStore);
@@ -1832,7 +1859,7 @@ export default function ChatView(props: ChatViewProps) {
       isDraftHeroState,
       persistInActiveThreads: settings.persistComposerContextStrip,
       hasActiveProject: activeProject !== null && !showProviderSubagentBar,
-      isGitRepo,
+      isGitRepo: showCodingChrome && isGitRepo,
       showEnvironmentIndicator: showComposerEnvironmentIndicator,
     });
   const terminalShortcutLabelOptions = {
@@ -1977,7 +2004,7 @@ export default function ChatView(props: ChatViewProps) {
     activeThreadId,
     activeThreadRef,
     activeProject,
-    activeRightPanelSurface,
+    activeRightPanelSurface: visibleActiveRightPanelSurface,
     runningTerminalIds,
     activeServerOrderedTerminalIds,
     activeTerminalLabelsById,
@@ -2080,7 +2107,7 @@ export default function ChatView(props: ChatViewProps) {
     latestRun: activeLatestRun,
     latestRunSettled,
     turnDiffSummaries,
-    isGitRepo: gitStatusQuery.data?.isRepo,
+    isGitRepo: showCodingChrome ? gitStatusQuery.data?.isRepo : false,
     linkedPullRequest: linkedThreadPullRequest,
     hasLinkedPullRequestDetail,
     pullRequestsKey: proactivePullRequestsKey,
@@ -2105,6 +2132,7 @@ export default function ChatView(props: ChatViewProps) {
   } = useRightPanelSurfaceClose({
     threadRef: activeThreadRef,
     terminalLabelsById: activeTerminalLabelsById,
+    visibleSurfaces: visibleRightPanelSurfaces,
   });
   const closeRightPanelSurfaceStable = closeRightPanelSurface;
   const persistThreadSettingsForNextTurn = async (input: {
@@ -2206,7 +2234,7 @@ export default function ChatView(props: ChatViewProps) {
     activeThreadRef,
     workspaceLayoutElement,
     !embedded,
-    terminalUiState.terminalOpen,
+    terminalDrawerOpen,
     isCoarsePointer ? ignoreComposerFocus : focusComposerStable,
   );
 
@@ -2215,7 +2243,7 @@ export default function ChatView(props: ChatViewProps) {
     if (
       embedded ||
       !activeThread?.id ||
-      terminalUiState.terminalOpen ||
+      terminalDrawerOpen ||
       isMobileViewport ||
       isCoarsePointer
     ) {
@@ -2249,7 +2277,7 @@ export default function ChatView(props: ChatViewProps) {
     focusComposerStable,
     isCoarsePointer,
     isMobileViewport,
-    terminalUiState.terminalOpen,
+    terminalDrawerOpen,
   ]);
 
   // Promotion drops draftId while a send may still be dispatching, so key by thread.
@@ -2446,13 +2474,13 @@ export default function ChatView(props: ChatViewProps) {
     openChangesFromThreadPanelStable,
     openFileSurfaceStable,
     toggleRightPanelMaximizedStable,
-    toggleRightPanelStable,
+    toggleRightPanelStable: toggleStoredRightPanelStable,
     toggleThreadPanelStable,
     shortcuts: rightPanelShortcuts,
   } = useRightPanelActions({
     activeThreadRef,
     activeProject,
-    activeRightPanelSurface,
+    activeRightPanelSurface: visibleActiveRightPanelSurface,
     activePreviewState,
     deviceState,
     deviceStateLoaded,
@@ -2460,7 +2488,7 @@ export default function ChatView(props: ChatViewProps) {
     threadPanelPresentation,
     isServerThread,
     embedded,
-    isGitRepo,
+    isGitRepo: showCodingChrome && isGitRepo,
     browserAvailable,
     canOperatePreview,
     diffOpen,
@@ -2475,6 +2503,37 @@ export default function ChatView(props: ChatViewProps) {
     onDiffPanelOpen,
     closeRightPanelSurface,
   });
+  const toggleRightPanelStable = useStableCallback(() => {
+    if (!activeThreadRef) return;
+    if (rightPanelPresentation.hasOnlyHiddenSurfaces) {
+      setWorkModeEmptyLauncherThreadKey((current) =>
+        current === activeThreadKey ? null : activeThreadKey,
+      );
+      return;
+    }
+    toggleStoredRightPanelStable();
+  });
+  const closeRightPanelSheetStable = useStableCallback(() => {
+    if (rightPanelPresentation.hasOnlyHiddenSurfaces) {
+      setWorkModeEmptyLauncherThreadKey(null);
+      return;
+    }
+    closePreviewPanelStable();
+  });
+  const moveVisibleRightPanelSurfaceStable = useStableCallback(
+    (surfaceId: string, toIndex: number) => {
+      moveRightPanelSurfaceStable(
+        surfaceId,
+        showCodingChrome
+          ? toIndex
+          : mapVisibleRightPanelMoveIndex(
+              rightPanelState.surfaces,
+              visibleRightPanelSurfaces,
+              toIndex,
+            ),
+      );
+    },
+  );
   const pullRequestSurfaceAvailable = supportsPullRequests && pullRequestPanelTarget !== null;
   const {
     acknowledgeActiveThreadWoke,
@@ -2721,7 +2780,12 @@ export default function ChatView(props: ChatViewProps) {
       freshSessionPending && activePendingApproval === null
         ? [freshSessionBannerItem(() => disarmFreshSession(routeThreadKey), messages)]
         : [];
-    if (!localCheckoutBranchMismatch || !showBranchMismatchBanner || !activeBranchMismatchKey) {
+    if (
+      !showCodingChrome ||
+      !localCheckoutBranchMismatch ||
+      !showBranchMismatchBanner ||
+      !activeBranchMismatchKey
+    ) {
       return [
         ...feedbackBannerItems,
         ...fallbackItems,
@@ -2774,8 +2838,8 @@ export default function ChatView(props: ChatViewProps) {
   }
 
   const getShortcutContext = (eventTarget: EventTarget | null = document.activeElement) => ({
-    terminalFocus: getTerminalFocusOwner() !== null,
-    terminalOpen: Boolean(terminalUiState.terminalOpen),
+    terminalFocus: showCodingChrome && getTerminalFocusOwner() !== null,
+    terminalOpen: terminalDrawerOpen,
     previewFocus: isPreviewFocused(),
     previewOpen: previewPanelOpen,
     rightPanelOpen,
@@ -2820,6 +2884,7 @@ export default function ChatView(props: ChatViewProps) {
       ...terminalShortcuts,
       ...rightPanelShortcuts,
       ...threadLifecycleShortcuts,
+      "rightPanel.toggle": () => toggleRightPanelStable(),
       "thread.copyReference": ({ event }) => {
         if (!event.repeat) copyActiveThreadReference();
       },
@@ -2855,10 +2920,11 @@ export default function ChatView(props: ChatViewProps) {
       const script = activeProjectScripts.find((entry) => entry.id === scriptId);
       return script ? () => void runProjectScriptStable(script) : undefined;
     },
+    isCommandBlocked: showCodingChrome ? undefined : isHiddenChatShortcutInWorkMode,
   });
 
   const closeActiveRightPanelSurfaceStable = useStableCallback(() => {
-    if (activeRightPanelSurface) closeRightPanelSurface(activeRightPanelSurface);
+    if (visibleActiveRightPanelSurface) closeRightPanelSurface(visibleActiveRightPanelSurface);
   });
 
   // A focused desktop browser page forwards these chords as menu actions.
@@ -3317,7 +3383,7 @@ export default function ChatView(props: ChatViewProps) {
   const rightPanelContent = activeThreadRef ? (
     <RightPanelSurfaceContent
       surface={renderedRightPanelSurface}
-      activeSurfaceId={activeRightPanelSurface?.id ?? null}
+      activeSurfaceId={visibleActiveRightPanelSurface?.id ?? null}
       threadRef={activeThreadRef}
       environmentId={activeThread.environmentId}
       visible={rightPanelOpen}
@@ -3368,8 +3434,9 @@ export default function ChatView(props: ChatViewProps) {
     />
   ) : null;
   const panelToggleControlProps = {
-    terminalAvailable: activeProject !== null,
-    terminalOpen: terminalUiState.terminalOpen,
+    showTerminalControl: showCodingChrome,
+    terminalAvailable: showCodingChrome && activeProject !== null,
+    terminalOpen: terminalDrawerOpen,
     terminalShortcutLabel: shortcutLabelForCommand(keybindings, "terminal.toggle"),
     threadPanelOpen,
     threadPanelPresentation,
@@ -3532,7 +3599,7 @@ export default function ChatView(props: ChatViewProps) {
                   citationHistory={citationHistory}
                   onCiteAssistantText={citeAssistantTextStable}
                   onReplyToResponse={replyToResponseStable}
-                  {...(activeProject && !runsOutsideHostCheckout
+                  {...(activeProject && !runsOutsideHostCheckout && showCodingChrome
                     ? { onRunShellCommand: parentPanel?.runShellCommand ?? runShellCommandStable }
                     : {})}
                   isWorking={isWorking}
@@ -3563,7 +3630,9 @@ export default function ChatView(props: ChatViewProps) {
                   {...(draftId
                     ? { onWorktreeSetupWorkLocally: onWorktreeSetupWorkLocallyStable }
                     : {})}
-                  {...(onOpenWorktreeSetupTerminal ? { onOpenWorktreeSetupTerminal } : {})}
+                  {...(showCodingChrome && onOpenWorktreeSetupTerminal
+                    ? { onOpenWorktreeSetupTerminal }
+                    : {})}
                   isPreparingWorktree={isPreparingWorktree}
                   footer={timelineFooter}
                   listRef={legendListRef}
@@ -3582,15 +3651,20 @@ export default function ChatView(props: ChatViewProps) {
                   routeThreadKey={displayedTimelineKey}
                   displayThreadKey={displayedTimelineKey}
                   announceTurnStatus={!isProviderSubagent}
-                  onOpenToolDiff={parentPanel?.openToolDiff ?? onOpenToolDiffStable}
+                  {...(showCodingChrome
+                    ? { onOpenToolDiff: parentPanel?.openToolDiff ?? onOpenToolDiffStable }
+                    : {})}
                   // Side chat runs keep no checkpoints to diff, and a fork would promote the side chat.
                   {...(embedded
                     ? {}
-                    : { onOpenTurnDiff: onOpenTurnDiffStable, onForkFromRun: onForkFromRunStable })}
+                    : {
+                        ...(showCodingChrome ? { onOpenTurnDiff: onOpenTurnDiffStable } : {}),
+                        onForkFromRun: onForkFromRunStable,
+                      })}
                   onOpenThread={onOpenRelatedThreadStable}
                   parentThreadLink={parentThreadLink}
                   workflowOpening={workflowOpening}
-                  supportsConversationRollback={supportsConversationRollback}
+                  supportsConversationRollback={supportsConversationRollback && showCodingChrome}
                   threadStartCheckpointAvailable={threadStartCheckpointAvailable}
                   availableRevertTurnCounts={availableRevertTurnCounts}
                   onRevertToTurnCount={onRevertTimelineTurnStable}
@@ -3815,7 +3889,7 @@ export default function ChatView(props: ChatViewProps) {
                                 settings={settings}
                                 keybindings={keybindings}
                                 getShortcutContext={getShortcutContextStable}
-                                terminalOpen={Boolean(terminalUiState.terminalOpen)}
+                                terminalOpen={terminalDrawerOpen}
                                 gitCwd={gitCwd}
                                 pullRequestProjectId={
                                   supportsPullRequests ? (activeProject?.id ?? null) : null
@@ -3873,7 +3947,7 @@ export default function ChatView(props: ChatViewProps) {
                         </ComposerSurface.Host>
                         <div className="min-h-0">
                           <div
-                            data-terminal-open={terminalUiState.terminalOpen ? "true" : undefined}
+                            data-terminal-open={terminalDrawerOpen ? "true" : undefined}
                             className="relative z-0"
                           >
                             {showComposerContextStrip && (
@@ -3886,7 +3960,7 @@ export default function ChatView(props: ChatViewProps) {
                                   projectId={activeThread.projectId}
                                   worktreePath={activeThread.worktreePath}
                                   isServerThread={isServerThread}
-                                  showGitControls={isGitRepo}
+                                  showGitControls={showCodingChrome && isGitRepo}
                                   {...(routeKind === "draft" && draftId ? { draftId } : {})}
                                   onEnvModeChange={onEnvModeChangeStable}
                                   startFromOrigin={startFromOrigin}
@@ -3987,7 +4061,9 @@ export default function ChatView(props: ChatViewProps) {
                   {...(draftId ? { draftId } : {})}
                   composerDraftTarget={composerDraftTarget}
                   activeProjectName={activeProject?.title}
-                  activeProjectScripts={activeProject ? activeProjectScripts : undefined}
+                  activeProjectScripts={
+                    showCodingChrome && activeProject ? activeProjectScripts : undefined
+                  }
                   preferredScriptId={
                     activeProject ? (lastInvokedScriptByProjectId[activeProject.id] ?? null) : null
                   }
@@ -4003,7 +4079,8 @@ export default function ChatView(props: ChatViewProps) {
                   }
                   gitCwd={gitCwd}
                   workspaceMutationId={workspaceMutationId}
-                  isGitRepo={isGitRepo}
+                  isGitRepo={showCodingChrome && isGitRepo}
+                  showCodingChrome={showCodingChrome}
                   envLocked={envLocked}
                   availableEnvironments={logicalProjectEnvironments}
                   autoEnvironmentLabel={autoEnvironmentLabel}
@@ -4032,7 +4109,7 @@ export default function ChatView(props: ChatViewProps) {
                     ? { onCheckoutPullRequestRequest: openPullRequestDialogStable }
                     : {})}
                   onComposerFocusRequest={scheduleComposerFocusStable}
-                  {...(isServerThread && isGitRepo
+                  {...(showCodingChrome && isServerThread && isGitRepo
                     ? { onOpenChanges: openChangesFromThreadPanelStable }
                     : {})}
                   onRunProjectScript={runProjectScriptStable}
@@ -4063,6 +4140,7 @@ export default function ChatView(props: ChatViewProps) {
           <ChatTerminalDrawers
             activeThreadKey={activeThreadKey}
             activeTerminalOpen={Boolean(terminalUiState.terminalOpen)}
+            hidden={!showCodingChrome}
             composerHeight={composerReservedHeight}
             launchContext={activeTerminalLaunchContext ?? null}
             splitShortcutLabel={splitTerminalShortcutLabel ?? undefined}
@@ -4081,7 +4159,7 @@ export default function ChatView(props: ChatViewProps) {
           workspaceLayoutElement={workspaceLayoutElement}
           widthStorageKey={`t3code:preview-panel-width:${activeThreadKey}`}
           sheetAnimationDurationMs={panelAnimationsActive ? panelAnimationDurationMs : 0}
-          onCloseSheet={closePreviewPanelStable}
+          onCloseSheet={closeRightPanelSheetStable}
           open={rightPanelOpen}
           keybindings={keybindings}
           getShortcutContext={getShortcutContextStable}
@@ -4115,7 +4193,7 @@ export default function ChatView(props: ChatViewProps) {
           onCloseOtherSurfaces={closeOtherRightPanelSurfacesStable}
           onCloseSurfacesToRight={closeRightPanelSurfacesToRightStable}
           onCloseAllSurfaces={closeAllRightPanelSurfacesStable}
-          onMoveSurface={moveRightPanelSurfaceStable}
+          onMoveSurface={moveVisibleRightPanelSurfaceStable}
           onCopyFilePath={copyRightPanelFilePathStable}
           onAddBrowser={() => createBrowserSurface()}
           onAddBrowserInProfile={createBrowserSurfaceStable}
@@ -4127,8 +4205,10 @@ export default function ChatView(props: ChatViewProps) {
           onAddDevice={addDeviceSurfaceStable}
           onAddSideChat={sideChatsOffered ? openSideChatStable : undefined}
           browserAvailable={canOperatePreview && browserAvailable}
-          terminalAvailable={activeProject !== null && canOperateTerminal}
-          diffAvailable={isServerThread && isGitRepo}
+          showTerminal={showCodingChrome}
+          terminalAvailable={showCodingChrome && activeProject !== null && canOperateTerminal}
+          showDiff={showCodingChrome}
+          diffAvailable={showCodingChrome && isServerThread && isGitRepo}
           filesAvailable={activeProject !== null}
           pullRequestAvailable={pullRequestSurfaceAvailable}
           pullRequestsAvailable={linkedItemsSurfaceAvailable}
@@ -4140,12 +4220,14 @@ export default function ChatView(props: ChatViewProps) {
         </ChatRightPanel>
       ) : null}
 
-      <RevertConfirmHost
-        threadKey={routeThreadKey}
-        checkpoints={serverProjection?.checkpoints}
-        worktreePath={activeThread?.worktreePath ?? null}
-        onConfirm={onConfirmRevertStable}
-      />
+      {showCodingChrome ? (
+        <RevertConfirmHost
+          threadKey={routeThreadKey}
+          checkpoints={serverProjection?.checkpoints}
+          worktreePath={activeThread?.worktreePath ?? null}
+          onConfirm={onConfirmRevertStable}
+        />
+      ) : null}
       {embedded ? null : <LinkPullRequestDialogHost />}
       <ThreadVisitWatermark threadRef={routeThreadRef} />
       <ExpandedImageDialogHost threadKey={routeThreadKey} />

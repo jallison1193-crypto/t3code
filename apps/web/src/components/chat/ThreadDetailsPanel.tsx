@@ -68,6 +68,7 @@ interface ThreadDetailsPanelProps extends Pick<
   gitCwd: string | null;
   workspaceMutationId: string | null;
   isGitRepo: boolean;
+  showCodingChrome?: boolean;
   envLocked: boolean;
   availableEnvironments: readonly EnvironmentOption[];
   autoEnvironmentLabel?: string | undefined;
@@ -103,15 +104,17 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
   const activeThreadRef = { environmentId: props.environmentId, threadId: props.threadId };
   const project = useProject(scopeProjectRef(props.environmentId, props.projectId));
   const serverConfig = useServerConfigs().get(props.environmentId);
+  const showCodingChrome = props.showCodingChrome !== false;
   // A No project thread's folder sits inside the shared scratch root, so it must never get git.
   // Until the config and project load, a No project thread looks like any other folder.
   const offersGit =
+    showCodingChrome &&
     props.gitCwd !== null &&
     serverConfig !== undefined &&
     project !== null &&
     !isScratchProject(project, serverConfig.scratchWorkspaceRoot);
   const branchToolbarProps = {
-    showGitControls: props.isGitRepo,
+    showGitControls: showCodingChrome && props.isGitRepo,
     environmentId: props.environmentId,
     threadId: props.threadId,
     projectId: props.projectId,
@@ -141,9 +144,11 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
       threadRef={{ environmentId: props.environmentId, threadId: props.threadId }}
       anchor={props.anchor}
       handle={props.handle}
-      contentKey={THREAD_DETAILS_ITEMS.filter((item) => visible[item.id])
+      contentKey={`${showCodingChrome ? "code" : "work"}:${THREAD_DETAILS_ITEMS.filter(
+        (item) => visible[item.id],
+      )
         .map((item) => item.id)
-        .join(",")}
+        .join(",")}`}
       onContextMenu={(event) => {
         // Popups the card opens bubble here through React; they, fields, links, and selected text
         // keep their own menus.
@@ -192,6 +197,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                       <BranchToolbar
                         layout="panel"
                         panelSection="workspace"
+                        showWorkspaceChoices={showCodingChrome}
                         availableEnvironments={props.availableEnvironments}
                         {...(props.onEnvironmentChange
                           ? { onEnvironmentChange: props.onEnvironmentChange }

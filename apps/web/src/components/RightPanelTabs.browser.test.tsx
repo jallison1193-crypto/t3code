@@ -2,7 +2,7 @@ import "~/index.css";
 
 import { EnvironmentId } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { userEvent } from "vite-plus/test/browser";
+import { page, userEvent } from "vite-plus/test/browser";
 
 import { InputGroup, InputGroupAddon, InputGroupInput } from "~/components/ui/input-group";
 import type { RightPanelSurface } from "~/rightPanelStore";
@@ -290,5 +290,57 @@ describe("device tab rename", () => {
     await userEvent.fill(input, "日本語");
     await userEvent.keyboard("{Enter}");
     expect(onRenameDevice).toHaveBeenCalledExactlyOnceWith(DEVICE_SURFACE.id, "日本語");
+  });
+});
+
+describe("work mode coding surface visibility", () => {
+  it("omits Terminal and Diff from the empty launcher, add menu, and launcher shortcuts when hidden", async () => {
+    const onAddTerminal = vi.fn();
+    const onAddDiff = vi.fn();
+    const onAddFiles = vi.fn();
+    const baseProps = panel(BROWSER_SURFACE).props as RightPanelTabsProps;
+    await using screen = await render(
+      <RightPanelTabs
+        {...baseProps}
+        surfaces={[]}
+        activeSurfaceId={null}
+        showTerminal={false}
+        showDiff={false}
+        onAddTerminal={onAddTerminal}
+        onAddDiff={onAddDiff}
+        onAddFiles={onAddFiles}
+      >
+        {null}
+      </RightPanelTabs>,
+    );
+
+    await expect.element(screen.getByRole("button", { name: /^Files/ })).toBeVisible();
+    await expect.element(screen.getByRole("button", { name: /^Terminal/ })).not.toBeInTheDocument();
+    await expect.element(screen.getByRole("button", { name: /^Diff/ })).not.toBeInTheDocument();
+
+    await userEvent.keyboard("tdf");
+    expect(onAddTerminal).not.toHaveBeenCalled();
+    expect(onAddDiff).not.toHaveBeenCalled();
+    expect(onAddFiles).toHaveBeenCalledOnce();
+
+    await screen.rerender(
+      <RightPanelTabs
+        {...baseProps}
+        surfaces={[BROWSER_SURFACE]}
+        activeSurfaceId={BROWSER_SURFACE.id}
+        showTerminal={false}
+        showDiff={false}
+        onAddTerminal={onAddTerminal}
+        onAddDiff={onAddDiff}
+        onAddFiles={onAddFiles}
+      >
+        {null}
+      </RightPanelTabs>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Add panel surface" }));
+    await expect.element(page.getByRole("menuitem", { name: /Files/ })).toBeVisible();
+    await expect.element(page.getByRole("menuitem", { name: /Terminal/ })).not.toBeInTheDocument();
+    await expect.element(page.getByRole("menuitem", { name: /Diff/ })).not.toBeInTheDocument();
   });
 });

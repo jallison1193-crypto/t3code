@@ -23,6 +23,7 @@ import {
 interface ChatTerminalDrawersProps {
   readonly activeThreadKey: string | null;
   readonly activeTerminalOpen: boolean;
+  readonly hidden?: boolean;
   readonly composerHeight: number;
   readonly launchContext: PersistentTerminalLaunchContext | null;
   readonly splitShortcutLabel: string | undefined;
@@ -93,7 +94,7 @@ export function ChatTerminalDrawers(props: ChatTerminalDrawersProps) {
       key={mountedThreadKey}
       threadRef={mountedThreadRef}
       threadId={mountedThreadRef.threadId}
-      active={mountedThreadKey === activeThreadKey}
+      active={mountedThreadKey === activeThreadKey && props.hidden !== true}
       composerHeight={mountedThreadKey === activeThreadKey ? props.composerHeight : 0}
       launchContext={mountedThreadKey === activeThreadKey ? props.launchContext : null}
       splitShortcutLabel={props.splitShortcutLabel}

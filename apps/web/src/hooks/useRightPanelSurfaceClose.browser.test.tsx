@@ -156,3 +156,43 @@ it.each([
     ).toHaveLength(1);
   },
 );
+
+it("closes only visible surfaces when hidden coding tabs are omitted in Work mode", async () => {
+  fixture.allowed = new Set(["environment-a"]);
+  fixture.sessions = new Map([["environment-a/thread-a/term-1", "running process"]]);
+  fixture.failClose = false;
+  const confirmSpy = vi.fn(() => Promise.resolve(true));
+  fixture.confirm = confirmSpy;
+  useRightPanelStore.setState({ byThreadKey: {} });
+  useTerminalUiStateStore.setState({ terminalUiStateByThreadKey: {} });
+  const threadRef: ScopedThreadRef = {
+    environmentId: EnvironmentId.make("environment-a"),
+    threadId: ThreadId.make("thread-a"),
+  };
+  useRightPanelStore.getState().openTerminal(threadRef, "term-1");
+  useRightPanelStore.getState().open(threadRef, "files");
+  const filesSurface = selectThreadRightPanelState(
+    useRightPanelStore.getState().byThreadKey,
+    threadRef,
+  ).surfaces.find((surface) => surface.kind === "files")!;
+
+  function WorkModeHarness() {
+    const { closeAllSurfaces } = useRightPanelSurfaceClose({
+      threadRef,
+      terminalLabelsById: new Map(),
+      visibleSurfaces: [filesSurface],
+    });
+    return <button onClick={() => closeAllSurfaces()}>Close visible tabs</button>;
+  }
+
+  await using screen = await render(<WorkModeHarness />);
+  await screen.getByRole("button", { name: "Close visible tabs" }).click();
+
+  expect(confirmSpy).not.toHaveBeenCalled();
+  expect(fixture.sessions.get("environment-a/thread-a/term-1")).toBe("running process");
+  expect(
+    selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, threadRef).surfaces.map(
+      (surface) => surface.kind,
+    ),
+  ).toEqual(["terminal"]);
+});

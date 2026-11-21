@@ -245,3 +245,48 @@ it("runs right panel commands from inside a side chat pane, but not thread comma
 
   expect(ran).toEqual(["toggle", "close", "toggle"]);
 });
+
+function ChatWithBlockedCommands(props: {
+  ran: string[];
+  isCommandBlocked?: (command: KeybindingCommand) => boolean;
+}) {
+  useChatShortcuts({
+    enabled: true,
+    keybindings: [
+      ctrlAlt("d", "diff.toggle"),
+      ctrlAlt("j", "terminal.toggle"),
+      ctrlAlt("b", "rightPanel.toggle"),
+    ],
+    scriptKeybindings: [],
+    getShortcutContext: () => shortcutContext,
+    threadFindActive: false,
+    composerRef: { current: null },
+    branchToolbarRef: { current: null },
+    closeThreadFind: () => {},
+    commands: {
+      "diff.toggle": () => void props.ran.push("diff"),
+      "terminal.toggle": () => void props.ran.push("terminal"),
+      "rightPanel.toggle": () => void props.ran.push("panel"),
+    },
+    fallback: () => undefined,
+    isCommandBlocked: props.isCommandBlocked,
+  });
+  return <div tabIndex={0}>Workspace</div>;
+}
+
+it("skips blocked commands while keeping non-blocked commands active", async () => {
+  const ran: string[] = [];
+  const blockCoding = (command: KeybindingCommand) =>
+    command === "diff.toggle" || command === "terminal.toggle";
+  await using screen = await render(
+    <ChatWithBlockedCommands ran={ran} isCommandBlocked={blockCoding} />,
+    options,
+  );
+
+  await userEvent.keyboard("{Control>}{Alt>}DJB{/Alt}{/Control}");
+  expect(ran).toEqual(["panel"]);
+
+  await screen.rerender(<ChatWithBlockedCommands ran={ran} />);
+  await userEvent.keyboard("{Control>}{Alt>}DJ{/Alt}{/Control}");
+  expect(ran).toEqual(["panel", "diff", "terminal"]);
+});

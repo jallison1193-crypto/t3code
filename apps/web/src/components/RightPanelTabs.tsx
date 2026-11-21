@@ -159,7 +159,9 @@ export interface RightPanelTabsProps {
   /** Absent where side chats are not offered. */
   onAddSideChat?: (() => void) | undefined;
   browserAvailable: boolean;
+  showTerminal?: boolean;
   terminalAvailable: boolean;
+  showDiff?: boolean;
   diffAvailable: boolean;
   filesAvailable: boolean;
   pullRequestAvailable: boolean;
@@ -344,7 +346,9 @@ function RightPanelEmptyState(props: {
   /** Absent where side chats are not offered. */
   onAddSideChat?: (() => void) | undefined;
   browserAvailable: boolean;
+  showTerminal?: boolean;
   terminalAvailable: boolean;
+  showDiff?: boolean;
   diffAvailable: boolean;
   filesAvailable: boolean;
   pullRequestAvailable: boolean;
@@ -366,14 +370,18 @@ function RightPanelEmptyState(props: {
       disabledReason: messages(SURFACE_UNAVAILABLE_HINTS.browser),
       onClick: props.onAddBrowser,
     },
-    {
-      label: msg("Terminal"),
-      icon: TerminalSquare,
-      shortcut: "T",
-      available: props.terminalAvailable,
-      disabledReason: messages(SURFACE_UNAVAILABLE_HINTS.terminal),
-      onClick: props.onAddTerminal,
-    },
+    ...(props.showTerminal !== false
+      ? [
+          {
+            label: msg("Terminal"),
+            icon: TerminalSquare,
+            shortcut: "T",
+            available: props.terminalAvailable,
+            disabledReason: messages(SURFACE_UNAVAILABLE_HINTS.terminal),
+            onClick: props.onAddTerminal,
+          },
+        ]
+      : []),
     {
       label: msg("Files"),
       icon: Files,
@@ -382,14 +390,18 @@ function RightPanelEmptyState(props: {
       disabledReason: messages(SURFACE_UNAVAILABLE_HINTS.files),
       onClick: props.onAddFiles,
     },
-    {
-      label: msg("Diff"),
-      icon: FileDiff,
-      shortcut: "D",
-      available: props.diffAvailable,
-      disabledReason: messages(SURFACE_UNAVAILABLE_HINTS.diff),
-      onClick: props.onAddDiff,
-    },
+    ...(props.showDiff !== false
+      ? [
+          {
+            label: msg("Diff"),
+            icon: FileDiff,
+            shortcut: "D",
+            available: props.diffAvailable,
+            disabledReason: messages(SURFACE_UNAVAILABLE_HINTS.diff),
+            onClick: props.onAddDiff,
+          },
+        ]
+      : []),
     {
       label: msg("Pull request"),
       icon: PullRequestGlyph.pullRequest,
@@ -1200,6 +1212,8 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
     });
   };
 
+  const showTerminal = props.showTerminal !== false;
+  const showDiff = props.showDiff !== false;
   const addSurfaceActions = [
     {
       label: msg("Browser"),
@@ -1209,14 +1223,18 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       disabledReason: messages(SURFACE_DISABLED_REASONS.browser),
       onClick: props.onAddBrowser,
     },
-    {
-      label: msg("Terminal"),
-      icon: TerminalSquare,
-      shortcut: "T",
-      available: props.terminalAvailable,
-      disabledReason: messages(SURFACE_DISABLED_REASONS.terminal),
-      onClick: props.onAddTerminal,
-    },
+    ...(showTerminal
+      ? [
+          {
+            label: msg("Terminal"),
+            icon: TerminalSquare,
+            shortcut: "T",
+            available: props.terminalAvailable,
+            disabledReason: messages(SURFACE_DISABLED_REASONS.terminal),
+            onClick: props.onAddTerminal,
+          },
+        ]
+      : []),
     {
       label: msg("Files"),
       icon: Files,
@@ -1225,14 +1243,18 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       disabledReason: messages(SURFACE_DISABLED_REASONS.files),
       onClick: props.onAddFiles,
     },
-    {
-      label: msg("Diff"),
-      icon: FileDiff,
-      shortcut: "D",
-      available: props.diffAvailable,
-      disabledReason: messages(SURFACE_DISABLED_REASONS.diff),
-      onClick: props.onAddDiff,
-    },
+    ...(showDiff
+      ? [
+          {
+            label: msg("Diff"),
+            icon: FileDiff,
+            shortcut: "D",
+            available: props.diffAvailable,
+            disabledReason: messages(SURFACE_DISABLED_REASONS.diff),
+            onClick: props.onAddDiff,
+          },
+        ]
+      : []),
     {
       label: msg("Pull request"),
       icon: PullRequestGlyph.pullRequest,
@@ -1684,7 +1706,9 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddDevice={props.onAddDevice}
             onAddSideChat={props.onAddSideChat}
             browserAvailable={props.browserAvailable}
+            showTerminal={showTerminal}
             terminalAvailable={props.terminalAvailable}
+            showDiff={showDiff}
             diffAvailable={props.diffAvailable}
             filesAvailable={props.filesAvailable}
             pullRequestAvailable={props.pullRequestAvailable}

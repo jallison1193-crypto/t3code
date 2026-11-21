@@ -171,8 +171,14 @@ to 10 **Other threads** outside your project groups. Each device keeps its own c
 
 Threads are either **Code** threads (the default) or **Work** threads. Turn on
 **Settings → General → Work mode** (or run **Switch to Work mode** / **Switch to Code mode** in
-the command palette) so new threads start as Work threads instead of Code threads. Changing this
-setting only affects threads created afterward.
+the command palette) so new threads start as Work threads. Existing threads keep their tags.
+
+While Work mode is active, the chat hides coding controls (diffs, terminal drawers and terminal
+tabs, branch and worktree controls, and checkpoint restore or diff actions, along with their
+keyboard shortcuts) regardless of the sidebar filter or the opened thread's tag. Switching back
+to Code mode restores those controls with your running terminals, checkpoints, drafts, and saved
+panel tabs intact. Noncoding panels, including threads opened beside a coordinator, stay available
+in both modes.
 
 In the Projects sidebar, use the **All / Code / Work** filter below Search to show all threads,
 only Code threads, or only Work threads in **Projects**, **Pinned**, and **Other threads**.

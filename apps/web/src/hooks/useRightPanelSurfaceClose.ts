@@ -35,8 +35,9 @@ import { useStableCallback } from "./useStableCallback";
 export function useRightPanelSurfaceClose(input: {
   readonly threadRef: ScopedThreadRef | null;
   readonly terminalLabelsById: ReadonlyMap<string, string>;
+  readonly visibleSurfaces?: readonly RightPanelSurface[];
 }) {
-  const { threadRef, terminalLabelsById } = input;
+  const { threadRef, terminalLabelsById, visibleSurfaces } = input;
   const closePreview = useAtomCommand(previewEnvironment.close, "preview close");
   const deleteThread = useAtomCommand(threadEnvironment.delete, "side chat delete");
   const canOperatePreview = useEnvironmentScope(
@@ -46,9 +47,10 @@ export function useRightPanelSurfaceClose(input: {
   const previewState = useThreadPreviewState(threadRef);
   const terminalActions = useThreadTerminalActions(threadRef);
   const storeCloseTerminal = useTerminalUiStateStore((state) => state.closeTerminal);
-  const surfaces = useRightPanelStore(
+  const storedSurfaces = useRightPanelStore(
     (state) => selectThreadRightPanelState(state.byThreadKey, threadRef).surfaces,
   );
+  const surfaces = visibleSurfaces ?? storedSurfaces;
 
   const releaseSurfaceResources = (ref: ScopedThreadRef, surface: RightPanelSurface) => {
     // Without preview access, server state remains until an authorized close or restart.
@@ -121,10 +123,16 @@ export function useRightPanelSurfaceClose(input: {
       useRightPanelStore.getState().byThreadKey,
       threadRef,
     );
-    if (nextActiveSurface?.kind === "preview" && nextActiveSurface.resourceId) {
+    const nextActiveVisible =
+      nextActiveSurface !== null &&
+      (visibleSurfaces === undefined ||
+        visibleSurfaces.some((surface) => surface.id === nextActiveSurface.id));
+    if (nextActiveVisible && nextActiveSurface.kind === "preview" && nextActiveSurface.resourceId) {
       setActivePreviewTab(threadRef, nextActiveSurface.resourceId);
     }
-    focusPanelTerminalAfterClose(threadRef, activeId);
+    if (nextActiveVisible) {
+      focusPanelTerminalAfterClose(threadRef, activeId);
+    }
   };
   const labelFor = (terminalId: string) =>
     terminalLabelsById.get(terminalId) ?? getTerminalLabel(terminalId, m);

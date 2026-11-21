@@ -18,6 +18,8 @@ export interface ReopenOwnerState {
   ownerExists: boolean;
   /** False only for a side chat tab whose thread is gone from the shell. */
   sideChatExists: boolean;
+  /** False when the current app mode hides this surface kind. */
+  surfaceVisible?: boolean;
   shellLive: boolean;
   panel: ThreadRightPanelState;
 }
@@ -34,6 +36,7 @@ export function planNextReopen(
       drop.push(entry);
       continue;
     }
+    if (owner.surfaceVisible === false) continue;
     if (!owner.ownerExists || !owner.sideChatExists) {
       if (owner.shellLive) continue;
       break;
