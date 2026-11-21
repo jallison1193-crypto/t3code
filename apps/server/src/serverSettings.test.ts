@@ -15,6 +15,7 @@ import {
   SecretProviderId,
   ServerSettings,
   ServerSettingsPatch,
+  ThreadSectionId,
   UsageLimitSourceId,
   type SimlockDeviceHostConfig,
 } from "@t3tools/contracts";
@@ -139,6 +140,49 @@ function strictSecretReferencePaths(
 }
 
 it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings", (it) => {
+  it.effect("persists concurrent thread section edits alongside existing settings", () =>
+    Effect.gen(function* () {
+      const { settingsPath } = yield* ServerConfig.ServerConfig;
+      const fs = yield* FileSystem.FileSystem;
+      const service = yield* ServerSettingsModule.ServerSettingsService;
+      const inbox = ThreadSectionId.make("2ad737d0-09bd-4d13-8a0a-faa748efade1");
+      const reading = ThreadSectionId.make("27edb145-0c94-4f32-99f8-a3a00764bd96");
+      const readPersisted = fs
+        .readFileString(settingsPath)
+        .pipe(Effect.flatMap(decodeServerSettingsJson));
+      yield* fs.writeFileString(settingsPath, '{ "responseStreamingMode": "turn" }');
+
+      yield* Effect.all(
+        [
+          service.updateSettings({ threadSections: { [inbox]: { name: "Inbox" } } }),
+          service.updateSettings({ threadSections: { [reading]: { name: "Reading" } } }),
+          service.updateSettings({ defaultAutoPull: true }),
+        ],
+        { concurrency: "unbounded" },
+      );
+      const created = yield* readPersisted;
+      assert.deepEqual(created.threadSections, {
+        [inbox]: { name: "Inbox" },
+        [reading]: { name: "Reading" },
+      });
+      assert.equal(created.responseStreamingMode, "turn");
+      assert.isTrue(created.defaultAutoPull);
+
+      yield* service.updateSettings({ threadSections: { [inbox]: { name: "Triage" } } });
+      const renamed = yield* readPersisted;
+      assert.deepEqual(renamed.threadSections, {
+        [inbox]: { name: "Triage" },
+        [reading]: { name: "Reading" },
+      });
+
+      yield* service.updateSettings({ threadSections: { [inbox]: null } });
+      const removed = yield* readPersisted;
+      assert.deepEqual(removed.threadSections, { [reading]: { name: "Reading" } });
+      assert.equal(removed.responseStreamingMode, "turn");
+      assert.isTrue(removed.defaultAutoPull);
+    }).pipe(Effect.provide(layerServerSettings())),
+  );
+
   it.effect("serializes concurrent model preference edits without cancelling duplicate adds", () =>
     Effect.gen(function* () {
       const service = yield* ServerSettingsModule.ServerSettingsService;

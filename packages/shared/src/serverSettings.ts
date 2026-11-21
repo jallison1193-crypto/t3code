@@ -400,7 +400,8 @@ export function applyServerSettingsPatch(
     backgroundActivityProfile,
     backgroundActivity,
     worktreeCleanup: worktreeCleanupPatch,
-    // Merged per entry below; its `null` removals must not reach deepMerge.
+    // Per-entry patches use null for deletion, which deepMerge would retain.
+    threadSections: threadSectionsPatch,
     usageLimitSources: usageLimitSourcesPatch,
     textGenerators: textGeneratorsPatch,
     secretProviders: secretProvidersPatch,
@@ -611,6 +612,9 @@ export function applyServerSettingsPatch(
       : {}),
     ...(patch.defaultProjectScripts !== undefined
       ? { defaultProjectScripts: patch.defaultProjectScripts }
+      : {}),
+    ...(threadSectionsPatch !== undefined
+      ? { threadSections: mergeSettingsEntries(current.threadSections, threadSectionsPatch) }
       : {}),
     ...(usageLimitSourcesPatch !== undefined
       ? {

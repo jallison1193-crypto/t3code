@@ -55,6 +55,31 @@ it("drops theme defaults from a client's settings patch", () => {
   ).toEqual({ newWorktreesStartFromOrigin: false });
 });
 
+describe("thread sections", () => {
+  const id = "2ad737d0-09bd-4d13-8a0a-faa748efade1";
+
+  it("decodes named folders and preserves their IDs and deletion patches", () => {
+    expect(decodeServerSettings({}).threadSections).toEqual({});
+    const input = { threadSections: { [id]: { name: "  Inbox  " } } };
+    const expected = { threadSections: { [id]: { name: "Inbox" } } };
+    expect(encodeServerSettings(decodeServerSettings(input))).toMatchObject(expected);
+    expect(decodeClientServerSettingsPatch(input)).toEqual(expected);
+
+    const deletion = { threadSections: { [id]: null } };
+    expect(encodeServerSettingsPatch(decodeClientServerSettingsPatch(deletion))).toEqual(deletion);
+    expect(() => decodeServerSettings(deletion)).toThrow();
+  });
+
+  it.each(["", "  ", "Line\nBreak", "Line\rBreak", "Line\u0085Break", "Line\u2028Break"])(
+    "rejects an invalid folder name %j",
+    (name) => {
+      const input = { threadSections: { [id]: { name } } };
+      expect(() => decodeServerSettings(input)).toThrow();
+      expect(() => decodeClientServerSettingsPatch(input)).toThrow();
+    },
+  );
+});
+
 describe("storage cleanup settings", () => {
   it("keeps cleanup disabled for existing installations", () => {
     expect(decodeServerSettings({}).worktreeCleanup).toBeNull();

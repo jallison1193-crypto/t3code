@@ -1403,6 +1403,15 @@ export const CloudSpeechCredentials = Schema.Struct({
   openrouter: CloudSpeechCredential,
 });
 
+export const ThreadSectionId = Schema.String.check(Schema.isUUID()).pipe(
+  Schema.brand("ThreadSectionId"),
+);
+export type ThreadSectionId = typeof ThreadSectionId.Type;
+
+const ThreadSection = Schema.Struct({
+  name: TrimmedNonEmptyString.check(Schema.isPattern(/^[^\r\n\v\f\u0085\u2028\u2029]+$/u)),
+});
+
 export const ServerSettings = Schema.Struct({
   // Null means unmigrated; empty is authoritative and must not resurrect cleared preferences.
   favorites: Schema.NullOr(ModelFavorites).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
@@ -1517,6 +1526,9 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
   hideTaggedThreads: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  threadSections: Schema.Record(ThreadSectionId, ThreadSection).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
   /** Beta: guest links for this machine's threads. Off refuses new links and pauses existing ones. */
   guestSharingEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   /**
@@ -1960,6 +1972,7 @@ export const ServerSettingsPatch = Schema.Struct({
   snoozePresets: Schema.optionalKey(SnoozePresetSettings),
   hiddenThreadTags: Schema.optionalKey(Schema.Array(Schema.String)),
   hideTaggedThreads: Schema.optionalKey(Schema.Boolean),
+  threadSections: Schema.optionalKey(Schema.Record(ThreadSectionId, Schema.NullOr(ThreadSection))),
   guestSharingEnabled: Schema.optionalKey(Schema.Boolean),
   linkedEnvironmentsEnabled: Schema.optionalKey(Schema.Boolean),
   promptSuggestionsEnabled: Schema.optionalKey(Schema.Boolean),

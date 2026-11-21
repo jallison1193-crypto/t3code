@@ -13,6 +13,7 @@ import {
   IssueTrackerKind,
   SecretProviderId,
   ThreadId,
+  ThreadSectionId,
   TurnItemId,
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
@@ -409,6 +410,9 @@ describe("settings mutation authorization", () => {
     operation: "remove" as const,
     instanceId: ProviderInstanceId.make("codex_work"),
   };
+  const threadSections = {
+    [ThreadSectionId.make("2ad737d0-09bd-4d13-8a0a-faa748efade1")]: { name: "Inbox" },
+  };
 
   it.effect("allows provider-only mutations while denying mixed settings without their grant", () =>
     Effect.gen(function* () {
@@ -460,6 +464,11 @@ describe("settings mutation authorization", () => {
         yield* client[WS_METHODS.serverUpdateSettings]({
           patch: { secretProviders: { [SecretProviderId.make("personal")]: null } },
         }).pipe(Effect.flip),
+      ).toMatchObject({ requiredPermission: AuthSettingsWriteScope });
+      expect(
+        yield* client[WS_METHODS.serverUpdateSettings]({ patch: { threadSections } }).pipe(
+          Effect.flip,
+        ),
       ).toMatchObject({ requiredPermission: AuthSettingsWriteScope });
       expect(handled).toBe(2);
     }),
@@ -521,6 +530,8 @@ describe("settings mutation authorization", () => {
           }).pipe(Effect.flip),
         ).toMatchObject({ requiredPermission: AuthProvidersManageScope });
         expect(handled).toBe(false);
+        yield* client[WS_METHODS.serverUpdateSettings]({ patch: { threadSections } });
+        expect(handled).toBe(true);
       }),
   );
 
