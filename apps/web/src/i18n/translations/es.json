@@ -12499,5 +12499,25 @@
   "03c2e80322a2b924": "Servidor de origen",
   "36b5b57c2ddb3857": "Nombre de la carpeta",
   "cd5293bd9bafbae8": "Carpeta de hilos",
-  "f4e722cd8ee3183c": "Crea primero una carpeta de hilos en la barra lateral de proyectos."
+  "f4e722cd8ee3183c": "Crea primero una carpeta de hilos en la barra lateral de proyectos.",
+  "12d912b480a0361a": "Abrir el hilo de origen",
+  "623db3534f001ded": "Filtro de modo de la biblioteca",
+  "b725c61c6d7808ab": "Cargando vista previa…",
+  "5109f5df9e77e555": [
+    "La biblioteca no está disponible en ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "."
+  ],
+  "088c6d542f65f2a5": "Cargando páginas HTML…",
+  "65785328053c7fef": "Sigue buscando para ver más resultados.",
+  "235c744109ad99ca": "No se encontraron páginas HTML.",
+  "cf64d91ca7ec8e06": "No se encontraron páginas HTML en los entornos disponibles.",
+  "c00c7b62908473c5": "Biblioteca de HTML",
+  "1d829f40405b2c18": "Biblioteca",
+  "e0aa7a66b051d7cb": "Biblioteca de HTML",
+  "12f0890f800baa7a": "Página no disponible"
 }

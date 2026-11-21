@@ -12504,5 +12504,25 @@
   "03c2e80322a2b924": "Serveur d’origine",
   "36b5b57c2ddb3857": "Nom du dossier",
   "cd5293bd9bafbae8": "Dossier de fils",
-  "f4e722cd8ee3183c": "Créez d’abord un dossier de fils dans la barre latérale des projets."
+  "f4e722cd8ee3183c": "Créez d’abord un dossier de fils dans la barre latérale des projets.",
+  "12d912b480a0361a": "Ouvrir le fil d’origine",
+  "623db3534f001ded": "Filtre de mode de la bibliothèque",
+  "b725c61c6d7808ab": "Chargement de l’aperçu…",
+  "5109f5df9e77e555": [
+    "Bibliothèque indisponible sur ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "."
+  ],
+  "088c6d542f65f2a5": "Chargement des pages HTML…",
+  "65785328053c7fef": "Poursuivez la recherche pour voir plus de résultats.",
+  "235c744109ad99ca": "Aucune page HTML trouvée.",
+  "cf64d91ca7ec8e06": "Aucune page HTML trouvée dans les environnements disponibles.",
+  "c00c7b62908473c5": "Bibliothèque HTML",
+  "1d829f40405b2c18": "Bibliothèque",
+  "e0aa7a66b051d7cb": "Bibliothèque HTML",
+  "12f0890f800baa7a": "Page indisponible"
 }

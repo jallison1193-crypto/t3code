@@ -21,6 +21,7 @@ import { Route as ChatUsageRouteImport } from './routes/_chat.usage'
 import { Route as ChatSettingsRouteImport } from './routes/_chat.settings'
 import { Route as ChatPullRequestsRouteImport } from './routes/_chat.pull-requests'
 import { Route as ChatNewRouteImport } from './routes/_chat.new'
+import { Route as ChatLibraryRouteImport } from './routes/_chat.library'
 import { Route as ChatIssuesRouteImport } from './routes/_chat.issues'
 import { Route as ThreadsEnvironmentIdThreadIdRouteImport } from './routes/threads.$environmentId.$threadId'
 import { Route as ChatSettingsWorktreesRouteImport } from './routes/_chat.settings.worktrees'
@@ -54,6 +55,7 @@ import { Route as ChatProjectsProjectKeyRouteImport } from './routes/_chat.proje
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
 import { Route as ChatProjectsProjectKeyThreadsRouteImport } from './routes/_chat.projects.$projectKey_.threads'
+import { Route as ChatProjectsProjectKeyLibraryRouteImport } from './routes/_chat.projects.$projectKey_.library'
 import { Route as ChatLinkedViaEnvironmentIdLinkedEnvironmentIdLinkedThreadIdRouteImport } from './routes/_chat.linked.$viaEnvironmentId.$linkedEnvironmentId.$linkedThreadId'
 
 const WelcomeRoute = WelcomeRouteImport.update({
@@ -113,6 +115,11 @@ const ChatPullRequestsRoute = ChatPullRequestsRouteImport.update({
 const ChatNewRoute = ChatNewRouteImport.update({
   id: '/new',
   path: '/new',
+  getParentRoute: () => ChatRoute,
+} as any)
+const ChatLibraryRoute = ChatLibraryRouteImport.update({
+  id: '/library',
+  path: '/library',
   getParentRoute: () => ChatRoute,
 } as any)
 const ChatIssuesRoute = ChatIssuesRouteImport.update({
@@ -287,6 +294,12 @@ const ChatProjectsProjectKeyThreadsRoute =
     path: '/projects/$projectKey/threads',
     getParentRoute: () => ChatRoute,
   } as any)
+const ChatProjectsProjectKeyLibraryRoute =
+  ChatProjectsProjectKeyLibraryRouteImport.update({
+    id: '/projects/$projectKey_/library',
+    path: '/projects/$projectKey/library',
+    getParentRoute: () => ChatRoute,
+  } as any)
 const ChatLinkedViaEnvironmentIdLinkedEnvironmentIdLinkedThreadIdRoute =
   ChatLinkedViaEnvironmentIdLinkedEnvironmentIdLinkedThreadIdRouteImport.update(
     {
@@ -305,6 +318,7 @@ export interface FileRoutesByFullPath {
   '/pair': typeof PairRoute
   '/welcome': typeof WelcomeRoute
   '/issues': typeof ChatIssuesRoute
+  '/library': typeof ChatLibraryRoute
   '/new': typeof ChatNewRoute
   '/pull-requests': typeof ChatPullRequestsRoute
   '/settings': typeof ChatSettingsRouteWithChildren
@@ -340,6 +354,7 @@ export interface FileRoutesByFullPath {
   '/settings/voice': typeof ChatSettingsVoiceRoute
   '/settings/worktrees': typeof ChatSettingsWorktreesRoute
   '/threads/$environmentId/$threadId': typeof ThreadsEnvironmentIdThreadIdRoute
+  '/projects/$projectKey/library': typeof ChatProjectsProjectKeyLibraryRoute
   '/projects/$projectKey/threads': typeof ChatProjectsProjectKeyThreadsRoute
   '/linked/$viaEnvironmentId/$linkedEnvironmentId/$linkedThreadId': typeof ChatLinkedViaEnvironmentIdLinkedEnvironmentIdLinkedThreadIdRoute
 }
@@ -351,6 +366,7 @@ export interface FileRoutesByTo {
   '/pair': typeof PairRoute
   '/welcome': typeof WelcomeRoute
   '/issues': typeof ChatIssuesRoute
+  '/library': typeof ChatLibraryRoute
   '/new': typeof ChatNewRoute
   '/pull-requests': typeof ChatPullRequestsRoute
   '/settings': typeof ChatSettingsRouteWithChildren
@@ -387,6 +403,7 @@ export interface FileRoutesByTo {
   '/settings/voice': typeof ChatSettingsVoiceRoute
   '/settings/worktrees': typeof ChatSettingsWorktreesRoute
   '/threads/$environmentId/$threadId': typeof ThreadsEnvironmentIdThreadIdRoute
+  '/projects/$projectKey/library': typeof ChatProjectsProjectKeyLibraryRoute
   '/projects/$projectKey/threads': typeof ChatProjectsProjectKeyThreadsRoute
   '/linked/$viaEnvironmentId/$linkedEnvironmentId/$linkedThreadId': typeof ChatLinkedViaEnvironmentIdLinkedEnvironmentIdLinkedThreadIdRoute
 }
@@ -400,6 +417,7 @@ export interface FileRoutesById {
   '/pair': typeof PairRoute
   '/welcome': typeof WelcomeRoute
   '/_chat/issues': typeof ChatIssuesRoute
+  '/_chat/library': typeof ChatLibraryRoute
   '/_chat/new': typeof ChatNewRoute
   '/_chat/pull-requests': typeof ChatPullRequestsRoute
   '/_chat/settings': typeof ChatSettingsRouteWithChildren
@@ -436,6 +454,7 @@ export interface FileRoutesById {
   '/_chat/settings/voice': typeof ChatSettingsVoiceRoute
   '/_chat/settings/worktrees': typeof ChatSettingsWorktreesRoute
   '/threads/$environmentId/$threadId': typeof ThreadsEnvironmentIdThreadIdRoute
+  '/_chat/projects/$projectKey_/library': typeof ChatProjectsProjectKeyLibraryRoute
   '/_chat/projects/$projectKey_/threads': typeof ChatProjectsProjectKeyThreadsRoute
   '/_chat/linked/$viaEnvironmentId/$linkedEnvironmentId/$linkedThreadId': typeof ChatLinkedViaEnvironmentIdLinkedEnvironmentIdLinkedThreadIdRoute
 }
@@ -450,6 +469,7 @@ export interface FileRouteTypes {
     | '/pair'
     | '/welcome'
     | '/issues'
+    | '/library'
     | '/new'
     | '/pull-requests'
     | '/settings'
@@ -485,6 +505,7 @@ export interface FileRouteTypes {
     | '/settings/voice'
     | '/settings/worktrees'
     | '/threads/$environmentId/$threadId'
+    | '/projects/$projectKey/library'
     | '/projects/$projectKey/threads'
     | '/linked/$viaEnvironmentId/$linkedEnvironmentId/$linkedThreadId'
   fileRoutesByTo: FileRoutesByTo
@@ -496,6 +517,7 @@ export interface FileRouteTypes {
     | '/pair'
     | '/welcome'
     | '/issues'
+    | '/library'
     | '/new'
     | '/pull-requests'
     | '/settings'
@@ -532,6 +554,7 @@ export interface FileRouteTypes {
     | '/settings/voice'
     | '/settings/worktrees'
     | '/threads/$environmentId/$threadId'
+    | '/projects/$projectKey/library'
     | '/projects/$projectKey/threads'
     | '/linked/$viaEnvironmentId/$linkedEnvironmentId/$linkedThreadId'
   id:
@@ -544,6 +567,7 @@ export interface FileRouteTypes {
     | '/pair'
     | '/welcome'
     | '/_chat/issues'
+    | '/_chat/library'
     | '/_chat/new'
     | '/_chat/pull-requests'
     | '/_chat/settings'
@@ -580,6 +604,7 @@ export interface FileRouteTypes {
     | '/_chat/settings/voice'
     | '/_chat/settings/worktrees'
     | '/threads/$environmentId/$threadId'
+    | '/_chat/projects/$projectKey_/library'
     | '/_chat/projects/$projectKey_/threads'
     | '/_chat/linked/$viaEnvironmentId/$linkedEnvironmentId/$linkedThreadId'
   fileRoutesById: FileRoutesById
@@ -679,6 +704,13 @@ declare module '@tanstack/react-router' {
       path: '/new'
       fullPath: '/new'
       preLoaderRoute: typeof ChatNewRouteImport
+      parentRoute: typeof ChatRoute
+    }
+    '/_chat/library': {
+      id: '/_chat/library'
+      path: '/library'
+      fullPath: '/library'
+      preLoaderRoute: typeof ChatLibraryRouteImport
       parentRoute: typeof ChatRoute
     }
     '/_chat/issues': {
@@ -912,6 +944,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatProjectsProjectKeyThreadsRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/_chat/projects/$projectKey_/library': {
+      id: '/_chat/projects/$projectKey_/library'
+      path: '/projects/$projectKey/library'
+      fullPath: '/projects/$projectKey/library'
+      preLoaderRoute: typeof ChatProjectsProjectKeyLibraryRouteImport
+      parentRoute: typeof ChatRoute
+    }
     '/_chat/linked/$viaEnvironmentId/$linkedEnvironmentId/$linkedThreadId': {
       id: '/_chat/linked/$viaEnvironmentId/$linkedEnvironmentId/$linkedThreadId'
       path: '/linked/$viaEnvironmentId/$linkedEnvironmentId/$linkedThreadId'
@@ -988,6 +1027,7 @@ const ChatSettingsRouteWithChildren = ChatSettingsRoute._addFileChildren(
 
 interface ChatRouteChildren {
   ChatIssuesRoute: typeof ChatIssuesRoute
+  ChatLibraryRoute: typeof ChatLibraryRoute
   ChatNewRoute: typeof ChatNewRoute
   ChatPullRequestsRoute: typeof ChatPullRequestsRoute
   ChatSettingsRoute: typeof ChatSettingsRouteWithChildren
@@ -996,12 +1036,14 @@ interface ChatRouteChildren {
   ChatEnvironmentIdThreadIdRoute: typeof ChatEnvironmentIdThreadIdRoute
   ChatDraftDraftIdRoute: typeof ChatDraftDraftIdRoute
   ChatProjectsProjectKeyRoute: typeof ChatProjectsProjectKeyRoute
+  ChatProjectsProjectKeyLibraryRoute: typeof ChatProjectsProjectKeyLibraryRoute
   ChatProjectsProjectKeyThreadsRoute: typeof ChatProjectsProjectKeyThreadsRoute
   ChatLinkedViaEnvironmentIdLinkedEnvironmentIdLinkedThreadIdRoute: typeof ChatLinkedViaEnvironmentIdLinkedEnvironmentIdLinkedThreadIdRoute
 }
 
 const ChatRouteChildren: ChatRouteChildren = {
   ChatIssuesRoute: ChatIssuesRoute,
+  ChatLibraryRoute: ChatLibraryRoute,
   ChatNewRoute: ChatNewRoute,
   ChatPullRequestsRoute: ChatPullRequestsRoute,
   ChatSettingsRoute: ChatSettingsRouteWithChildren,
@@ -1010,6 +1052,7 @@ const ChatRouteChildren: ChatRouteChildren = {
   ChatEnvironmentIdThreadIdRoute: ChatEnvironmentIdThreadIdRoute,
   ChatDraftDraftIdRoute: ChatDraftDraftIdRoute,
   ChatProjectsProjectKeyRoute: ChatProjectsProjectKeyRoute,
+  ChatProjectsProjectKeyLibraryRoute: ChatProjectsProjectKeyLibraryRoute,
   ChatProjectsProjectKeyThreadsRoute: ChatProjectsProjectKeyThreadsRoute,
   ChatLinkedViaEnvironmentIdLinkedEnvironmentIdLinkedThreadIdRoute:
     ChatLinkedViaEnvironmentIdLinkedEnvironmentIdLinkedThreadIdRoute,

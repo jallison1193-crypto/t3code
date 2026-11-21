@@ -12511,5 +12511,25 @@
   "03c2e80322a2b924": "Hemserver",
   "36b5b57c2ddb3857": "Mappnamn",
   "cd5293bd9bafbae8": "Trådmapp",
-  "f4e722cd8ee3183c": "Skapa först en trådmapp i sidofältet Projekt."
+  "f4e722cd8ee3183c": "Skapa först en trådmapp i sidofältet Projekt.",
+  "12d912b480a0361a": "Öppna källtråden",
+  "623db3534f001ded": "Lägesfilter för biblioteket",
+  "b725c61c6d7808ab": "Läser in förhandsvisning…",
+  "5109f5df9e77e555": [
+    "Biblioteket är inte tillgängligt på ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "."
+  ],
+  "088c6d542f65f2a5": "Läser in HTML-sidor…",
+  "65785328053c7fef": "Fortsätt söka för att se fler resultat.",
+  "235c744109ad99ca": "Inga HTML-sidor hittades.",
+  "cf64d91ca7ec8e06": "Inga HTML-sidor hittades i de tillgängliga miljöerna.",
+  "c00c7b62908473c5": "HTML-bibliotek",
+  "1d829f40405b2c18": "Bibliotek",
+  "e0aa7a66b051d7cb": "HTML-bibliotek",
+  "12f0890f800baa7a": "Sidan är inte tillgänglig"
 }

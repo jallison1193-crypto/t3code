@@ -12504,5 +12504,25 @@
   "03c2e80322a2b924": "Heimatserver",
   "36b5b57c2ddb3857": "Ordnername",
   "cd5293bd9bafbae8": "Thread-Ordner",
-  "f4e722cd8ee3183c": "Erstelle zuerst einen Thread-Ordner in der Projekte-Seitenleiste."
+  "f4e722cd8ee3183c": "Erstelle zuerst einen Thread-Ordner in der Projekte-Seitenleiste.",
+  "12d912b480a0361a": "Ursprünglichen Thread öffnen",
+  "623db3534f001ded": "Modusfilter der Bibliothek",
+  "b725c61c6d7808ab": "Vorschau wird geladen…",
+  "5109f5df9e77e555": [
+    "Bibliothek auf ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " nicht verfügbar."
+  ],
+  "088c6d542f65f2a5": "HTML-Seiten werden geladen…",
+  "65785328053c7fef": "Weiter suchen, um mehr Ergebnisse zu sehen.",
+  "235c744109ad99ca": "Keine HTML-Seiten gefunden.",
+  "cf64d91ca7ec8e06": "In den verfügbaren Umgebungen wurden keine HTML-Seiten gefunden.",
+  "c00c7b62908473c5": "HTML-Bibliothek",
+  "1d829f40405b2c18": "Bibliothek",
+  "e0aa7a66b051d7cb": "HTML-Bibliothek",
+  "12f0890f800baa7a": "Seite nicht verfügbar"
 }

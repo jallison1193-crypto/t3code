@@ -12503,5 +12503,25 @@
   "03c2e80322a2b924": "Servidor de origem",
   "36b5b57c2ddb3857": "Nome da pasta",
   "cd5293bd9bafbae8": "Pasta de conversas",
-  "f4e722cd8ee3183c": "Primeiro crie uma pasta de conversas na barra lateral de projetos."
+  "f4e722cd8ee3183c": "Primeiro crie uma pasta de conversas na barra lateral de projetos.",
+  "12d912b480a0361a": "Abrir a conversa de origem",
+  "623db3534f001ded": "Filtro de modo da biblioteca",
+  "b725c61c6d7808ab": "Carregando prévia…",
+  "5109f5df9e77e555": [
+    "Biblioteca indisponível em ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "."
+  ],
+  "088c6d542f65f2a5": "Carregando páginas HTML…",
+  "65785328053c7fef": "Continue a busca para ver mais resultados.",
+  "235c744109ad99ca": "Nenhuma página HTML encontrada.",
+  "cf64d91ca7ec8e06": "Nenhuma página HTML encontrada nos ambientes disponíveis.",
+  "c00c7b62908473c5": "Biblioteca de HTML",
+  "1d829f40405b2c18": "Biblioteca",
+  "e0aa7a66b051d7cb": "Biblioteca de HTML",
+  "12f0890f800baa7a": "Página indisponível"
 }

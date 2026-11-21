@@ -12513,5 +12513,26 @@
   "03c2e80322a2b924": "Home server",
   "36b5b57c2ddb3857": "Folder name",
   "cd5293bd9bafbae8": "Thread folder",
-  "f4e722cd8ee3183c": "Create a thread folder in the Projects sidebar first."
+  "f4e722cd8ee3183c": "Create a thread folder in the Projects sidebar first.",
+  "12d912b480a0361a": "Open source thread",
+  "623db3534f001ded": "Library mode filter",
+  "b725c61c6d7808ab": "Loading preview…",
+  "5109f5df9e77e555": [
+    "Library unavailable on",
+    " ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "."
+  ],
+  "088c6d542f65f2a5": "Loading HTML pages…",
+  "65785328053c7fef": "Keep searching to see more results.",
+  "235c744109ad99ca": "No HTML pages found.",
+  "cf64d91ca7ec8e06": "No HTML pages found in available environments.",
+  "c00c7b62908473c5": "HTML Library",
+  "1d829f40405b2c18": "Library",
+  "e0aa7a66b051d7cb": "HTML Library",
+  "12f0890f800baa7a": "Page unavailable"
 }
