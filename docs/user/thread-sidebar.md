@@ -180,6 +180,11 @@ to Code mode restores those controls with your running terminals, checkpoints, d
 panel tabs intact. Noncoding panels, including threads opened beside a coordinator, stay available
 in both modes.
 
+Opening the app home in Work mode switches to the Projects sidebar and opens your most recent
+active project's home (including non-Git folders), leaving the sidebar's **All / Code / Work**
+filter unchanged. Direct links to a thread, project, or Settings stay where you opened them, and
+switching between Work mode and Code mode keeps your current thread and draft open.
+
 In the Projects sidebar, use the **All / Code / Work** filter below Search to show all threads,
 only Code threads, or only Work threads in **Projects**, **Pinned**, and **Other threads**.
 **Needs you** always shows every waiting thread regardless of the filter.

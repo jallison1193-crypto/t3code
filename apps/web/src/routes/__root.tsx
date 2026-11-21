@@ -15,6 +15,7 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { APP_DISPLAY_NAME, APP_VERSION } from "../branding";
+import { shouldNavigateBootstrapThreadOnIndex } from "../chatIndexLanding.logic";
 import { AppSidebarLayout } from "../components/AppSidebarLayout";
 import { CommandPalette } from "../components/CommandPalette";
 import { CustomSnoozeDialogHost } from "../components/CustomSnoozeDialog";
@@ -355,6 +356,7 @@ function EventRouter({
 }) {
   const navigate = useNavigate();
   const pathname = useLocation({ select: (loc) => loc.pathname });
+  const appMode = useClientSettings((settings) => settings.appMode);
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const serverConfig = useAtomValue(primaryServerConfigAtom);
   const serverWelcome = useAtomValue(primaryServerWelcomeAtom);
@@ -385,6 +387,10 @@ function EventRouter({
       useUiStateStore.getState().setProjectExpanded(bootstrapProjectKey, true);
 
       if (readPathname() !== "/") {
+        return;
+      }
+      if (!shouldNavigateBootstrapThreadOnIndex(appMode)) {
+        handledBootstrapThreadIdRef.current = payload.bootstrapThreadId;
         return;
       }
       if (skipInitialBootstrapNavigationRef.current) {

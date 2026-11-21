@@ -1,13 +1,13 @@
 import { workspaceAreaProps } from "../lib/workspaceFocus";
 import { RefreshIcon } from "~/components/ui/refresh-icon";
-import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { selectProjectGroupingSettings } from "@t3tools/client-runtime/state/project-grouping";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { T, useGT } from "gt-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
+import { resolveChatIndexLandingTarget } from "../chatIndexLanding.logic";
 import { isElectron } from "../env";
 import { NoProjectsHero } from "../components/NoProjectsHero";
-import { sortScopedProjectsForSidebar } from "../components/Sidebar.logic";
 import { Button } from "../components/ui/button";
 import { HostedEmptyState } from "../components/HostedEmptyState";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../components/ui/empty";
@@ -15,15 +15,25 @@ import { SidebarInset } from "../components/ui/sidebar";
 import { WorkspacePageHeader } from "../components/WorkspacePageHeader";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import {
+  getClientSettings,
+  persistClientSettingsPatch,
+  useClientSettings,
+  useClientSettingsHydrated,
+} from "../hooks/useSettings";
+import {
   readProject,
   useAllEnvironmentShellsBootstrapped,
   useProjects,
+  useServerConfigs,
   useVisibleThreadShells,
 } from "../state/entities";
-import { useEnvironments } from "../state/environments";
+import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 
-function ChatIndexRouteView() {
-  const { authGateState } = Route.useRouteContext();
+export function ChatIndexLandingView({
+  authGateState,
+}: {
+  readonly authGateState: { readonly status: string };
+}) {
   const { environments, isReady } = useEnvironments();
 
   if (authGateState.status === "hosted-static") {
@@ -34,37 +44,92 @@ function ChatIndexRouteView() {
   return <IndexDraftLanding />;
 }
 
+function ChatIndexRouteView() {
+  const { authGateState } = Route.useRouteContext();
+  return <ChatIndexLandingView authGateState={authGateState} />;
+}
+
 function IndexDraftLanding() {
+  const clientSettingsHydrated = useClientSettingsHydrated();
+  const appMode = useClientSettings((settings) => settings.appMode);
+  const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
   const projects = useProjects();
   const threads = useVisibleThreadShells();
+  const serverConfigs = useServerConfigs();
   const bootstrapped = useAllEnvironmentShellsBootstrapped();
   const handleNewThread = useNewThreadHandler();
   const router = useRouter();
   // Read at effect time; this page can stay mounted while the router is already navigating away.
   const isStillOnIndex = useEffectEvent(() => router.state.location.pathname === "/");
   const startedAttemptRef = useRef<number | null>(null);
+  const appliedWorkSidebarRef = useRef(false);
+  const navigatedWorkProjectKeyRef = useRef<string | null>(null);
   const [startState, setStartState] = useState({ failed: false, retryRequest: 0 });
 
-  const mostRecentProject =
-    sortScopedProjectsForSidebar(
-      projects.filter((project) => project.archivedAt == null),
-      threads,
-      "updated_at",
-    )[0] ?? null;
+  const landingTarget = clientSettingsHydrated
+    ? resolveChatIndexLandingTarget({
+        appMode,
+        projects,
+        threads,
+        projectGroupingSettings,
+        primaryEnvironmentId,
+        getScratchWorkspaceRoot: (environmentId) =>
+          serverConfigs.get(environmentId)?.scratchWorkspaceRoot,
+      })
+    : null;
   const attempt = startState.retryRequest;
 
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- starts a draft thread in the most recent project and navigates to it while still on the index
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- opens Work project home (with Projects sidebar) or starts a Code draft thread while still on the index
   useEffect(() => {
-    // Starting a draft after the user has left would replace the page they picked.
-    if (mostRecentProject === null || startedAttemptRef.current === attempt || !isStillOnIndex()) {
+    if (!clientSettingsHydrated || landingTarget === null || !isStillOnIndex()) {
       return;
     }
-    const projectRef = scopeProjectRef(mostRecentProject.environmentId, mostRecentProject.id);
-    if (readProject(projectRef) === null) {
+
+    if (appMode === "work") {
+      if (!appliedWorkSidebarRef.current) {
+        appliedWorkSidebarRef.current = true;
+        if (getClientSettings().sidebarLayout !== "projects") {
+          void persistClientSettingsPatch({ sidebarLayout: "projects" });
+        }
+      }
+      if (
+        !bootstrapped ||
+        landingTarget.kind !== "project-home" ||
+        navigatedWorkProjectKeyRef.current === landingTarget.projectKey
+      ) {
+        return;
+      }
+      if (readProject(landingTarget.projectRef) === null) {
+        return;
+      }
+      navigatedWorkProjectKeyRef.current = landingTarget.projectKey;
+      void router
+        .navigate({
+          to: "/projects/$projectKey",
+          params: { projectKey: landingTarget.projectKey },
+          replace: true,
+        })
+        .catch(() => {
+          if (navigatedWorkProjectKeyRef.current === landingTarget.projectKey) {
+            navigatedWorkProjectKeyRef.current = null;
+          }
+        });
+      return;
+    }
+
+    appliedWorkSidebarRef.current = false;
+    navigatedWorkProjectKeyRef.current = null;
+
+    // Starting a draft after the user has left would replace the page they picked.
+    if (landingTarget.kind !== "draft-thread" || startedAttemptRef.current === attempt) {
+      return;
+    }
+    if (readProject(landingTarget.projectRef) === null) {
       return;
     }
     startedAttemptRef.current = attempt;
-    void handleNewThread(projectRef, { replace: true })
+    void handleNewThread(landingTarget.projectRef, { replace: true })
       .then((opened) => {
         if (opened === null) {
           setStartState((state) => ({ ...state, retryRequest: state.retryRequest + 1 }));
@@ -73,9 +138,23 @@ function IndexDraftLanding() {
       .catch(() => {
         setStartState((state) => ({ ...state, failed: true }));
       });
-  }, [attempt, handleNewThread, mostRecentProject]);
+  }, [
+    appMode,
+    attempt,
+    bootstrapped,
+    clientSettingsHydrated,
+    handleNewThread,
+    landingTarget,
+    router,
+  ]);
 
-  if (mostRecentProject !== null) {
+  if (!clientSettingsHydrated || landingTarget === null) {
+    return null;
+  }
+  if (landingTarget.kind === "project-home") {
+    return null;
+  }
+  if (landingTarget.kind === "draft-thread") {
     return startState.failed ? (
       <DraftStartError
         onRetry={() => {
