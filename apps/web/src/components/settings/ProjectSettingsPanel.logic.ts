@@ -64,6 +64,7 @@ const PROJECT_SETTINGS_ANCHOR_TABS: Readonly<Record<string, ProjectSettingsTab>>
   "project-knowledge": "memory",
   "project-actions": "environment",
   "import-scripts": "environment",
+  "project-repositories": "environment",
   "project-checkouts": "environment",
 };
 

@@ -59,6 +59,7 @@ import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import { ProjectInstructionsSettings } from "./ProjectInstructionsSettings";
 import { ProjectKnowledgeSettings } from "./ProjectKnowledgeSettings";
 import { ProjectMemorySettings } from "./ProjectMemorySettings";
+import { ProjectRepositoriesSettings } from "./ProjectRepositoriesSettings";
 import {
   defaultProjectIcon,
   hasDefaultProjectIcon,
@@ -784,6 +785,7 @@ function ProjectDetail({
         ) : (
           <>
             <ProjectActionsSettings />
+            <ProjectRepositoriesSettings members={group.memberProjects} />
             {checkoutChoices}
           </>
         )}
