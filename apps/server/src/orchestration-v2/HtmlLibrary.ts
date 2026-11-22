@@ -57,6 +57,12 @@ export class HtmlLibrary extends Context.Service<
 
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  // Fork-only index: a numbered migration would collide with upstream's next migration id.
+  yield* sql`
+    CREATE INDEX IF NOT EXISTS orchestration_v2_projection_turn_items_html_library_idx
+    ON orchestration_v2_projection_turn_items(updated_at DESC, turn_item_id DESC)
+    WHERE type = 'dynamic_tool' AND status = 'completed' AND inline_work_output = 1
+  `;
 
   const list = Effect.fn("HtmlLibrary.list")(function* ({
     projectIds,
