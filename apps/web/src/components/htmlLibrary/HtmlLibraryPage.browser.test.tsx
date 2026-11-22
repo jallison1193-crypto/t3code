@@ -109,12 +109,11 @@ it("loads on opening, keeps partial results, and resolves the preview on its sou
   await userEvent.click(screen.getByRole("button", { name: /Quarterly chart/ }));
   const dialog = page.getByRole("dialog", { name: "Expanded Quarterly chart preview" });
   await expect.element(dialog).toBeVisible();
-  await expect
-    .element(dialog.getByTitle("Quarterly chart"))
-    .toHaveAttribute("src", /^https:\/\/build-machine\.test\/attachment\.html(?:#|$)/);
-  await expect
-    .element(dialog.getByTitle("Quarterly chart"))
-    .toHaveAttribute("sandbox", "allow-scripts allow-forms");
+  const iframe = dialog.getByTitle("Quarterly chart");
+  await expect.element(iframe).toHaveAttribute("sandbox", "allow-scripts allow-forms");
+  expect(iframe.element().getAttribute("src")?.split("#")[0]).toBe(
+    "https://build-machine.test/attachment.html",
+  );
   expect(mocks.asset.mock.calls[0]?.[0]).toBe(remote);
   await userEvent.click(dialog.getByRole("button", { name: "Close" }));
   await expect.element(dialog).not.toBeInTheDocument();
