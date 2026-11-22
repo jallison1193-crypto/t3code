@@ -52,11 +52,24 @@ try {
 
   $pre = (Invoke-Git rev-parse HEAD).Trim()
   $newCommits = (Invoke-Git rev-list --count "HEAD..$upstream").Trim()
-  & git merge --no-edit -m "chore(fork): sync upstream $upstreamSha" $upstream 2>&1 | Out-Null
+  $mergeOut = @(& git merge --no-edit -m "chore(fork): sync upstream $upstreamSha" $upstream 2>&1 | ForEach-Object { "$_" })
   if ($LASTEXITCODE -ne 0) {
     $conflicts = @(& git diff --name-only --diff-filter=U)
-    & git merge --abort 2>&1 | Out-Null
-    Write-Report "merge conflict" (@("Merging $newCommits upstream commits ($upstreamSha) conflicts in:", "") + ($conflicts | ForEach-Object { "- ``$_``" }) + @("", "$Branch unchanged; resolve by hand.")) 2
+    & git rev-parse -q --verify MERGE_HEAD *> $null
+    $mergeInProgress = $LASTEXITCODE -eq 0
+    if ($mergeInProgress) { $restoreOut = @(& git merge --abort 2>&1 | ForEach-Object { "$_" }) }
+    # A merge that fails before recording MERGE_HEAD can leave a half-applied tree; the clean check above makes reset and clean safe.
+    if (-not $mergeInProgress -or $LASTEXITCODE -ne 0) {
+      $restoreOut = @(& git reset --hard --quiet $pre 2>&1 | ForEach-Object { "$_" }) + @(& git clean -fdq 2>&1 | ForEach-Object { "$_" })
+    }
+    $leftDirty = [bool](& git status --porcelain)
+    $lines = if ($conflicts.Count -gt 0) {
+      @("Merging $newCommits upstream commits ($upstreamSha) conflicts in:", "") + ($conflicts | ForEach-Object { "- ``$_``" })
+    } else {
+      @("Merging $newCommits upstream commits ($upstreamSha) failed without conflicts. git said:", "", '```') + ($mergeOut | Select-Object -Last 20) + @('```')
+    }
+    $tail = if ($leftDirty) { @("", "Restoring the sync worktree failed; it needs a manual cleanup:", "") + ($restoreOut | ForEach-Object { "    $_" }) } else { @("", "$Branch unchanged and the sync worktree is clean; resolve by hand.") }
+    Write-Report "merge conflict" ($lines + $tail) 2
   }
 
   & git diff --quiet $pre HEAD -- pnpm-lock.yaml
