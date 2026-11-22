@@ -5,3 +5,8 @@ forks a session from its original directory after the workspace root changes
 saves through a symlinked client settings file without replacing the link
 opens a model added to the account after its workspace already ran an agent
 recovers a historical Pi fork recorded before turns stored the session file
+rebuilds only instances missing their CLI when a refresh finds a new login-shell PATH
+re-probes when settings change the codex binaryPath
+# Pass alone; fail after ProjectSettingsPanel.browser leaves a persisted composer draft in localStorage.
+numbers the unsent draft at the top before the threads below it
+does not re-render thread rows when a quick Mod shortcut opens and focuses the terminal

@@ -6,6 +6,7 @@ Base: upstream `pingdotgg/t3code` @ `ecb295516f` (2026-11-17). Research by two G
 
 - Upstream moves ~200 commits/day. Keep new logic in **new files**; touch hot files (`Orchestrator.ts`, `ClaudeAdapterV2.ts`, `CodexAdapterV2.ts`, `Sidebar.tsx`, `settings.ts`, `orchestrationV2.ts`) with 1-5 line hooks only.
 - Additive, optional schema fields only, so older clients and servers still decode.
+- No numbered DB migrations in the fork. Upstream owns the next ids, and a recorded fork name at an upstream id stops the server from starting. Use settings overrides, server settings, or an idempotent `CREATE ... IF NOT EXISTS` in the owning service (see `HtmlLibrary.ts`).
 - Hit every surface (repo `AGENTS.md`): web, desktop, mobile, MCP tools for agents, contracts, i18n, reverse states.
 - Check: `vp run check:changed` plus focused `vp test run <files>`. No repo-wide checks.
 
@@ -138,5 +139,7 @@ Model roles per project (who plans, builds, reviews) and cross-provider review n
 - M1, M2 and M3 done.
 - M4 core done (2026-11-18): project home opens the coordinator, threads open beside it, Threads board, settings tabs, opt-in projects-first sidebar, mobile Threads screen. Mobile was checked by tests only; no emulator on the laptop yet.
 - M4 project icons outside their group done (calm look). Suggested threads, Library and the digest moved into M4b.
+- M4b done so far (2026-11-21): mode tag on threads, All/Code/Work sidebar filter, coding chrome hidden in Work, Work opens on project home, cross-server thread folders, HTML Library (global and per project). Left: Library pin, rename and "change this" in the source thread; files threads produced; the digest; Suggested threads; MCP tools for folders and the Library.
+- Upstream synced to `dd19bce823` on 2026-11-22 (367 commits). The fork's own Library migration 103 collided with upstream's 103 and was replaced by a service-created index.
 - Order: M4b Work mode, then M5 mods, then M6 bots. Mobile on hold.
 - Working name: **T3ther** (unofficial fork of T3 Code). Repo rename and README disclaimer come when the fork goes public.
