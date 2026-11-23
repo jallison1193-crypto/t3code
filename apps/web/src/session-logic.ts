@@ -27,6 +27,8 @@ import {
   htmlRenderFromToolItem,
   mcpAppFromToolItem,
   sentMessageFromToolItem,
+  threadSuggestionsFromToolItem,
+  type ThreadSuggestion,
 } from "@t3tools/shared/toolOutput";
 import {
   contextCompactionLabel,
@@ -132,6 +134,13 @@ export type TimelineEntry = (
       readonly createdAt: string;
       readonly runId: RunId | null;
       readonly text: string;
+    }
+  | {
+      readonly id: string;
+      readonly kind: "thread-suggestions";
+      readonly createdAt: string;
+      readonly runId: RunId | null;
+      readonly suggestions: ReadonlyArray<ThreadSuggestion>;
     }
   | {
       readonly id: string;
@@ -720,6 +729,22 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
         createdAt,
         runId: item.runId,
         text: sentMessage,
+        ...attemptMetadata,
+      });
+      continue;
+    }
+
+    const threadSuggestions =
+      item.type === "dynamic_tool" && item.status === "completed"
+        ? threadSuggestionsFromToolItem(item)
+        : undefined;
+    if (threadSuggestions !== undefined) {
+      entries.push({
+        id: item.id,
+        kind: "thread-suggestions",
+        createdAt,
+        runId: item.runId,
+        suggestions: threadSuggestions,
         ...attemptMetadata,
       });
       continue;

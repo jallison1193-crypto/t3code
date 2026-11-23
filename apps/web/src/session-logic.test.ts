@@ -1468,6 +1468,39 @@ describe("HTML renders in the timeline", () => {
     expect(turn(send("running")).some((entry) => entry.kind === "sent-message")).toBe(false);
   });
 
+  it("shows suggested threads in place through the turn fold, and only once completed", () => {
+    const suggestions = [
+      { title: "Fix reconnect race", prompt: "Fix src/session.ts.", reason: "Separate bug" },
+      { title: "Audit CSV dates", prompt: "Use UTC in src/export/csv.ts." },
+    ];
+    const suggest = (
+      status: OrchestrationV2TurnItem["status"],
+      output?: unknown,
+    ): OrchestrationV2TurnItem => ({
+      ...base("suggest", 2),
+      status,
+      type: "dynamic_tool",
+      toolName: "mcp__t3-code__t3_thread_suggest",
+      input: { suggestions },
+      ...(output === undefined ? {} : { output }),
+    });
+    const entries = turn(suggest("completed", { structuredContent: { suggestions }, content: [] }));
+    expect(entries.find((entry) => entry.kind === "thread-suggestions")).toMatchObject({
+      id: "suggest",
+      runId,
+      suggestions,
+    });
+    expect(rowsFor(entries, false)).toEqual([
+      "message",
+      "turn-fold",
+      "thread-suggestions",
+      "message",
+    ]);
+    expect(turn(suggest("running")).some((entry) => entry.kind === "thread-suggestions")).toBe(
+      false,
+    );
+  });
+
   it("hosts a captured MCP app after its tool row, from any provider's tool", () => {
     const mcpApp = {
       attachmentId: "render-thread-app-html",
