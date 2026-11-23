@@ -10,8 +10,10 @@ import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { T, useGT } from "gt-react";
 
 import { useEnvironmentSettings } from "~/hooks/useSettings";
+import { cn } from "~/lib/utils";
 import { serverEnvironment } from "~/state/server";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
+import { sinceAwayDigestCount } from "./sinceAwayDigest.logic";
 import { useProjectThreadBoard } from "./useProjectThreadBoard";
 
 export function useIsProjectCoordinator(
@@ -34,7 +36,8 @@ export function ProjectViewTabs({
 }) {
   const gt = useGT();
   const navigate = useNavigate();
-  const { openCount } = useProjectThreadBoard(projectKey);
+  const { openCount, digest } = useProjectThreadBoard(projectKey);
+  const hasDigestActivity = sinceAwayDigestCount(digest) > 0;
   const open = (view: ProjectView) => {
     if (view === active) return;
     if (view === "settings") {
@@ -69,6 +72,22 @@ export function ProjectViewTabs({
           <T>Threads</T>
           {openCount > 0 ? (
             <span className="text-muted-foreground tabular-nums">{openCount}</span>
+          ) : null}
+          {hasDigestActivity ? (
+            <span
+              className={cn(
+                "size-1.5 shrink-0 rounded-full",
+                digest.needsYou.length > 0
+                  ? "bg-warning"
+                  : digest.failed.length > 0
+                    ? "bg-error"
+                    : "bg-success",
+              )}
+            >
+              <span className="sr-only">
+                <T>New activity</T>
+              </span>
+            </span>
           ) : null}
         </Toggle>
         <Toggle value="library">

@@ -244,18 +244,49 @@ function useMarkThreadUnread() {
   };
 }
 
-export function useAcknowledgeThreadWoke() {
+function resolveVisitedAt(target: ScopedThreadRef, visitedAt: string | undefined): string {
+  if (visitedAt !== undefined) return visitedAt;
+  let best = new Date().toISOString();
+  let bestMs = Date.parse(best);
+  const thread = readThreadShell(target);
+  for (const candidate of [
+    thread?.updatedAt,
+    thread?.latestRun?.completedAt,
+    thread?.latestRun?.startedAt,
+    thread?.latestRun?.requestedAt,
+  ]) {
+    if (!candidate) continue;
+    const ms = Date.parse(candidate);
+    if (!Number.isNaN(ms) && ms > bestMs) {
+      best = candidate;
+      bestMs = ms;
+    }
+  }
+  return best;
+}
+
+export function useMarkThreadsVisited() {
   const visitThreadMutation = useAtomCommand(threadEnvironment.visit, { reportFailure: false });
   const markThreadVisited = useUiStateStore((state) => state.markThreadVisited);
-  return (target: ScopedThreadRef, wokeAt: string) => {
-    if (readEnvironmentServerConfigLoaded(target.environmentId)) {
-      void visitThreadMutation({
-        environmentId: target.environmentId,
-        input: { threadId: target.threadId, visitedAt: wokeAt },
-      });
-      return;
+  return (targets: readonly ScopedThreadRef[], visitedAt?: string) => {
+    for (const target of targets) {
+      const targetVisitedAt = resolveVisitedAt(target, visitedAt);
+      if (readEnvironmentServerConfigLoaded(target.environmentId)) {
+        void visitThreadMutation({
+          environmentId: target.environmentId,
+          input: { threadId: target.threadId, visitedAt: targetVisitedAt },
+        });
+      } else {
+        markThreadVisited(scopedThreadKey(target), targetVisitedAt);
+      }
     }
-    markThreadVisited(scopedThreadKey(target), wokeAt);
+  };
+}
+
+export function useAcknowledgeThreadWoke() {
+  const markThreadsVisited = useMarkThreadsVisited();
+  return (target: ScopedThreadRef, wokeAt: string) => {
+    markThreadsVisited([target], wokeAt);
   };
 }
 

@@ -314,6 +314,8 @@ Opening a project's home (**Open project home** in the command palette) goes to 
 
 The coordinator's **Threads** tab shows every thread in the project by state: Ready for review (finished since you last looked), Waiting on you, Working, Idle, and Done (settled). The count on the tab leaves out Done threads. Click a thread to open it beside the coordinator.
 
+When threads finish, fail, or need your input while you are away, a **Since you were away** strip appears above the board columns and a dot appears on the **Threads** tab. Click a thread in the strip to open it, or click **Mark all seen** to clear finished and failed threads while keeping threads that still need you.
+
 On mobile, open **Settings → Projects**, pick a project, and tap **Threads** or **Open coordinator**. In the coordinator thread, the robot menu has **Project threads**.
 
 To remove the designation, choose **Remove as coordinator** from the thread's menu or click **Clear** next to **Coordinator thread** in **Settings → Projects**.
