@@ -13,6 +13,7 @@ import { Button } from "../ui/button";
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { HtmlRenderFrame } from "./HtmlRenderFrame";
 import { McpAppFrame } from "./McpAppFrame";
+import { ThreadSuggestionsCard } from "./ThreadSuggestionsCard";
 import { checkpointFileTotals } from "@t3tools/client-runtime/state/thread-checkpoints";
 import { ChangedFilesCard, type ChangedFilesGroup } from "./ChangedFilesTree";
 import {
@@ -146,6 +147,25 @@ export function SentMessageTimelineRow({
           onImageExpand={ctx.onImageExpand}
         />
       </AssistantCitationSource>
+    </div>
+  );
+}
+
+export function ThreadSuggestionsTimelineRow({
+  row,
+}: {
+  row: Extract<TimelineRow, { kind: "thread-suggestions" }>;
+}) {
+  const ctx = use(TimelineRowCtx);
+  const thread = useQuietThreadShell(ctx.threadRef);
+  const projectRef =
+    thread && thread.projectId
+      ? { environmentId: thread.environmentId, projectId: thread.projectId }
+      : null;
+
+  return (
+    <div className="min-w-0 px-1 py-0.5">
+      <ThreadSuggestionsCard suggestions={row.suggestions} projectRef={projectRef} />
     </div>
   );
 }

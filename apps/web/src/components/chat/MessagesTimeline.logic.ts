@@ -69,7 +69,11 @@ import {
 import type { ThreadRunSummary } from "@t3tools/client-runtime/state/shell";
 import type { ToolCallVisibility } from "@t3tools/contracts/settings";
 import { resolveT3McpToolDefinition } from "@t3tools/shared/t3McpToolPresentation";
-import { compactDynamicToolOutput } from "@t3tools/shared/toolOutput";
+import {
+  compactDynamicToolOutput,
+  threadSuggestionsEqual,
+  type ThreadSuggestion,
+} from "@t3tools/shared/toolOutput";
 import { htmlRenderReferencesEqual, type HtmlRenderReference } from "@t3tools/shared/htmlRender";
 import { mcpAppReferencesEqual, type McpAppReference } from "@t3tools/shared/mcpApp";
 import { formatDuration } from "@t3tools/shared/orchestrationTimingCopy";
@@ -90,7 +94,12 @@ export function timelineEntryRunId(entry: TimelineEntry): RunId | null {
   if (entry.kind === "proposed-plan") {
     return entry.proposedPlan.runId;
   }
-  if (entry.kind === "html-render" || entry.kind === "mcp-app" || entry.kind === "sent-message") {
+  if (
+    entry.kind === "html-render" ||
+    entry.kind === "mcp-app" ||
+    entry.kind === "sent-message" ||
+    entry.kind === "thread-suggestions"
+  ) {
     return entry.runId;
   }
   return entry.kind === "work" ? (entry.entry.runId ?? null) : null;
@@ -684,6 +693,12 @@ type MessagesTimelineRowContent =
       text: string;
     }
   | {
+      kind: "thread-suggestions";
+      id: string;
+      createdAt: string;
+      suggestions: ReadonlyArray<ThreadSuggestion>;
+    }
+  | {
       kind: "mcp-app";
       id: string;
       createdAt: string;
@@ -867,6 +882,7 @@ function deriveSupersededAttemptFolds(
       entry.kind === "html-render" ||
       entry.kind === "mcp-app" ||
       entry.kind === "sent-message" ||
+      entry.kind === "thread-suggestions" ||
       timelineEntryIsPersistentResourceCard(entry) ||
       liveSubagentEntryIds.has(entry.id) ||
       (entry.kind === "work" && entry.entry.itemType === "system_notice")
@@ -2241,6 +2257,16 @@ export function deriveMessagesTimelineRows(
       continue;
     }
 
+    if (timelineEntry.kind === "thread-suggestions") {
+      nextRows.push({
+        kind: "thread-suggestions",
+        id: timelineEntry.id,
+        createdAt: timelineEntry.createdAt,
+        suggestions: timelineEntry.suggestions,
+      });
+      continue;
+    }
+
     if (timelineEntry.kind === "mcp-app") {
       nextRows.push({
         kind: "mcp-app",
@@ -2849,6 +2875,11 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
     case "sent-message": {
       const bs = b as typeof a;
       return a.createdAt === bs.createdAt && a.text === bs.text;
+    }
+
+    case "thread-suggestions": {
+      const bt = b as typeof a;
+      return a.createdAt === bt.createdAt && threadSuggestionsEqual(a.suggestions, bt.suggestions);
     }
 
     case "mcp-app": {

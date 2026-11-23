@@ -6,6 +6,11 @@ import {
   mcpToolResultOutput,
   SEND_TO_USER_MAX_LENGTH,
   sentMessageFromToolItem,
+  THREAD_SUGGEST_MAX_ITEMS,
+  THREAD_SUGGEST_MAX_PROMPT_LENGTH,
+  THREAD_SUGGEST_MAX_REASON_LENGTH,
+  THREAD_SUGGEST_MAX_TITLE_LENGTH,
+  threadSuggestionsFromToolItem,
   toolOutputImages,
   toolOutputIndicatesFailure,
 } from "./toolOutput.ts";
@@ -35,6 +40,50 @@ describe("compactDynamicToolOutput", () => {
     // OpenCode 2 Code Mode reports a script's nested send_to_user call as one `execute` item.
     const output = JSON.stringify({ sentMessage: "Draft", message: "Shown to the user." });
     expect(sentMessageFromToolItem({ toolName: "execute", output })).toBe("Draft");
+  });
+
+  it("extracts t3_thread_suggest suggestions and rejects errors or other tools", () => {
+    const suggestions = [
+      { title: "Fix reconnect race", prompt: "Fix src/session.ts.", reason: "Separate bug" },
+      { title: "Audit CSV dates", prompt: "Use UTC in src/export/csv.ts." },
+    ];
+    for (const [toolName, output] of [
+      ["mcp__t3-code__t3_thread_suggest", { structuredContent: { suggestions }, content: [] }],
+      ["t3_thread_suggest", [{ type: "text", text: JSON.stringify({ suggestions }) }]],
+      ["execute", JSON.stringify({ suggestions })],
+    ] as const) {
+      expect(threadSuggestionsFromToolItem({ toolName, output })).toEqual(suggestions);
+    }
+    const largest = Array.from({ length: THREAD_SUGGEST_MAX_ITEMS }, () => ({
+      title: "界".repeat(THREAD_SUGGEST_MAX_TITLE_LENGTH),
+      prompt: "界".repeat(THREAD_SUGGEST_MAX_PROMPT_LENGTH),
+      reason: "界".repeat(THREAD_SUGGEST_MAX_REASON_LENGTH),
+    }));
+    const text = JSON.stringify({ suggestions: largest });
+    expect(
+      threadSuggestionsFromToolItem({
+        toolName: "t3_thread_suggest",
+        output: [{ type: "text", text }],
+      }),
+    ).toEqual(largest);
+    expect(
+      threadSuggestionsFromToolItem({
+        toolName: "mcp__t3-code__t3_thread_suggest",
+        output: { isError: true, structuredContent: { suggestions } },
+      }),
+    ).toBeUndefined();
+    expect(
+      threadSuggestionsFromToolItem({
+        toolName: "mcp__t3-code__t3_thread_list",
+        output: { structuredContent: { suggestions } },
+      }),
+    ).toBeUndefined();
+    expect(
+      threadSuggestionsFromToolItem({
+        toolName: "mcp__t3-code__t3_thread_suggest",
+        output: { suggestions: [] },
+      }),
+    ).toBeUndefined();
   });
 
   it("keeps nested thread identity and scalar task IDs without result bodies", () => {

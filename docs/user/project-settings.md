@@ -316,6 +316,8 @@ The coordinator's **Threads** tab shows every thread in the project by state: Re
 
 When threads finish, fail, or need your input while you are away, a **Since you were away** strip appears above the board columns and a dot appears on the **Threads** tab. Click a thread in the strip to open it, or click **Mark all seen** to clear finished and failed threads while keeping threads that still need you.
 
+An agent can also suggest follow-up threads in the conversation without starting them. Suggested threads appear as a card with a **Start** button on each row; clicking **Start** opens a new thread draft in the same project with the suggested prompt filled in so you can edit it, choose a model, and send.
+
 On mobile, open **Settings → Projects**, pick a project, and tap **Threads** or **Open coordinator**. In the coordinator thread, the robot menu has **Project threads**.
 
 To remove the designation, choose **Remove as coordinator** from the thread's menu or click **Clear** next to **Coordinator thread** in **Settings → Projects**.

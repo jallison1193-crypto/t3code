@@ -1,8 +1,11 @@
 import {
   isProviderSendTurnSupportedImageMimeType,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
+  TrimmedNonEmptyString,
 } from "@t3tools/contracts";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 
 import {
   HTML_RENDER_TOOL_NAME,
@@ -20,6 +23,37 @@ import { resolveT3McpToolId } from "./t3McpToolPresentation.ts";
 export const SEND_TO_USER_TOOL_NAME = "send_to_user";
 // 4,000 UTF-16 units stay inside MAX_PARSED_BYTES even as 3-byte characters.
 export const SEND_TO_USER_MAX_LENGTH = 4_000;
+
+export const THREAD_SUGGEST_TOOL_NAME = "t3_thread_suggest";
+const THREAD_SUGGEST_MIN_ITEMS = 1;
+export const THREAD_SUGGEST_MAX_ITEMS = 5;
+export const THREAD_SUGGEST_MAX_TITLE_LENGTH = 80;
+// Five full suggestions stay inside MAX_PARSED_BYTES even as 3-byte characters.
+export const THREAD_SUGGEST_MAX_PROMPT_LENGTH = 700;
+export const THREAD_SUGGEST_MAX_REASON_LENGTH = 200;
+
+const isSingleLine = Schema.makeFilter((value: string) => !/[\r\n]/.test(value), {
+  expected: "a single-line string",
+});
+
+export const ThreadSuggestion = Schema.Struct({
+  title: TrimmedNonEmptyString.check(
+    isSingleLine,
+    Schema.isMaxLength(THREAD_SUGGEST_MAX_TITLE_LENGTH),
+  ),
+  prompt: TrimmedNonEmptyString.check(Schema.isMaxLength(THREAD_SUGGEST_MAX_PROMPT_LENGTH)),
+  reason: Schema.optional(
+    TrimmedNonEmptyString.check(isSingleLine, Schema.isMaxLength(THREAD_SUGGEST_MAX_REASON_LENGTH)),
+  ),
+});
+export type ThreadSuggestion = Schema.Schema.Type<typeof ThreadSuggestion>;
+
+export const ThreadSuggestionsList = Schema.Array(ThreadSuggestion).check(
+  Schema.isMinLength(THREAD_SUGGEST_MIN_ITEMS),
+  Schema.isMaxLength(THREAD_SUGGEST_MAX_ITEMS),
+);
+
+const decodeThreadSuggestions = Schema.decodeUnknownOption(ThreadSuggestionsList);
 
 const MAX_PARSED_BYTES = 16_384;
 const MAX_METADATA_BYTES = 8_192;
@@ -57,6 +91,7 @@ interface CompactToolOutput {
   linkedCount?: number;
   unlinkedCount?: number;
   sentMessage?: string;
+  suggestions?: ReadonlyArray<ThreadSuggestion>;
 }
 
 function readResult(value: unknown, budget: ResultReadBudget, depth = 0): ResultEnvelope {
@@ -153,6 +188,8 @@ export function compactDynamicToolOutput(value: unknown): CompactToolOutput | un
     ) {
       output.sentMessage = data.sentMessage;
     }
+    const suggestions = Option.getOrUndefined(decodeThreadSuggestions(data.suggestions));
+    if (suggestions !== undefined) output.suggestions = suggestions;
     const htmlRender = readHtmlRenderReference(data.htmlRender);
     if (htmlRender !== undefined) output.htmlRender = htmlRender;
     const mcpApp = readMcpAppReference(data[MCP_APP_OUTPUT_KEY]);
@@ -236,6 +273,36 @@ export function sentMessageFromToolItem(item: {
   }
   const output = compactDynamicToolOutput(item.output);
   return output?.isError ? undefined : output?.sentMessage;
+}
+
+export function threadSuggestionsEqual(
+  left: ReadonlyArray<ThreadSuggestion>,
+  right: ReadonlyArray<ThreadSuggestion>,
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (suggestion, index) =>
+        suggestion.title === right[index]?.title &&
+        suggestion.prompt === right[index]?.prompt &&
+        suggestion.reason === right[index]?.reason,
+    )
+  );
+}
+
+/** Threads proposed with `t3_thread_suggest` for the user to start. */
+export function threadSuggestionsFromToolItem(item: {
+  readonly toolName: string | null | undefined;
+  readonly output?: unknown;
+}): ReadonlyArray<ThreadSuggestion> | undefined {
+  if (
+    item.toolName !== OPENCODE_CODE_MODE_TOOL_NAME &&
+    resolveT3McpToolId(item.toolName) !== THREAD_SUGGEST_TOOL_NAME
+  ) {
+    return undefined;
+  }
+  const output = compactDynamicToolOutput(item.output);
+  return output?.isError ? undefined : output?.suggestions;
 }
 
 /** The thread-owned file `preview_recording_stop` stored for the agent. */
