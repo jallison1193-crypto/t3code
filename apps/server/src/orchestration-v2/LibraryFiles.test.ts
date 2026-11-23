@@ -5,6 +5,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import { traceSqlRouting } from "../persistence/testkit/SqliteRouting.ts";
@@ -399,11 +401,19 @@ describe("library files", () => {
         { updatedAt: "2026-11-21T11:00:00.000Z" },
       );
 
+      yield* addFileChange(
+        "item-5",
+        "thread",
+        { fileName: NodePath.join(NodeOS.tmpdir(), "scratchpad", "notes.md") },
+        { updatedAt: "2026-11-21T15:00:00.000Z" },
+      );
+
       const page = yield* service.list({ limit: 1 });
       assert.deepEqual(
         page.entries.map((entry) => entry.path),
         ["/workspace/a.md"],
       );
+      // Temp-folder scratch files are dropped before any existence check.
       assert.deepEqual(checked, ["/workspace/missing.md", "/workspace/a.md"]);
     }).pipe(
       Effect.provide(

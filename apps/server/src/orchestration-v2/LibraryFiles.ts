@@ -27,6 +27,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import type { SqlError } from "effect/sql/SqlError";
+import * as NodeOS from "node:os";
 
 const CANDIDATE_LIMIT = 100;
 const DEFAULT_PAGE_SIZE = 25;
@@ -120,6 +121,12 @@ function normalizeLibraryFilePath(rawPath: string, workspaceRoot?: string): stri
   return segments.length === 0 ? null : `/${segments.join("/")}`;
 }
 
+function isInsideFolder(path: string, folder: string, isWindows: boolean): boolean {
+  const [p, f] = isWindows ? [path.toLowerCase(), folder.toLowerCase()] : [path, folder];
+  const separator = f.startsWith("/") ? "/" : "\\";
+  return p.startsWith(f.endsWith(separator) ? f : `${f}${separator}`);
+}
+
 function dedupeKey(projectId: string, normalizedPath: string, isWindows: boolean): string {
   return `${projectId}\0${isWindows ? normalizedPath.toLowerCase() : normalizedPath}`;
 }
@@ -151,6 +158,7 @@ const make = Effect.gen(function* () {
   }: OrchestrationV2ListLibraryFilesInput) {
     if (projectIds?.length === 0) return { entries: [], nextCursor: null };
     const isWindows = (yield* HostProcess.Platform) === "win32";
+    const tempRoot = normalizeLibraryFilePath(NodeOS.tmpdir());
 
     // Filter in the SELECT so even a sparse project or mode examines a bounded batch.
     const rows = yield* sql<Candidate>`
@@ -208,7 +216,14 @@ const make = Effect.gen(function* () {
             : [];
 
       for (const change of changes) {
-        const normalizedPath = normalizeLibraryFilePath(change.path, workspaceRoot);
+        const resolvedPath = normalizeLibraryFilePath(change.path, workspaceRoot);
+        // Agent scratch files under the OS temp folder are throwaway, not work the thread produced.
+        const normalizedPath =
+          resolvedPath !== null &&
+          tempRoot !== null &&
+          isInsideFolder(resolvedPath, tempRoot, isWindows)
+            ? null
+            : resolvedPath;
         let key: string | null = null;
         if (normalizedPath !== null) {
           key = dedupeKey(row.projectId, normalizedPath, isWindows);
