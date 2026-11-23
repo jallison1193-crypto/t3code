@@ -14,6 +14,7 @@ import { ProposedPlanCard } from "./ProposedPlanCard";
 import { HtmlRenderFrame } from "./HtmlRenderFrame";
 import { McpAppFrame } from "./McpAppFrame";
 import { ThreadSuggestionsCard } from "./ThreadSuggestionsCard";
+import { PluginChangeCard } from "./PluginChangeCard";
 import { checkpointFileTotals } from "@t3tools/client-runtime/state/thread-checkpoints";
 import { ChangedFilesCard, type ChangedFilesGroup } from "./ChangedFilesTree";
 import {
@@ -166,6 +167,24 @@ export function ThreadSuggestionsTimelineRow({
   return (
     <div className="min-w-0 px-1 py-0.5">
       <ThreadSuggestionsCard suggestions={row.suggestions} projectRef={projectRef} />
+    </div>
+  );
+}
+
+export function PluginChangeTimelineRow({
+  row,
+}: {
+  row: Extract<TimelineRow, { kind: "plugin-change" }>;
+}) {
+  const ctx = use(TimelineRowCtx);
+
+  return (
+    <div className="min-w-0 px-1 py-0.5">
+      <PluginChangeCard
+        rowId={row.id}
+        environmentId={ctx.activeThreadEnvironmentId}
+        change={row.pluginChange}
+      />
     </div>
   );
 }

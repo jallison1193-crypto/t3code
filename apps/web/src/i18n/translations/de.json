@@ -12719,5 +12719,19 @@
     " verschoben und seine Aktivierungs-Einstellung wird entfernt. Du kannst ihn später wiederherstellen, indem du den Ordner zurückverschiebst."
   ],
   "c1b7649ac731ed07": "Plugins",
-  "a4f2ab80d075b199": "erweiterungen plugins eigenes css stile theme erscheinungsbild installieren deinstallieren"
+  "a4f2ab80d075b199": "erweiterungen plugins eigenes css stile theme erscheinungsbild installieren deinstallieren",
+  "6b77b59ddb720321": "Plugin nicht wiederhergestellt",
+  "22db7b7686cf81c7": "Plugin-Version konnte nicht wiederhergestellt werden.",
+  "4fcb236959551fa1": "Neues Plugin",
+  "5c174688fdb31c00": "Installiert",
+  "fdbef417d4c9a964": "Abgebrochen",
+  "94493230e3966179": "Aktualisiert",
+  "eb2762ced90b31fa": "Rückgängig gemacht",
+  "4a866ed9d49f7ccb": "Seitdem geändert",
+  "ba5ce6350c9183ed": "Gestaltet T3 mit CSS um",
+  "b848773fd942cc02": "Installieren",
+  "a780192787ba0339": "Ausschalten",
+  "de5d81466963b903": "Trotzdem installieren",
+  "f510356291976f4f": "Rückgängig",
+  "4fc630d6b2bf647f": "Wiederherstellen"
 }

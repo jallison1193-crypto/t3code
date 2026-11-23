@@ -12730,5 +12730,19 @@
     " and its enabled setting will be removed. You can restore it later by moving the folder back."
   ],
   "c1b7649ac731ed07": "Plugins",
-  "a4f2ab80d075b199": "extensions custom css styles theme appearance install uninstall"
+  "a4f2ab80d075b199": "extensions custom css styles theme appearance install uninstall",
+  "6b77b59ddb720321": "Plugin not restored",
+  "22db7b7686cf81c7": "Could not restore plugin revision.",
+  "4fcb236959551fa1": "New plugin",
+  "5c174688fdb31c00": "Installed",
+  "fdbef417d4c9a964": "Cancelled",
+  "94493230e3966179": "Updated",
+  "eb2762ced90b31fa": "Undone",
+  "4a866ed9d49f7ccb": "Changed since",
+  "ba5ce6350c9183ed": "Restyles T3 with CSS",
+  "b848773fd942cc02": "Install",
+  "a780192787ba0339": "Turn off",
+  "de5d81466963b903": "Install anyway",
+  "f510356291976f4f": "Undo",
+  "4fc630d6b2bf647f": "Restore"
 }

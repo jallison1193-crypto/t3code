@@ -1,5 +1,7 @@
 import {
   isProviderSendTurnSupportedImageMimeType,
+  PluginContribution,
+  PluginId,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
   TrimmedNonEmptyString,
 } from "@t3tools/contracts";
@@ -55,6 +57,21 @@ export const ThreadSuggestionsList = Schema.Array(ThreadSuggestion).check(
 
 const decodeThreadSuggestions = Schema.decodeUnknownOption(ThreadSuggestionsList);
 
+export const PLUGIN_WRITE_TOOL_NAME = "t3_plugin_write";
+
+const PluginRevision = Schema.String.check(Schema.isPattern(/^[a-f0-9]{12}$/));
+
+export const PluginChange = Schema.Struct({
+  pluginId: PluginId,
+  created: Schema.Boolean,
+  before: Schema.optional(PluginRevision),
+  after: PluginRevision,
+  contributes: Schema.Array(PluginContribution),
+});
+export type PluginChange = Schema.Schema.Type<typeof PluginChange>;
+
+const decodePluginChange = Schema.decodeUnknownOption(PluginChange);
+
 const MAX_PARSED_BYTES = 16_384;
 const MAX_METADATA_BYTES = 8_192;
 const MAX_ID_LENGTH = 256;
@@ -92,6 +109,7 @@ interface CompactToolOutput {
   unlinkedCount?: number;
   sentMessage?: string;
   suggestions?: ReadonlyArray<ThreadSuggestion>;
+  pluginChange?: PluginChange;
 }
 
 function readResult(value: unknown, budget: ResultReadBudget, depth = 0): ResultEnvelope {
@@ -190,6 +208,10 @@ export function compactDynamicToolOutput(value: unknown): CompactToolOutput | un
     }
     const suggestions = Option.getOrUndefined(decodeThreadSuggestions(data.suggestions));
     if (suggestions !== undefined) output.suggestions = suggestions;
+    const pluginChange = Option.getOrUndefined(
+      decodePluginChange(Predicate.isObject(data.pluginChange) ? data.pluginChange : data),
+    );
+    if (pluginChange !== undefined) output.pluginChange = pluginChange;
     const htmlRender = readHtmlRenderReference(data.htmlRender);
     if (htmlRender !== undefined) output.htmlRender = htmlRender;
     const mcpApp = readMcpAppReference(data[MCP_APP_OUTPUT_KEY]);
@@ -303,6 +325,32 @@ export function threadSuggestionsFromToolItem(item: {
   }
   const output = compactDynamicToolOutput(item.output);
   return output?.isError ? undefined : output?.suggestions;
+}
+
+export function pluginChangeEqual(left: PluginChange, right: PluginChange): boolean {
+  return (
+    left.pluginId === right.pluginId &&
+    left.created === right.created &&
+    left.before === right.before &&
+    left.after === right.after &&
+    left.contributes.length === right.contributes.length &&
+    left.contributes.every((item, index) => item === right.contributes[index])
+  );
+}
+
+/** A plugin creation or edit made by `t3_plugin_write`. */
+export function pluginChangeFromToolItem(item: {
+  readonly toolName: string | null | undefined;
+  readonly output?: unknown;
+}): PluginChange | null {
+  if (
+    item.toolName !== OPENCODE_CODE_MODE_TOOL_NAME &&
+    resolveT3McpToolId(item.toolName) !== PLUGIN_WRITE_TOOL_NAME
+  ) {
+    return null;
+  }
+  const output = compactDynamicToolOutput(item.output);
+  return output?.isError ? null : (output?.pluginChange ?? null);
 }
 
 /** The thread-owned file `preview_recording_stop` stored for the agent. */

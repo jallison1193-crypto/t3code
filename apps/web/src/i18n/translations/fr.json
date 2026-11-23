@@ -12720,5 +12720,19 @@
     " et son réglage d’activation sera supprimé. Vous pourrez le restaurer plus tard en replaçant le dossier."
   ],
   "c1b7649ac731ed07": "Plugins",
-  "a4f2ab80d075b199": "extensions css personnalisé styles thème apparence installer désinstaller"
+  "a4f2ab80d075b199": "extensions css personnalisé styles thème apparence installer désinstaller",
+  "6b77b59ddb720321": "Plugin non restauré",
+  "22db7b7686cf81c7": "Impossible de restaurer la révision du plugin.",
+  "4fcb236959551fa1": "Nouveau plugin",
+  "5c174688fdb31c00": "Installé",
+  "fdbef417d4c9a964": "Annulé",
+  "94493230e3966179": "Mis à jour",
+  "eb2762ced90b31fa": "Rétabli",
+  "4a866ed9d49f7ccb": "Modifié depuis",
+  "ba5ce6350c9183ed": "Personnalise le style de T3 avec CSS",
+  "b848773fd942cc02": "Installer",
+  "a780192787ba0339": "Désactiver",
+  "de5d81466963b903": "Installer quand même",
+  "f510356291976f4f": "Annuler",
+  "4fc630d6b2bf647f": "Restaurer"
 }

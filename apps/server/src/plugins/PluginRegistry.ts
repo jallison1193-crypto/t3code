@@ -1,4 +1,5 @@
-// @effect-diagnostics nodeBuiltinImport:off - plugin scanning needs lstat, realpath, and path containment checks alongside readThemeFileGuarded.
+// @effect-diagnostics nodeBuiltinImport:off - plugin scanning and revisions need lstat, realpath, utimes, crypto, and path containment checks alongside readThemeFileGuarded.
+import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
@@ -12,10 +13,12 @@ import {
   PluginOperationError,
   type PluginSettingEntry,
   type ServerListPluginsResult,
+  type ServerRestorePluginRevisionResult,
   type ServerSetPluginEnabledResult,
   type ServerUninstallPluginResult,
   THEME_CSS_MAX_LENGTH,
 } from "@t3tools/contracts";
+import { fromJsonStringPretty } from "@t3tools/shared/schemaJson";
 import { themeCssLoadsRemoteFiles } from "@t3tools/shared/themeCss";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -40,12 +43,29 @@ import * as ServerSettings from "../serverSettings.ts";
 import { watchDirectoryPath } from "../watchDirectoryReplacements.ts";
 
 const PLUGINS_ARCHIVE_DIR_NAME = "plugins-archive";
+const PLUGINS_HISTORY_DIR_NAME = "plugins-history";
+const PLUGIN_CSS_FILE = "plugin.css";
 const MAX_PLUGIN_FOLDERS = 64;
+const MAX_PLUGIN_HISTORY_REVISIONS = 20;
 const MAX_PLUGIN_MANIFEST_BYTES = 64 * 1024;
 const MAX_PLUGIN_CSS_BYTES = 4 * THEME_CSS_MAX_LENGTH;
+const PLUGIN_REVISION_PATTERN = /^[a-f0-9]{12}$/;
 
 const isPluginId = Schema.is(PluginId);
+const isPluginRevision = (value: string): boolean => PLUGIN_REVISION_PATTERN.test(value);
 const decodePluginManifestExit = Schema.decodeUnknownExit(PluginManifest);
+const decodePluginManifestJsonExit = Schema.decodeUnknownExit(
+  Schema.fromJsonString(PluginManifest),
+);
+const encodePluginManifestJson = Schema.encodeEffect(fromJsonStringPretty(PluginManifest));
+
+const computePluginRevision = (manifestText: string, cssText: string): string =>
+  NodeCrypto.createHash("sha256")
+    .update(manifestText)
+    .update("\0")
+    .update(cssText)
+    .digest("hex")
+    .slice(0, 12);
 
 interface PluginSnapshot {
   readonly seq: number;
@@ -56,12 +76,45 @@ interface PluginSnapshot {
 interface ScannedPlugin {
   readonly plugin: InstalledPlugin;
   readonly css?: string;
+  readonly rawManifest?: string;
+  readonly rawCss?: string;
+}
+
+export interface PluginReadResult {
+  readonly displayName?: string;
+  readonly description?: string;
+  readonly version?: string;
+  readonly css: string;
+}
+
+export interface PluginWriteInput {
+  readonly id: string;
+  readonly displayName?: string;
+  readonly description?: string;
+  readonly version?: string;
+  readonly css: string;
+}
+
+export interface PluginWriteResult {
+  readonly plugin: InstalledPlugin;
+  readonly created: boolean;
+  readonly before?: string;
+  readonly after: string;
 }
 
 export class PluginRegistry extends Context.Service<
   PluginRegistry,
   {
     readonly list: Effect.Effect<ServerListPluginsResult, PluginOperationError>;
+    readonly read: (id: string) => Effect.Effect<PluginReadResult, PluginOperationError>;
+    readonly write: (
+      input: PluginWriteInput,
+    ) => Effect.Effect<PluginWriteResult, PluginOperationError>;
+    readonly restore: (
+      id: string,
+      revision: string,
+      enable?: boolean,
+    ) => Effect.Effect<ServerRestorePluginRevisionResult, PluginOperationError>;
     readonly setEnabled: (
       id: string,
       enabled: boolean,
@@ -113,8 +166,177 @@ const withProblem = (
   id: string,
   problem: string,
   metadata: PluginMetadata = {},
+  extra: {
+    readonly revision?: string;
+    readonly rawManifest?: string;
+    readonly rawCss?: string;
+  } = {},
 ): ScannedPlugin => ({
-  plugin: { id, ...metadata, enabled: false, contributes: [], problem },
+  plugin: {
+    id,
+    ...metadata,
+    enabled: false,
+    contributes: [],
+    ...(extra.revision !== undefined ? { revision: extra.revision } : {}),
+    problem,
+  },
+  ...(extra.rawManifest !== undefined ? { rawManifest: extra.rawManifest } : {}),
+  ...(extra.rawCss !== undefined ? { rawCss: extra.rawCss } : {}),
+});
+
+const resolveSafeCssPath = (folderPath: string, cssName: string): string | null => {
+  const resolvedCssPath = NodePath.resolve(folderPath, cssName);
+  if (
+    !cssName.startsWith("./") ||
+    cssName.includes("\\") ||
+    cssName.includes("\0") ||
+    !isInsideDirectory(NodePath.resolve(folderPath), resolvedCssPath, false)
+  ) {
+    return null;
+  }
+  return resolvedCssPath;
+};
+
+const isExistingTargetSafe = (folderPath: string, targetCssPath: string | null): boolean => {
+  const folderStat = lstatOrNull(folderPath);
+  if (folderStat === null) return true;
+  if (folderStat.isSymbolicLink() || !folderStat.isDirectory()) return false;
+  const manifestDir = NodePath.join(folderPath, PLUGIN_MANIFEST_DIR);
+  const manifestDirStat = lstatOrNull(manifestDir);
+  if (
+    manifestDirStat !== null &&
+    (manifestDirStat.isSymbolicLink() || !manifestDirStat.isDirectory())
+  ) {
+    return false;
+  }
+  const manifestPath = NodePath.join(manifestDir, PLUGIN_MANIFEST_FILE);
+  if (lstatOrNull(manifestPath)?.isSymbolicLink() === true) return false;
+  if (targetCssPath !== null) {
+    if (lstatOrNull(targetCssPath)?.isSymbolicLink() === true) return false;
+    const cssDir = NodePath.dirname(targetCssPath);
+    if (cssDir !== folderPath && lstatOrNull(cssDir)?.isSymbolicLink() === true) return false;
+  }
+  return true;
+};
+
+// Untraced: called inside traced PluginRegistry write/restore spans.
+const writeFileAtomic = Effect.fnUntraced(function* (
+  fs: FileSystem.FileSystem,
+  filePath: string,
+  content: string,
+  errorFor: (cause: unknown) => PluginOperationError,
+) {
+  const dir = NodePath.dirname(filePath);
+  const base = NodePath.basename(filePath);
+  const tempPath = NodePath.join(
+    dir,
+    `.${base}.${process.pid}.${NodeCrypto.randomBytes(6).toString("hex")}.tmp`,
+  );
+  yield* fs.writeFileString(tempPath, content).pipe(
+    Effect.andThen(fs.rename(tempPath, filePath)),
+    Effect.tapError(() => fs.remove(tempPath).pipe(Effect.ignore)),
+    Effect.mapError(errorFor),
+  );
+});
+
+// Untraced: called inside traced PluginRegistry write/restore spans.
+const saveHistoryRevision = Effect.fnUntraced(function* (
+  fs: FileSystem.FileSystem,
+  stateDir: string,
+  pluginId: string,
+  manifestText: string,
+  cssText: string,
+  operation: "write" | "restore",
+) {
+  const revision = computePluginRevision(manifestText, cssText);
+  const historyRoot = NodePath.join(stateDir, PLUGINS_HISTORY_DIR_NAME);
+  const pluginHistoryDir = NodePath.join(historyRoot, pluginId);
+  const revisionDir = NodePath.join(pluginHistoryDir, revision);
+  const manifestPath = NodePath.join(revisionDir, PLUGIN_MANIFEST_FILE);
+  const cssPath = NodePath.join(revisionDir, PLUGIN_CSS_FILE);
+  const mapError = (cause: unknown) =>
+    new PluginOperationError({
+      pluginId,
+      operation,
+      reason: "write_failed",
+      cause,
+    });
+
+  for (const candidate of [historyRoot, pluginHistoryDir, revisionDir, manifestPath, cssPath]) {
+    if (lstatOrNull(candidate)?.isSymbolicLink() === true) {
+      return yield* new PluginOperationError({
+        pluginId,
+        operation,
+        reason: "write_failed",
+      });
+    }
+  }
+
+  const existingManifest = lstatOrNull(manifestPath);
+  const existingCss = lstatOrNull(cssPath);
+  if (existingManifest?.isFile() && existingCss?.isFile()) {
+    return revision;
+  }
+
+  let maxExistingMtimeMs = 0;
+  const existingEntries = yield* fs
+    .readDirectory(pluginHistoryDir)
+    .pipe(Effect.orElseSucceed((): Array<string> => []));
+  for (const entry of existingEntries) {
+    if (!isPluginRevision(entry) || entry === revision) continue;
+    const stat = lstatOrNull(NodePath.join(pluginHistoryDir, entry));
+    if (
+      stat !== null &&
+      !stat.isSymbolicLink() &&
+      stat.isDirectory() &&
+      stat.mtimeMs > maxExistingMtimeMs
+    ) {
+      maxExistingMtimeMs = stat.mtimeMs;
+    }
+  }
+
+  yield* fs.makeDirectory(revisionDir, { recursive: true }).pipe(Effect.mapError(mapError));
+  yield* writeFileAtomic(fs, manifestPath, manifestText, mapError);
+  yield* writeFileAtomic(fs, cssPath, cssText, mapError);
+
+  // Keep mtimes strictly ordered across back-to-back writes within one OS timer tick.
+  const writtenStat = lstatOrNull(revisionDir);
+  if (
+    writtenStat !== null &&
+    maxExistingMtimeMs > 0 &&
+    writtenStat.mtimeMs <= maxExistingMtimeMs &&
+    maxExistingMtimeMs - writtenStat.mtimeMs < 60_000
+  ) {
+    const nextMtimeSeconds = (maxExistingMtimeMs + 1) / 1000;
+    yield* Effect.try({
+      try: () => NodeFS.utimesSync(revisionDir, nextMtimeSeconds, nextMtimeSeconds),
+      catch: mapError,
+    });
+  }
+
+  const entriesAfter = yield* fs
+    .readDirectory(pluginHistoryDir)
+    .pipe(Effect.orElseSucceed((): Array<string> => []));
+  const revisionDirs: Array<{ readonly name: string; readonly mtimeMs: number }> = [];
+  for (const entry of entriesAfter) {
+    if (!isPluginRevision(entry)) continue;
+    const stat = lstatOrNull(NodePath.join(pluginHistoryDir, entry));
+    if (stat === null || stat.isSymbolicLink() || !stat.isDirectory()) continue;
+    revisionDirs.push({ name: entry, mtimeMs: stat.mtimeMs });
+  }
+  if (revisionDirs.length > MAX_PLUGIN_HISTORY_REVISIONS) {
+    revisionDirs.sort((left, right) => {
+      if (left.name === revision) return -1;
+      if (right.name === revision) return 1;
+      return right.mtimeMs - left.mtimeMs;
+    });
+    for (const stale of revisionDirs.slice(MAX_PLUGIN_HISTORY_REVISIONS)) {
+      yield* fs
+        .remove(NodePath.join(pluginHistoryDir, stale.name), { recursive: true, force: true })
+        .pipe(Effect.ignoreCause({ log: true }));
+    }
+  }
+  return revision;
 });
 
 const realpathOrNull = (targetPath: string): string | null => {
@@ -206,10 +428,13 @@ const inspectPluginFolder = (
     );
   }
   const manifest = decoded.value;
+  const emptyCssRevision = computePluginRevision(rawManifest, "");
   if (manifest.name !== folderName) {
     return withProblem(
       folderName,
       `Manifest name "${manifest.name}" does not match folder name "${folderName}".`,
+      {},
+      { revision: emptyCssRevision, rawManifest },
     );
   }
 
@@ -219,18 +444,27 @@ const inspectPluginFolder = (
     ...(manifest.version !== undefined ? { version: manifest.version } : {}),
   };
   if (manifest.css === undefined) {
-    return { plugin: { id: folderName, ...metadata, enabled: storedEnabled, contributes: [] } };
+    return {
+      plugin: {
+        id: folderName,
+        ...metadata,
+        enabled: storedEnabled,
+        contributes: [],
+        revision: emptyCssRevision,
+      },
+      rawManifest,
+    };
   }
 
-  const cssProblem = (problem: string) => withProblem(folderName, problem, metadata);
+  const cssProblem = (problem: string, css?: string) =>
+    withProblem(folderName, problem, metadata, {
+      revision: css === undefined ? emptyCssRevision : computePluginRevision(rawManifest, css),
+      rawManifest,
+      ...(css !== undefined ? { rawCss: css } : {}),
+    });
   const cssName = manifest.css;
-  const resolvedCssPath = NodePath.resolve(folderPath, cssName);
-  if (
-    !cssName.startsWith("./") ||
-    cssName.includes("\\") ||
-    cssName.includes("\0") ||
-    !isInsideDirectory(NodePath.resolve(folderPath), resolvedCssPath, false)
-  ) {
+  const resolvedCssPath = resolveSafeCssPath(folderPath, cssName);
+  if (resolvedCssPath === null) {
     return cssProblem('CSS path must start with "./" and stay inside the plugin folder.');
   }
 
@@ -257,15 +491,26 @@ const inspectPluginFolder = (
   const css = readThemeFileGuarded(resolvedCssPath, MAX_PLUGIN_CSS_BYTES);
   if (css === null) return cssProblem(`CSS file "${cssName}" could not be read.`);
   if (css.length > THEME_CSS_MAX_LENGTH) {
-    return cssProblem(`CSS exceeds the ${THEME_CSS_MAX_LENGTH} character limit.`);
+    return cssProblem(`CSS exceeds the ${THEME_CSS_MAX_LENGTH} character limit.`, css);
   }
   if (themeCssLoadsRemoteFiles(css)) {
-    return cssProblem("CSS cannot load remote files (@import, image-set(), or non-local url()).");
+    return cssProblem(
+      "CSS cannot load remote files (@import, image-set(), or non-local url()).",
+      css,
+    );
   }
 
   return {
-    plugin: { id: folderName, ...metadata, enabled: storedEnabled, contributes: ["css"] },
+    plugin: {
+      id: folderName,
+      ...metadata,
+      enabled: storedEnabled,
+      contributes: ["css"],
+      revision: computePluginRevision(rawManifest, css),
+    },
     css,
+    rawManifest,
+    rawCss: css,
   };
 };
 
@@ -396,6 +641,355 @@ const make = Effect.gen(function* () {
     const snapshot = yield* refresh;
     return { pluginsDir, plugins: snapshot.plugins };
   });
+
+  const read: PluginRegistry["Service"]["read"] = Effect.fn("PluginRegistry.read")(function* (id) {
+    return yield* mutationSemaphore.withPermits(1)(
+      Effect.gen(function* () {
+        if (!isPluginId(id)) {
+          return yield* new PluginOperationError({
+            pluginId: id,
+            operation: "read",
+            reason: "invalid_id",
+          });
+        }
+        const folderPath = NodePath.join(pluginsDir, id);
+        const folderStat = lstatOrNull(folderPath);
+        if (folderStat === null) {
+          return yield* new PluginOperationError({
+            pluginId: id,
+            operation: "read",
+            reason: "not_found",
+          });
+        }
+        if (folderStat.isSymbolicLink()) {
+          return yield* new PluginOperationError({
+            pluginId: id,
+            operation: "read",
+            reason: "has_problem",
+          });
+        }
+        if (!folderStat.isDirectory()) {
+          return yield* new PluginOperationError({
+            pluginId: id,
+            operation: "read",
+            reason: "not_found",
+          });
+        }
+        const scanned = inspectPluginFolder(pluginsDir, id, false);
+        if (scanned === null) {
+          return yield* new PluginOperationError({
+            pluginId: id,
+            operation: "read",
+            reason: "not_found",
+          });
+        }
+        if (scanned.plugin.problem !== undefined) {
+          return yield* new PluginOperationError({
+            pluginId: id,
+            operation: "read",
+            reason: "has_problem",
+          });
+        }
+        return {
+          ...(scanned.plugin.displayName !== undefined
+            ? { displayName: scanned.plugin.displayName }
+            : {}),
+          ...(scanned.plugin.description !== undefined
+            ? { description: scanned.plugin.description }
+            : {}),
+          ...(scanned.plugin.version !== undefined ? { version: scanned.plugin.version } : {}),
+          css: scanned.css ?? "",
+        };
+      }),
+    );
+  });
+
+  const write: PluginRegistry["Service"]["write"] = Effect.fn("PluginRegistry.write")(
+    function* (input) {
+      return yield* mutationSemaphore.withPermits(1)(
+        Effect.gen(function* () {
+          if (!isPluginId(input.id)) {
+            return yield* new PluginOperationError({
+              pluginId: input.id,
+              operation: "write",
+              reason: "invalid_id",
+            });
+          }
+          if (input.css.length > THEME_CSS_MAX_LENGTH || themeCssLoadsRemoteFiles(input.css)) {
+            return yield* new PluginOperationError({
+              pluginId: input.id,
+              operation: "write",
+              reason: "invalid_css",
+            });
+          }
+          const manifestDecoded = decodePluginManifestExit({
+            name: input.id,
+            ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
+            ...(input.description !== undefined ? { description: input.description } : {}),
+            ...(input.version !== undefined ? { version: input.version } : {}),
+            css: `./${PLUGIN_CSS_FILE}`,
+          });
+          if (manifestDecoded._tag === "Failure") {
+            return yield* new PluginOperationError({
+              pluginId: input.id,
+              operation: "write",
+              reason: "has_problem",
+            });
+          }
+          const manifestText = `${yield* encodePluginManifestJson(manifestDecoded.value).pipe(
+            Effect.mapError(
+              () =>
+                new PluginOperationError({
+                  pluginId: input.id,
+                  operation: "write",
+                  reason: "has_problem",
+                }),
+            ),
+          )}\n`;
+
+          const resolvedRoot = NodePath.resolve(pluginsDir);
+          const folderPath = NodePath.resolve(pluginsDir, input.id);
+          if (!isInsideDirectory(resolvedRoot, folderPath, false)) {
+            return yield* new PluginOperationError({
+              pluginId: input.id,
+              operation: "write",
+              reason: "invalid_id",
+            });
+          }
+          const folderStat = lstatOrNull(folderPath);
+          const manifestDir = NodePath.join(folderPath, PLUGIN_MANIFEST_DIR);
+          const manifestPath = NodePath.join(manifestDir, PLUGIN_MANIFEST_FILE);
+          const cssPath = NodePath.join(folderPath, PLUGIN_CSS_FILE);
+          if (!isExistingTargetSafe(folderPath, cssPath)) {
+            return yield* new PluginOperationError({
+              pluginId: input.id,
+              operation: "write",
+              reason: "has_problem",
+            });
+          }
+
+          const created = folderStat === null;
+          let before: string | undefined;
+          if (!created) {
+            const existing = inspectPluginFolder(pluginsDir, input.id, false);
+            if (existing?.rawManifest !== undefined) {
+              before = yield* saveHistoryRevision(
+                fs,
+                stateDir,
+                input.id,
+                existing.rawManifest,
+                existing.rawCss ?? "",
+                "write",
+              );
+            }
+          }
+
+          const mapWriteError = (cause: unknown) =>
+            new PluginOperationError({
+              pluginId: input.id,
+              operation: "write",
+              reason: "write_failed",
+              cause,
+            });
+          yield* fs
+            .makeDirectory(manifestDir, { recursive: true })
+            .pipe(Effect.mapError(mapWriteError));
+          yield* writeFileAtomic(fs, manifestPath, manifestText, mapWriteError);
+          yield* writeFileAtomic(fs, cssPath, input.css, mapWriteError);
+
+          const after = yield* saveHistoryRevision(
+            fs,
+            stateDir,
+            input.id,
+            manifestText,
+            input.css,
+            "write",
+          );
+          const updated = yield* refresh;
+          const plugin = updated.plugins.find((candidate) => candidate.id === input.id);
+          if (plugin === undefined) {
+            return yield* new PluginOperationError({
+              pluginId: input.id,
+              operation: "write",
+              reason: "write_failed",
+            });
+          }
+          return {
+            plugin,
+            created,
+            ...(before !== undefined ? { before } : {}),
+            after,
+          };
+        }),
+      );
+    },
+  );
+
+  const restore: PluginRegistry["Service"]["restore"] = Effect.fn("PluginRegistry.restore")(
+    function* (id, revision, enable) {
+      return yield* mutationSemaphore.withPermits(1)(
+        Effect.gen(function* () {
+          if (!isPluginId(id)) {
+            return yield* new PluginOperationError({
+              pluginId: id,
+              operation: "restore",
+              reason: "invalid_id",
+            });
+          }
+          if (!isPluginRevision(revision)) {
+            return yield* new PluginOperationError({
+              pluginId: id,
+              operation: "restore",
+              reason: "not_found",
+            });
+          }
+          const historyRoot = NodePath.resolve(stateDir, PLUGINS_HISTORY_DIR_NAME);
+          const pluginHistoryDir = NodePath.resolve(historyRoot, id);
+          const revisionDir = NodePath.resolve(pluginHistoryDir, revision);
+          if (
+            !isInsideDirectory(historyRoot, pluginHistoryDir, false) ||
+            !isInsideDirectory(pluginHistoryDir, revisionDir, false)
+          ) {
+            return yield* new PluginOperationError({
+              pluginId: id,
+              operation: "restore",
+              reason: "not_found",
+            });
+          }
+          const histManifestPath = NodePath.join(revisionDir, PLUGIN_MANIFEST_FILE);
+          const histCssPath = NodePath.join(revisionDir, PLUGIN_CSS_FILE);
+          for (const candidate of [
+            historyRoot,
+            pluginHistoryDir,
+            revisionDir,
+            histManifestPath,
+            histCssPath,
+          ]) {
+            if (lstatOrNull(candidate)?.isSymbolicLink() === true) {
+              return yield* new PluginOperationError({
+                pluginId: id,
+                operation: "restore",
+                reason: "has_problem",
+              });
+            }
+          }
+          const revStat = lstatOrNull(revisionDir);
+          if (revStat === null || !revStat.isDirectory()) {
+            return yield* new PluginOperationError({
+              pluginId: id,
+              operation: "restore",
+              reason: "not_found",
+            });
+          }
+          const manifestText = readThemeFileGuarded(histManifestPath, MAX_PLUGIN_MANIFEST_BYTES);
+          const cssText = readThemeFileGuarded(histCssPath, MAX_PLUGIN_CSS_BYTES);
+          if (manifestText === null || cssText === null) {
+            return yield* new PluginOperationError({
+              pluginId: id,
+              operation: "restore",
+              reason: "not_found",
+            });
+          }
+
+          const decoded = decodePluginManifestJsonExit(manifestText);
+          if (decoded._tag === "Failure" || decoded.value.name !== id) {
+            return yield* new PluginOperationError({
+              pluginId: id,
+              operation: "restore",
+              reason: "has_problem",
+            });
+          }
+          const folderPath = NodePath.resolve(pluginsDir, id);
+          const targetCssPath =
+            decoded.value.css === undefined
+              ? null
+              : resolveSafeCssPath(folderPath, decoded.value.css);
+          if (decoded.value.css !== undefined) {
+            if (targetCssPath === null) {
+              return yield* new PluginOperationError({
+                pluginId: id,
+                operation: "restore",
+                reason: "has_problem",
+              });
+            }
+            if (cssText.length > THEME_CSS_MAX_LENGTH || themeCssLoadsRemoteFiles(cssText)) {
+              return yield* new PluginOperationError({
+                pluginId: id,
+                operation: "restore",
+                reason: "invalid_css",
+              });
+            }
+          }
+
+          const manifestDir = NodePath.join(folderPath, PLUGIN_MANIFEST_DIR);
+          const manifestPath = NodePath.join(manifestDir, PLUGIN_MANIFEST_FILE);
+          if (!isExistingTargetSafe(folderPath, targetCssPath)) {
+            return yield* new PluginOperationError({
+              pluginId: id,
+              operation: "restore",
+              reason: "has_problem",
+            });
+          }
+          if (lstatOrNull(folderPath) !== null) {
+            const existing = inspectPluginFolder(pluginsDir, id, false);
+            if (existing?.rawManifest !== undefined) {
+              yield* saveHistoryRevision(
+                fs,
+                stateDir,
+                id,
+                existing.rawManifest,
+                existing.rawCss ?? "",
+                "restore",
+              );
+            }
+          }
+
+          const mapWriteError = (cause: unknown) =>
+            new PluginOperationError({
+              pluginId: id,
+              operation: "restore",
+              reason: "write_failed",
+              cause,
+            });
+          yield* fs
+            .makeDirectory(manifestDir, { recursive: true })
+            .pipe(Effect.mapError(mapWriteError));
+          yield* writeFileAtomic(fs, manifestPath, manifestText, mapWriteError);
+          if (targetCssPath !== null) {
+            yield* fs
+              .makeDirectory(NodePath.dirname(targetCssPath), { recursive: true })
+              .pipe(Effect.mapError(mapWriteError));
+            yield* writeFileAtomic(fs, targetCssPath, cssText, mapWriteError);
+          }
+
+          if (enable === true) {
+            yield* settings.updateSettings({ plugins: { [id]: { enabled: true } } }).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new PluginOperationError({
+                    pluginId: id,
+                    operation: "restore",
+                    reason: "settings_failed",
+                    cause,
+                  }),
+              ),
+            );
+          }
+
+          const updated = yield* refresh;
+          const plugin = updated.plugins.find((candidate) => candidate.id === id);
+          if (plugin === undefined) {
+            return yield* new PluginOperationError({
+              pluginId: id,
+              operation: "restore",
+              reason: "write_failed",
+            });
+          }
+          return { plugin };
+        }),
+      );
+    },
+  );
 
   const setEnabled: PluginRegistry["Service"]["setEnabled"] = Effect.fn(
     "PluginRegistry.setEnabled",
@@ -532,6 +1126,9 @@ const make = Effect.gen(function* () {
 
   return PluginRegistry.of({
     list: list(),
+    read,
+    write,
+    restore,
     setEnabled,
     uninstall,
     get streamChanges() {

@@ -1476,10 +1476,18 @@ export function createServerEnvironmentAtoms<R, E>(
     scheduler: configScheduler,
     concurrency: configConcurrency,
   });
+  const pluginsRefreshSignalAtom = Atom.family((environmentId: EnvironmentId) =>
+    Atom.make((get) => {
+      const config = get(configValueAtom(environmentId));
+      return JSON.stringify([config?.settings.plugins ?? null, config?.environmentPlugins ?? null]);
+    }).pipe(Atom.withLabel(`environment-data:server:plugins:refresh-signal:${environmentId}`)),
+  );
   const pluginsList = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "environment-data:server:plugins:list",
     tag: WS_METHODS.serverListPlugins,
+    staleTimeMs: 0,
     idleTtlMs: 0,
+    refreshTrigger: ({ environmentId }) => pluginsRefreshSignalAtom(environmentId),
   });
 
   return {
@@ -1811,6 +1819,16 @@ export function createServerEnvironmentAtoms<R, E>(
     uninstallPlugin: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:plugins:uninstall",
       tag: WS_METHODS.serverUninstallPlugin,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+      onSuccess: ({ environmentId }, registry) =>
+        Effect.sync(() => {
+          registry.refresh(pluginsList({ environmentId, input: {} }));
+        }),
+    }),
+    restorePluginRevision: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:plugins:restore-revision",
+      tag: WS_METHODS.serverRestorePluginRevision,
       scheduler: configScheduler,
       concurrency: configConcurrency,
       onSuccess: ({ environmentId }, registry) =>

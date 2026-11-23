@@ -44,6 +44,7 @@ export const InstalledPlugin = Schema.Struct({
   version: Schema.optional(TrimmedNonEmptyString),
   enabled: Schema.Boolean,
   contributes: Schema.Array(PluginContribution),
+  revision: Schema.optional(TrimmedNonEmptyString),
   problem: Schema.optional(TrimmedNonEmptyString),
 });
 export type InstalledPlugin = typeof InstalledPlugin.Type;
@@ -82,17 +83,31 @@ export const ServerUninstallPluginResult = Schema.Struct({
 });
 export type ServerUninstallPluginResult = typeof ServerUninstallPluginResult.Type;
 
+export const ServerRestorePluginRevisionInput = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  revision: TrimmedNonEmptyString,
+  enable: Schema.optional(Schema.Boolean),
+});
+export type ServerRestorePluginRevisionInput = typeof ServerRestorePluginRevisionInput.Type;
+
+export const ServerRestorePluginRevisionResult = Schema.Struct({
+  plugin: InstalledPlugin,
+});
+export type ServerRestorePluginRevisionResult = typeof ServerRestorePluginRevisionResult.Type;
+
 export class PluginOperationError extends Schema.TaggedError<PluginOperationError>()(
   "PluginOperationError",
   {
     pluginId: Schema.optional(Schema.String),
-    operation: Schema.Literals(["list", "setEnabled", "uninstall"]),
+    operation: Schema.Literals(["list", "read", "write", "restore", "setEnabled", "uninstall"]),
     reason: Schema.Literals([
       "not_found",
       "invalid_id",
+      "invalid_css",
       "has_problem",
       "settings_failed",
       "archive_failed",
+      "write_failed",
     ]),
     cause: Schema.optional(Schema.Defect()),
   },
@@ -101,15 +116,23 @@ export class PluginOperationError extends Schema.TaggedError<PluginOperationErro
     const id = this.pluginId ?? "";
     switch (this.reason) {
       case "not_found":
-        return `Plugin "${id}" is not installed.`;
+        return this.operation === "restore"
+          ? `Revision for plugin "${id}" was not found.`
+          : `Plugin "${id}" is not installed.`;
       case "invalid_id":
         return `Plugin "${id}" is not a valid plugin id.`;
+      case "invalid_css":
+        return `CSS for plugin "${id}" exceeds the size limit or loads remote files.`;
       case "has_problem":
-        return `Plugin "${id}" has a problem and cannot be enabled.`;
+        return this.operation === "setEnabled"
+          ? `Plugin "${id}" has a problem and cannot be enabled.`
+          : `Plugin "${id}" has a problem and cannot be accessed.`;
       case "settings_failed":
         return `Could not save settings for plugin "${id}".`;
       case "archive_failed":
         return `Could not archive plugin "${id}".`;
+      case "write_failed":
+        return `Could not write files for plugin "${id}".`;
     }
   }
 }

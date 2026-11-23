@@ -71,7 +71,9 @@ import type { ToolCallVisibility } from "@t3tools/contracts/settings";
 import { resolveT3McpToolDefinition } from "@t3tools/shared/t3McpToolPresentation";
 import {
   compactDynamicToolOutput,
+  pluginChangeEqual,
   threadSuggestionsEqual,
+  type PluginChange,
   type ThreadSuggestion,
 } from "@t3tools/shared/toolOutput";
 import { htmlRenderReferencesEqual, type HtmlRenderReference } from "@t3tools/shared/htmlRender";
@@ -98,7 +100,8 @@ export function timelineEntryRunId(entry: TimelineEntry): RunId | null {
     entry.kind === "html-render" ||
     entry.kind === "mcp-app" ||
     entry.kind === "sent-message" ||
-    entry.kind === "thread-suggestions"
+    entry.kind === "thread-suggestions" ||
+    entry.kind === "plugin-change"
   ) {
     return entry.runId;
   }
@@ -699,6 +702,12 @@ type MessagesTimelineRowContent =
       suggestions: ReadonlyArray<ThreadSuggestion>;
     }
   | {
+      kind: "plugin-change";
+      id: string;
+      createdAt: string;
+      pluginChange: PluginChange;
+    }
+  | {
       kind: "mcp-app";
       id: string;
       createdAt: string;
@@ -883,6 +892,7 @@ function deriveSupersededAttemptFolds(
       entry.kind === "mcp-app" ||
       entry.kind === "sent-message" ||
       entry.kind === "thread-suggestions" ||
+      entry.kind === "plugin-change" ||
       timelineEntryIsPersistentResourceCard(entry) ||
       liveSubagentEntryIds.has(entry.id) ||
       (entry.kind === "work" && entry.entry.itemType === "system_notice")
@@ -2267,6 +2277,16 @@ export function deriveMessagesTimelineRows(
       continue;
     }
 
+    if (timelineEntry.kind === "plugin-change") {
+      nextRows.push({
+        kind: "plugin-change",
+        id: timelineEntry.id,
+        createdAt: timelineEntry.createdAt,
+        pluginChange: timelineEntry.pluginChange,
+      });
+      continue;
+    }
+
     if (timelineEntry.kind === "mcp-app") {
       nextRows.push({
         kind: "mcp-app",
@@ -2880,6 +2900,11 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
     case "thread-suggestions": {
       const bt = b as typeof a;
       return a.createdAt === bt.createdAt && threadSuggestionsEqual(a.suggestions, bt.suggestions);
+    }
+
+    case "plugin-change": {
+      const bp = b as typeof a;
+      return a.createdAt === bp.createdAt && pluginChangeEqual(a.pluginChange, bp.pluginChange);
     }
 
     case "mcp-app": {
