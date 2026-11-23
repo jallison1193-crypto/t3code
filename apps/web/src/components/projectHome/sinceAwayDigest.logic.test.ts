@@ -87,6 +87,7 @@ describe("buildSinceAwayDigest", () => {
       lastVisitedAt: BEFORE_COMPLETE,
     });
     const finished = makeThread("finished", { lastVisitedAt: BEFORE_COMPLETE });
+    const neverOpened = makeThread("never-opened", { lastVisitedAt: null });
 
     const digest = buildSinceAwayDigest([
       approval,
@@ -96,6 +97,7 @@ describe("buildSinceAwayDigest", () => {
       failed,
       limited,
       finished,
+      neverOpened,
     ]);
 
     expect(digest.needsYou.map((thread) => thread.id)).toEqual([
@@ -105,8 +107,8 @@ describe("buildSinceAwayDigest", () => {
       "guest",
     ]);
     expect(digest.failed.map((thread) => thread.id)).toEqual(["failed", "limited"]);
-    expect(digest.finished.map((thread) => thread.id)).toEqual(["finished"]);
-    expect(sinceAwayDigestCount(digest)).toBe(7);
+    expect(digest.finished.map((thread) => thread.id)).toEqual(["finished", "never-opened"]);
+    expect(sinceAwayDigestCount(digest)).toBe(8);
   });
 
   it("places each thread in at most one group with priority needsYou > failed > finished", () => {

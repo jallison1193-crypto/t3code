@@ -1,8 +1,9 @@
+import { hasUnreviewedCompletion } from "@t3tools/client-runtime/project-thread-board";
 import { hasUnseenRunFailure } from "@t3tools/client-runtime/state/thread-settled";
 
-import { hasUnseenCompletion, resolveSidebarThreadStatus } from "../Sidebar.logic";
+import { resolveSidebarThreadStatus } from "../Sidebar.logic";
 
-export type SinceAwayDigestThread = Parameters<typeof hasUnseenCompletion>[0] &
+export type SinceAwayDigestThread = Parameters<typeof hasUnreviewedCompletion>[0] &
   Parameters<typeof resolveSidebarThreadStatus>[0] &
   Parameters<typeof hasUnseenRunFailure>[0];
 
@@ -12,6 +13,7 @@ export interface SinceAwayDigest<T> {
   readonly finished: readonly T[];
 }
 
+// Finished uses the board's review rule, so threads a coordinator launched and nobody opened count.
 export function buildSinceAwayDigest<T extends SinceAwayDigestThread>(
   threads: readonly T[],
 ): SinceAwayDigest<T> {
@@ -31,7 +33,7 @@ export function buildSinceAwayDigest<T extends SinceAwayDigestThread>(
     } else if (
       status === "ready" &&
       thread.latestRun?.status !== "failed" &&
-      hasUnseenCompletion(thread)
+      hasUnreviewedCompletion(thread)
     ) {
       finished.push(thread);
     }

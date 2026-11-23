@@ -50,7 +50,9 @@ export function projectThreadBoardColumn(thread: BoardThread): ProjectThreadBoar
 
 // Threads a coordinator launches are never opened, so a null watermark counts as unseen.
 // `undefined` is an older server without visit tracking; those never read as unreviewed.
-function hasUnreviewedCompletion(thread: BoardThread): boolean {
+export function hasUnreviewedCompletion(
+  thread: Pick<BoardThread, "latestRun" | "lastVisitedAt">,
+): boolean {
   const run = thread.latestRun;
   if (run?.completedAt == null || thread.lastVisitedAt === undefined) return false;
   if (run.status === "interrupted" || run.status === "cancelled") return false;

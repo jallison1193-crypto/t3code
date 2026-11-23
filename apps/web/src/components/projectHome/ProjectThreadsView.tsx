@@ -10,7 +10,7 @@ import { msg, T, useMessages, Var } from "gt-react";
 import { FolderIcon, ListTodoIcon } from "lucide-react";
 
 import { isElectron } from "~/env";
-import { useMarkThreadsVisited } from "~/hooks/useThreadActions";
+import { useAcknowledgeThreadWoke } from "~/hooks/useThreadActions";
 import { cn } from "~/lib/utils";
 import { useRightPanelStore } from "~/rightPanelStore";
 import { readEnvironment, useEnvironments } from "~/state/environments";
@@ -47,7 +47,7 @@ export function ProjectThreadsView({ projectKey }: { readonly projectKey: string
   const navigate = useNavigate();
   const { isReady } = useEnvironments();
   const { group, columns, openCount, digest } = useProjectThreadBoard(projectKey);
-  const markThreadsVisited = useMarkThreadsVisited();
+  const markThreadVisited = useAcknowledgeThreadWoke();
 
   // From the board, a thread opens beside its project's coordinator when there is one.
   const openThread = (thread: EnvironmentThreadShell) => {
@@ -125,13 +125,15 @@ export function ProjectThreadsView({ projectKey }: { readonly projectKey: string
                 <Button
                   variant="ghost-muted"
                   size="xs"
-                  onClick={() =>
-                    markThreadsVisited(
-                      markableThreads.map((thread) =>
+                  onClick={() => {
+                    // The server's own updatedAt, like the command palette, so client clock skew can't leave a thread unseen.
+                    for (const thread of markableThreads) {
+                      markThreadVisited(
                         scopeThreadRef(thread.environmentId, thread.id),
-                      ),
-                    )
-                  }
+                        thread.updatedAt,
+                      );
+                    }
+                  }}
                 >
                   <T>Mark all seen</T>
                 </Button>
