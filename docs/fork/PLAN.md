@@ -1,4 +1,4 @@
-# Fork plan: Claude-style Projects + Mods
+# Fork plan: Claude-style Projects + Plugins
 
 Base: upstream `pingdotgg/t3code` @ `ecb295516f` (2026-11-17). Research by two Gemini 4 Hydrogen xhigh agents, key paths spot-checked by Opus.
 
@@ -79,7 +79,7 @@ Josh's pain points: hard to organize, looks plain, projects feel buried.
 
 ### Calm default look (decided 2026-11-18)
 
-Compared with Linear, ChatGPT and platform guidance: color stays small. A project's color shows only through its project icon, and that icon appears wherever a thread shows outside its project's group (Needs you, Pinned, other threads, chat header). No stripes, tinted rows or colored backgrounds. Strong color is for status only. Users who want more restyle through mods.
+Compared with Linear, ChatGPT and platform guidance: color stays small. A project's color shows only through its project icon, and that icon appears wherever a thread shows outside its project's group (Needs you, Pinned, other threads, chat header). No stripes, tinted rows or colored backgrounds. Strong color is for status only. Users who want more restyle through plugins.
 
 ## Milestone 4b: Work mode
 
@@ -97,19 +97,32 @@ Target: Antigravity's Knowledge Work mode, ChatGPT Work and Claude Cowork, witho
 
 On hold since 2026-11-18. Phones use the regular T3 Code app connected to a T3ther server, so server and contract changes stay additive and fork features degrade quietly there. The M4 mobile Threads screen stays but gets no more work.
 
-## Milestone 5+: Mods
+## Milestone 5+: Plugins
 
-Goal (Josh, 2026-11-17): ask an agent for a change and get a working mod. "Make the sidebar denser", "add a pomodoro panel", "add a /standup command", "sync project memory to my vault". Mods change the look, change the UX, and add real features, not only themes.
+Goal (Josh, 2026-11-17): ask an agent for a change and get a working plugin. "Make the sidebar denser", "add a pomodoro panel", "add a /standup command", "sync project memory to my vault". Plugins change the look, change the UX, and add real features, not only themes.
 
-- Format: a folder with `t3mod.json`. User mods in T3 home; repo mods in `.t3/mods/`, disabled until approved. Share as folder or git repo. Enable, disable and uninstall are always one click (reverse states).
-- Authoring: an MCP toolkit (`t3_mod_create`, `t3_mod_update`, `t3_mod_list`, `t3_mod_enable`) lets any provider build, install and edit mods, the way "Ask an agent" restyles T3 today. Claude Code's mods and DeepSeek Harness's creator mode are the model to match.
-- Look: reuse T3's theme path (palette plus Custom CSS, published as an environment theme, same CSS limits). No second styling system.
-- UX and content: named UI slots (sidebar section, right panel tab, status line, toasts, composer actions, settings page) render mod UI in the existing MCP Apps sandbox (`McpAppFrame.tsx` / `McpAppWebView.tsx`). Panels run their own JS, so a mod can add real features from day one.
+Decided with Josh (2026-11-23):
+
+- Name: **plugins**, not mods. Claude Code and DeepSeek Harness use the word for the same bundle, so Claude Code compatibility means "a Claude Code plugin is a T3 plugin with fewer parts".
+- Format: a folder with `.t3-plugin/plugin.json`, mirroring Claude Code's `.claude-plugin/plugin.json` so one folder can carry both. User plugins in `<T3 home>/userdata/plugins/`; repo plugins in `.t3/plugins/`, off until the user turns them on. Share as folder or git repo. Enable, disable and uninstall are always one click (reverse states); uninstall archives, never deletes.
+- Approvals: an agent's first install of a plugin posts a card in the chat listing what it changes, with Install and Cancel. Later edits that add no new power apply at once with Undo. A new power that runs outside the sandbox (hooks, MCP servers, server worker, file or network access) asks again and names what it can touch.
+- Research first: before each slice, study how DeepSeek Harness and Claude Code built that piece (read source where open) and put a short prior-art note in the brief.
+- Look: reuse T3's theme path. Plugin CSS goes through the same fetch-stripping applier and limits as theme CSS and layers on top of the current theme. No second styling system.
+- UX and content: named UI slots render plugin UI in the existing MCP Apps sandbox (`McpAppFrame.tsx` / `McpAppWebView.tsx`). Right panel tab first, then sidebar section and status line.
 - Behavior: skills, slash commands, instructions, keybindings, MCP servers (approval-gated, proxied through T3's `/mcp`), hooks (approval-gated).
-- Logic that needs files, network or schedules: mod code in an isolated server worker with a small declared API. Comes right after the first slots work, not as a someday item.
-- Read Claude Code plugins where they map cleanly (skills, slash commands, MCP servers, hooks), so existing plugins work without rewriting.
-- First real mods: Obsidian vault sync (project memory and status to the vault's project notes), then one agent-built panel as the end-to-end test of authoring.
-- Later: project templates (instructions, memory skeleton, scripts, mods).
+- Logic that needs files, network or schedules: plugin code in an isolated server worker with a small declared API, timed when it fits best (it gates the vault sync plugin).
+- Claude Code plugin compatibility (skills, slash commands, MCP servers, hooks): after the core slices below.
+- First real plugin: an agent-built panel as the end-to-end authoring test, then Obsidian vault sync once the worker exists.
+
+Slices, in order:
+
+1. P1 core and look: format, registry service, enable/disable/uninstall, plugin CSS delivered to clients, Settings > Plugins.
+2. P2 authoring: MCP tools to list, read, create and edit plugins, the install card, Undo.
+3. P3 right panel tab slot, then the agent-built panel.
+4. P4 server worker, then Obsidian vault sync.
+5. P5 repo plugins and behavior parts, Claude Code plugin compatibility.
+
+- Later: project templates (instructions, memory skeleton, scripts, plugins).
 
 ## Milestone 6: Bots
 
@@ -118,7 +131,7 @@ Target: always-on agents like Grok Bot, OpenAI dots and Claude Duet, but on the 
 - A bot is a named, long-lived agent: goal, model, memory, triggers (schedule, webhook, message), and a home environment (the laptop or a linked VPS as its "own computer").
 - Bots live in their own sidebar tab; their working threads stay inside the bot. Approvals and questions still reach Needs you.
 - Daily summary; approval gates for sending, paying and deleting, since bots read untrusted email and web pages.
-- Builds on existing pieces: scheduled tasks, webhook automations, coordinator completion wakes, project memory, approvals, phone notifications, linked environments. Chat-app bridges (Telegram, iMessage, Slack) ship as mods.
+- Builds on existing pieces: scheduled tasks, webhook automations, coordinator completion wakes, project memory, approvals, phone notifications, linked environments. Chat-app bridges (Telegram, iMessage, Slack) ship as plugins.
 - Open questions: an unattended signed-in browser for bots, and per-bot usage limits.
 
 ## Going public
@@ -139,7 +152,7 @@ Model roles per project (who plans, builds, reviews) and cross-provider review n
 - M1, M2 and M3 done.
 - M4 core done (2026-11-18): project home opens the coordinator, threads open beside it, Threads board, settings tabs, opt-in projects-first sidebar, mobile Threads screen. Mobile was checked by tests only; no emulator on the laptop yet.
 - M4 project icons outside their group done (calm look). Suggested threads, Library and the digest moved into M4b.
-- M4b done so far (2026-11-21): mode tag on threads, All/Code/Work sidebar filter, coding chrome hidden in Work, Work opens on project home, cross-server thread folders, HTML Library (global and per project). Added 2026-11-22: Library pin, rename and "Ask for changes" in the source thread; "Since you were away" digest on the project Threads board; MCP tools for folders and the Library (`t3_folder_read`/`_update`, `t3_library_read`/`_update`); a Files view in the Library listing files threads wrote or edited. Added 2026-11-23: Suggested threads (`t3_thread_suggest` shows a card in the chat; Start opens a prefilled draft). M4b is done; next is planning M5 with Josh.
+- M4b done so far (2026-11-21): mode tag on threads, All/Code/Work sidebar filter, coding chrome hidden in Work, Work opens on project home, cross-server thread folders, HTML Library (global and per project). Added 2026-11-22: Library pin, rename and "Ask for changes" in the source thread; "Since you were away" digest on the project Threads board; MCP tools for folders and the Library (`t3_folder_read`/`_update`, `t3_library_read`/`_update`); a Files view in the Library listing files threads wrote or edited. Added 2026-11-23: Suggested threads (`t3_thread_suggest` shows a card in the chat; Start opens a prefilled draft). M4b is done. M5 plugins decided 2026-11-23; P1 in progress.
 - Upstream synced to `dd19bce823` on 2026-11-22 (367 commits). The fork's own Library migration 103 collided with upstream's 103 and was replaced by a service-created index.
-- Order: M4b Work mode, then M5 mods, then M6 bots. Mobile on hold.
+- Order: M4b Work mode, then M5 plugins, then M6 bots. Mobile on hold.
 - Working name: **T3ther** (unofficial fork of T3 Code). Repo rename and README disclaimer come when the fork goes public.
