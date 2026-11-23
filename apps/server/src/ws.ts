@@ -203,6 +203,7 @@ import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
 import * as ServerSettings from "./serverSettings.ts";
+import * as PluginRegistry from "./plugins/PluginRegistry.ts";
 import { invalidateSettingsSecrets } from "./sourceControl/sourceControlHostSecrets.ts";
 import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
@@ -1614,6 +1615,7 @@ export const layerWsRpc = (
       const keybindings = yield* Keybindings.Keybindings;
       const featureFlags = yield* FeatureFlags.FeatureFlags;
       const environmentTheme = yield* EnvironmentTheme.EnvironmentThemeService;
+      const pluginRegistry = yield* PluginRegistry.PluginRegistry;
       const projectMemoryStore = yield* ProjectMemoryStore.ProjectMemoryStore;
       const externalLauncher = yield* ExternalLauncher.ExternalLauncher;
       const remoteOpenTargets = yield* RemoteOpenTargets.RemoteOpenTargets;
@@ -2863,6 +2865,10 @@ export const layerWsRpc = (
               serverSettings.setThreadSectionMembership(environmentId, input),
             ),
           ),
+        [WS_METHODS.serverListPlugins]: (_input) => pluginRegistry.list,
+        [WS_METHODS.serverSetPluginEnabled]: (input) =>
+          pluginRegistry.setEnabled(input.id, input.enabled),
+        [WS_METHODS.serverUninstallPlugin]: (input) => pluginRegistry.uninstall(input.id),
         [WS_METHODS.serverDiscoverSourceControl]: (_input) => sourceControlDiscovery.discover,
         [WS_METHODS.serverCheckSecretSource]: (input) => secretCheck.check(input.source),
         [WS_METHODS.serverGetTraceDiagnostics]: (_input) =>
@@ -3704,6 +3710,16 @@ export const layerWsRpc = (
                       })),
                     )
                   : Stream.empty;
+              const environmentPluginUpdates =
+                input.environmentPlugins === true
+                  ? pluginRegistry.streamChanges.pipe(
+                      Stream.map((plugins) => ({
+                        version: 1 as const,
+                        type: "environmentPluginsUpdated" as const,
+                        payload: { plugins },
+                      })),
+                    )
+                  : Stream.empty;
               const usageLimitSourceUpdates =
                 input.usageLimitSources === true
                   ? usageLimitSources.streamChanges.pipe(
@@ -3731,7 +3747,10 @@ export const layerWsRpc = (
                   providerStatuses,
                   Stream.merge(
                     settingsUpdates,
-                    Stream.merge(environmentThemeUpdates, usageLimitSourceUpdates),
+                    Stream.merge(
+                      environmentThemeUpdates,
+                      Stream.merge(environmentPluginUpdates, usageLimitSourceUpdates),
+                    ),
                   ),
                 ),
               );

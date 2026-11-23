@@ -23,6 +23,7 @@ export type SettingsPath =
   | "/settings/diagnostics"
   | "/settings/voice"
   | "/settings/appearance"
+  | "/settings/plugins"
   | "/settings/chat"
   | "/settings/diffs"
   | "/settings/keybindings"
@@ -101,6 +102,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/projects": msg("Projects"),
   "/settings/general": msg("General"),
   "/settings/appearance": msg("Appearance"),
+  "/settings/plugins": msg("Plugins"),
   "/settings/chat": msg("Chat"),
   "/settings/diffs": msg("Diffs & pull requests"),
   "/settings/keybindings": msg("Keybindings"),
@@ -145,6 +147,7 @@ const ALL_SETTINGS_NAV_GROUPS: ReadonlyArray<SettingsNavGroup> = [
     paths: [
       "/settings/general",
       "/settings/appearance",
+      "/settings/plugins",
       "/settings/chat",
       "/settings/diffs",
       "/settings/keybindings",
@@ -379,6 +382,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/appearance",
     searchTerms: [msg("appearance colors palette custom import")],
     targetId: "appearance",
+  },
+  {
+    id: "plugins",
+    title: msg("Plugins"),
+    to: "/settings/plugins",
+    searchTerms: [msg("extensions custom css styles theme appearance install uninstall")],
+    environmentOnly: true,
   },
   {
     // Prefixed because the slider control already owns the `appearance-contrast` id.
@@ -1555,6 +1565,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/general": null,
   "/settings/voice": null,
   "/settings/appearance": null,
+  "/settings/plugins": null,
   "/settings/chat": null,
   "/settings/diffs": null,
   "/settings/snap-shot": null,

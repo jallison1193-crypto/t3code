@@ -724,6 +724,26 @@ describe("serverSettings helpers", () => {
     expect(current.usagePriceOverrides["example-model"]?.cacheReadCostPerMillionTokens).toBe(0.5);
   });
 
+  it("upserts and removes plugins per entry with null deletion", () => {
+    const first = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+      plugins: { "compact-sidebar": { enabled: true } },
+    });
+    const second = applyServerSettingsPatch(first, {
+      plugins: { "bold-header": { enabled: false } },
+    });
+    expect(second.plugins).toEqual({
+      "compact-sidebar": { enabled: true },
+      "bold-header": { enabled: false },
+    });
+    const removed = applyServerSettingsPatch(second, {
+      plugins: { "compact-sidebar": null },
+    });
+    expect(removed.plugins).toEqual({
+      "bold-header": { enabled: false },
+    });
+    expect(first.plugins).toEqual({ "compact-sidebar": { enabled: true } });
+  });
+
   it("stores background activity profiles as a versioned object and syncs legacy aliases", () => {
     const next = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
       backgroundActivity: {

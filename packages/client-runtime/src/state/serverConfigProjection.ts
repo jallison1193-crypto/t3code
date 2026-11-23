@@ -17,10 +17,19 @@ export interface ServerConfigProjection {
  * cache could restore a set the machine no longer reports.
  */
 export function withoutEnvironmentThemes(config: ServerConfig): ServerConfig {
-  if (config.environmentThemes === undefined && config.usageLimitSources === undefined) {
+  if (
+    config.environmentThemes === undefined &&
+    config.environmentPlugins === undefined &&
+    config.usageLimitSources === undefined
+  ) {
     return config;
   }
-  const { environmentThemes: _themes, usageLimitSources: _sources, ...rest } = config;
+  const {
+    environmentThemes: _themes,
+    environmentPlugins: _plugins,
+    usageLimitSources: _sources,
+    ...rest
+  } = config;
   return rest;
 }
 
@@ -104,6 +113,9 @@ export function applyServerConfigProjection(
       const carriedThemes = Option.isSome(current)
         ? current.value.config.environmentThemes
         : undefined;
+      const carriedPlugins = Option.isSome(current)
+        ? current.value.config.environmentPlugins
+        : undefined;
       const carriedSources = Option.isSome(current)
         ? current.value.config.usageLimitSources
         : undefined;
@@ -114,6 +126,7 @@ export function applyServerConfigProjection(
           event.config.providers,
         ),
         ...(carriedThemes === undefined ? {} : { environmentThemes: carriedThemes }),
+        ...(carriedPlugins === undefined ? {} : { environmentPlugins: carriedPlugins }),
         ...(carriedSources === undefined ? {} : { usageLimitSources: carriedSources }),
       };
       return Option.some({
@@ -168,6 +181,16 @@ export function applyServerConfigProjection(
           ...projection.config,
           // Kept when empty: undefined means the theme event has not arrived yet.
           environmentThemes: event.payload.themes,
+        },
+        latestEvent: event,
+        source: "live",
+      }));
+    case "environmentPluginsUpdated":
+      return Option.map(current, (projection) => ({
+        config: {
+          ...projection.config,
+          // Kept when empty: undefined means the plugin event has not arrived yet.
+          environmentPlugins: event.payload.plugins,
         },
         latestEvent: event,
         source: "live",

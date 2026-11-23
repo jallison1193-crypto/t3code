@@ -122,6 +122,20 @@ describe("html library entries", () => {
     expect(() => decodeServerSettings(deletion)).toThrow();
   });
 
+  it("defaults plugins to empty and accepts enable and null-delete patches", () => {
+    expect(decodeServerSettings({}).plugins).toEqual({});
+    const input = { plugins: { "compact-sidebar": { enabled: true } } };
+    expect(encodeServerSettings(decodeServerSettings(input))).toMatchObject(input);
+    expect(decodeClientServerSettingsPatch(input)).toEqual(input);
+
+    const deletion = { plugins: { "compact-sidebar": null } };
+    expect(encodeServerSettingsPatch(decodeClientServerSettingsPatch(deletion))).toEqual(deletion);
+    expect(() => decodeServerSettings(deletion)).toThrow();
+    expect(() =>
+      decodeClientServerSettingsPatch({ plugins: { "Bad Id": { enabled: true } } }),
+    ).toThrow();
+  });
+
   it.each(["", "  ", "Line\nBreak", "Line\rBreak", "Line\u2028Break"])(
     "rejects an invalid entry title %j",
     (title) => {

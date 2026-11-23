@@ -12663,5 +12663,57 @@
   "63e6db34aa9da336": "No se encontraron archivos en los entornos disponibles.",
   "afcd3ff0d57176e6": "Páginas",
   "7a4e5e17bc86fd03": "Iniciar",
-  "39dc197f7836569d": "Hilos sugeridos"
+  "39dc197f7836569d": "Hilos sugeridos",
+  "c863fb8704e56cd5": "Plugin no actualizado",
+  "fd8927f12faf648b": "No se pudo actualizar el estado del plugin.",
+  "98f26a1f3e3d587e": "Plugin no desinstalado",
+  "05e7889d65b3edf5": "No se pudo desinstalar el plugin.",
+  "cbd8c04be50de551": "No se pudieron cargar los plugins",
+  "c72c61308fbd226a": [
+    "Actualiza T3 Code en ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " para gestionar sus plugins."
+  ],
+  "119fdf3a37955ebd": "Conecta un entorno para gestionar sus plugins.",
+  "582e155f909e9bc4": "Cargando plugins…",
+  "d82c581217d84120": "Los plugins se guardan en la carpeta de plugins de abajo; pronto los agentes también podrán crearlos aquí.",
+  "cc0e82d6578ff61e": "Desinstalar",
+  "86c29ba4da470da1": [
+    "Carpeta de plugins:",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "734c0fead66883d0": [
+    "¿Desinstalar ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "?"
+  ],
+  "0ad3072559ee9ecc": [
+    "La carpeta del plugin se moverá a",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": "plugins-archive"
+    },
+    " y se eliminará su ajuste de activación. Puedes restaurarlo más tarde moviendo la carpeta de vuelta."
+  ],
+  "c1b7649ac731ed07": "Plugins",
+  "a4f2ab80d075b199": "extensiones complementos css personalizado estilos tema apariencia instalar desinstalar"
 }

@@ -68,6 +68,7 @@ export interface RpcSession {
 
 export interface RpcSessionOptions {
   readonly environmentThemes?: boolean;
+  readonly environmentPlugins?: boolean;
   readonly usageLimitSources?: boolean;
   readonly usageLimitsCommand?: boolean;
   readonly providerCatalogsOnDemand?: boolean;
@@ -102,6 +103,10 @@ type EnvironmentThemesUpdatedEvent = Extract<
   ServerConfigStreamEvent,
   { readonly type: "environmentThemesUpdated" }
 >;
+type EnvironmentPluginsUpdatedEvent = Extract<
+  ServerConfigStreamEvent,
+  { readonly type: "environmentPluginsUpdated" }
+>;
 type UsageLimitSourcesUpdatedEvent = Extract<
   ServerConfigStreamEvent,
   { readonly type: "usageLimitSourcesUpdated" }
@@ -111,6 +116,7 @@ interface ServerConfigReplayState {
   readonly projection: ServerConfigProjection;
   readonly revision: number;
   readonly themesEvent: EnvironmentThemesUpdatedEvent | undefined;
+  readonly pluginsEvent: EnvironmentPluginsUpdatedEvent | undefined;
   readonly sourcesEvent: UsageLimitSourcesUpdatedEvent | undefined;
 }
 
@@ -131,6 +137,7 @@ function serverConfigReplayEvents(
   return [
     snapshot,
     ...(state.themesEvent === undefined ? [] : [state.themesEvent]),
+    ...(state.pluginsEvent === undefined ? [] : [state.pluginsEvent]),
     ...(state.sourcesEvent === undefined ? [] : [state.sourcesEvent]),
   ];
 }
@@ -185,6 +192,7 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
   const webSocketConstructor = yield* Socket.WebSocketConstructor;
   const serverConfigInput: ServerConfigSubscriptionInput = {
     ...(options.environmentThemes === true ? { environmentThemes: true } : {}),
+    ...(options.environmentPlugins === true ? { environmentPlugins: true } : {}),
     ...(options.usageLimitSources === true ? { usageLimitSources: true } : {}),
     ...(options.usageLimitsCommand === true ? { usageLimitsCommand: true } : {}),
     ...(options.providerCatalogsOnDemand === true ? { providerCatalogsOnDemand: true } : {}),
@@ -342,6 +350,10 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
                 event.type === "environmentThemesUpdated"
                   ? event
                   : Option.getOrUndefined(current)?.themesEvent,
+              pluginsEvent:
+                event.type === "environmentPluginsUpdated"
+                  ? event
+                  : Option.getOrUndefined(current)?.pluginsEvent,
               sourcesEvent:
                 event.type === "usageLimitSourcesUpdated"
                   ? event

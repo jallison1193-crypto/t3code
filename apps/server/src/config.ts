@@ -41,6 +41,7 @@ export interface ServerDerivedPaths {
   readonly keybindingsConfigPath: string;
   readonly settingsPath: string;
   readonly environmentThemesDir: string;
+  readonly pluginsDir: string;
   readonly providerStatusCacheDir: string;
   readonly worktreesDir: string;
   readonly worktreeCheckoutCacheDir: string;
@@ -159,6 +160,7 @@ export const deriveServerPaths = Effect.fn(function* (
     keybindingsConfigPath: join(stateDir, "keybindings.json"),
     settingsPath: join(stateDir, "settings.json"),
     environmentThemesDir: join(stateDir, "themes"),
+    pluginsDir: join(stateDir, "plugins"),
     providerStatusCacheDir,
     worktreesDir: join(baseDir, "worktrees"),
     worktreeCheckoutCacheDir: join(providerStatusCacheDir, "worktree-checkouts"),

@@ -42,6 +42,7 @@ import {
   ProviderOptionSelections,
 } from "./model.ts";
 import { ModelSelection } from "./modelSelection.ts";
+import { PluginId, PluginSettingEntry } from "./plugin.ts";
 import { ProjectScript, type ProjectMutation } from "./project.ts";
 import { DEFAULT_RUNTIME_MODE, RuntimeMode } from "./providerPolicy.ts";
 import { BrowserProfile, BrowserProfileId, DEFAULT_BROWSER_PROFILE_ID } from "./browserProfile.ts";
@@ -1570,6 +1571,9 @@ export const ServerSettings = Schema.Struct({
   htmlLibraryEntries: Schema.Record(TrimmedNonEmptyString, HtmlLibraryEntryOverride).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
+  plugins: Schema.Record(PluginId, PluginSettingEntry).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
   /** Beta: guest links for this machine's threads. Off refuses new links and pauses existing ones. */
   guestSharingEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   /**
@@ -2032,6 +2036,7 @@ export const ServerSettingsPatch = Schema.Struct({
   htmlLibraryEntries: Schema.optionalKey(
     Schema.Record(TrimmedNonEmptyString, Schema.NullOr(HtmlLibraryEntryOverride)),
   ),
+  plugins: Schema.optionalKey(Schema.Record(PluginId, Schema.NullOr(PluginSettingEntry))),
   guestSharingEnabled: Schema.optionalKey(Schema.Boolean),
   linkedEnvironmentsEnabled: Schema.optionalKey(Schema.Boolean),
   promptSuggestionsEnabled: Schema.optionalKey(Schema.Boolean),

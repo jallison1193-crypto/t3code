@@ -481,6 +481,48 @@ describe("settings mutation authorization", () => {
     }),
   );
 
+  it.effect("requires the settings grant to toggle or uninstall plugins", () =>
+    Effect.gen(function* () {
+      const methods = [
+        WS_METHODS.serverSetPluginEnabled,
+        WS_METHODS.serverUninstallPlugin,
+      ] as const;
+      const group = WsRpcGroup.omit(
+        ...[...WsRpcGroup.requests.keys()].filter(
+          (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, (typeof methods)[number]> =>
+            !methods.includes(tag as (typeof methods)[number]),
+        ),
+      );
+      const handlers = Layer.merge(
+        group.toLayerHandler(WS_METHODS.serverSetPluginEnabled, () =>
+          Effect.succeed({
+            plugin: { id: "demo", enabled: true, contributes: ["css" as const] },
+          }),
+        ),
+        group.toLayerHandler(WS_METHODS.serverUninstallPlugin, () =>
+          Effect.succeed({ id: "demo", archivedTo: "/archive/demo" }),
+        ),
+      );
+      const reader = yield* RpcTest.makeClient(group).pipe(
+        Effect.provide(Layer.merge(handlers, RpcAuthorization.layer([AuthOrchestrationReadScope]))),
+      );
+      expect(
+        yield* reader[WS_METHODS.serverSetPluginEnabled]({ id: "demo", enabled: true }).pipe(
+          Effect.flip,
+        ),
+      ).toMatchObject({ requiredPermission: AuthSettingsWriteScope });
+      expect(
+        yield* reader[WS_METHODS.serverUninstallPlugin]({ id: "demo" }).pipe(Effect.flip),
+      ).toMatchObject({ requiredPermission: AuthSettingsWriteScope });
+
+      const writer = yield* RpcTest.makeClient(group).pipe(
+        Effect.provide(Layer.merge(handlers, RpcAuthorization.layer([AuthSettingsWriteScope]))),
+      );
+      yield* writer[WS_METHODS.serverSetPluginEnabled]({ id: "demo", enabled: true });
+      yield* writer[WS_METHODS.serverUninstallPlugin]({ id: "demo" });
+    }),
+  );
+
   const group = WsRpcGroup.omit(
     ...[...WsRpcGroup.requests.keys()].filter(
       (

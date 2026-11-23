@@ -477,6 +477,7 @@ const cachedConfigSnapshotEvent = (config: ServerConfig): ServerConfigStreamEven
 
 export interface ServerConfigSubscriptionOptions {
   readonly environmentThemes?: boolean;
+  readonly environmentPlugins?: boolean;
   readonly usageLimitSources?: boolean;
   readonly usageLimitsCommand?: boolean;
   readonly providerCatalogsOnDemand?: boolean;
@@ -594,6 +595,7 @@ export const makeEnvironmentServerConfigState = Effect.fn("EnvironmentServerConf
       // serverTime changes every connect, which would rewrite the cache each time.
       const {
         environmentThemes: _themes,
+        environmentPlugins: _plugins,
         usageLimitSources: _sources,
         lastEventLoopStall: _stall,
         serverTime: _serverTime,
@@ -649,6 +651,7 @@ export const makeEnvironmentServerConfigState = Effect.fn("EnvironmentServerConf
     let fetchedCatalogs: ReadonlyArray<FetchedMachineCatalog> = [];
     const configUpdates = subscribe(WS_METHODS.subscribeServerConfig, {
       ...(subscription.environmentThemes === true ? { environmentThemes: true } : {}),
+      ...(subscription.environmentPlugins === true ? { environmentPlugins: true } : {}),
       ...(subscription.usageLimitSources === true ? { usageLimitSources: true } : {}),
       ...(subscription.usageLimitsCommand === true ? { usageLimitsCommand: true } : {}),
       ...(subscription.providerCatalogsOnDemand === true ? { providerCatalogsOnDemand: true } : {}),
@@ -956,6 +959,7 @@ export function createServerEnvironmentAtoms<R, E>(
       environmentId: EnvironmentId,
     ) => Atom.Atom<ServerConfig | null>;
     readonly environmentThemes?: boolean;
+    readonly environmentPlugins?: boolean;
     readonly usageLimitSources?: boolean;
     readonly usageLimitsCommand?: boolean;
     readonly providerCatalogsOnDemand?: boolean;
@@ -984,6 +988,7 @@ export function createServerEnvironmentAtoms<R, E>(
           environmentId,
           {
             ...(options.environmentThemes === true ? { environmentThemes: true } : {}),
+            ...(options.environmentPlugins === true ? { environmentPlugins: true } : {}),
             ...(options.usageLimitSources === true ? { usageLimitSources: true } : {}),
             ...(options.usageLimitsCommand === true ? { usageLimitsCommand: true } : {}),
             ...(options.providerCatalogsOnDemand === true
@@ -1471,6 +1476,11 @@ export function createServerEnvironmentAtoms<R, E>(
     scheduler: configScheduler,
     concurrency: configConcurrency,
   });
+  const pluginsList = createEnvironmentRpcQueryAtomFamily(runtime, {
+    label: "environment-data:server:plugins:list",
+    tag: WS_METHODS.serverListPlugins,
+    idleTtlMs: 0,
+  });
 
   return {
     configValueAtom,
@@ -1786,6 +1796,27 @@ export function createServerEnvironmentAtoms<R, E>(
       tag: WS_METHODS.serverSetThreadSectionMembership,
       scheduler: configScheduler,
       concurrency: configConcurrency,
+    }),
+    pluginsList,
+    setPluginEnabled: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:plugins:set-enabled",
+      tag: WS_METHODS.serverSetPluginEnabled,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+      onSuccess: ({ environmentId }, registry) =>
+        Effect.sync(() => {
+          registry.refresh(pluginsList({ environmentId, input: {} }));
+        }),
+    }),
+    uninstallPlugin: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:plugins:uninstall",
+      tag: WS_METHODS.serverUninstallPlugin,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+      onSuccess: ({ environmentId }, registry) =>
+        Effect.sync(() => {
+          registry.refresh(pluginsList({ environmentId, input: {} }));
+        }),
     }),
     mutateProviderInstance: updateSettings,
     prepareAcpRegistryAgent: createEnvironmentRpcCommand(runtime, {

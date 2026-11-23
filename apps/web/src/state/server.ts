@@ -1,6 +1,7 @@
 import {
   DEFAULT_SERVER_SETTINGS,
   type EnvironmentId,
+  type EnvironmentPlugin,
   type EnvironmentTheme,
   type ServerConfig,
   type ServerConfigStreamEvent,
@@ -33,6 +34,7 @@ import { reuseProvidersIgnoringCheckedAt } from "./serverProviders.logic";
 export const serverEnvironment = createServerEnvironmentAtoms(connectionAtomRuntime, {
   initialConfigValueAtom: environmentSession.initialConfigValueAtom,
   environmentThemes: true,
+  environmentPlugins: true,
   usageLimitSources: true,
   usageLimitsCommand: true,
 });
@@ -165,6 +167,7 @@ export const primaryServerKeybindingsAtom = createShortcutKeybindingsAtom({
 }).pipe(Atom.withLabel("web-primary-server-keybindings"));
 
 const EMPTY_ENVIRONMENT_THEMES: ReadonlyArray<EnvironmentTheme> = [];
+const EMPTY_ENVIRONMENT_PLUGINS: ReadonlyArray<EnvironmentPlugin> = [];
 
 const themeServerConfigAtom = Atom.make((get): ServerConfig | null => {
   const environmentId = get(localEnvironmentIdAtom);
@@ -186,6 +189,11 @@ export const themeServerEnvironmentThemesAtom = Atom.make(
       : EMPTY_ENVIRONMENT_THEMES;
   },
 ).pipe(Atom.withLabel("web-theme-server-environment-themes"));
+
+export const themeServerEnvironmentPluginsAtom = Atom.make(
+  (get): ReadonlyArray<EnvironmentPlugin> =>
+    get(themeServerConfigAtom)?.environmentPlugins ?? EMPTY_ENVIRONMENT_PLUGINS,
+).pipe(Atom.withLabel("web-theme-server-environment-plugins"));
 
 export const themeServerSettingsAtom = Atom.make(
   (get): ServerSettings => get(themeServerConfigAtom)?.settings ?? DEFAULT_SERVER_SETTINGS,

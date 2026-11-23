@@ -12668,5 +12668,57 @@
   "63e6db34aa9da336": "Aucun fichier trouvé dans les environnements disponibles.",
   "afcd3ff0d57176e6": "Pages",
   "7a4e5e17bc86fd03": "Démarrer",
-  "39dc197f7836569d": "Fils suggérés"
+  "39dc197f7836569d": "Fils suggérés",
+  "c863fb8704e56cd5": "Plugin non mis à jour",
+  "fd8927f12faf648b": "Impossible de mettre à jour l’état du plugin.",
+  "98f26a1f3e3d587e": "Plugin non désinstallé",
+  "05e7889d65b3edf5": "Impossible de désinstaller le plugin.",
+  "cbd8c04be50de551": "Impossible de charger les plugins",
+  "c72c61308fbd226a": [
+    "Mettez à jour T3 Code sur ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " pour gérer ses plugins."
+  ],
+  "119fdf3a37955ebd": "Connectez un environnement pour gérer ses plugins.",
+  "582e155f909e9bc4": "Chargement des plugins…",
+  "d82c581217d84120": "Les plugins se trouvent dans le dossier ci-dessous ; les agents pourront bientôt en créer ici aussi.",
+  "cc0e82d6578ff61e": "Désinstaller",
+  "86c29ba4da470da1": [
+    "Dossier des plugins :",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "734c0fead66883d0": [
+    "Désinstaller ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " ?"
+  ],
+  "0ad3072559ee9ecc": [
+    "Le dossier du plugin sera déplacé vers",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": "plugins-archive"
+    },
+    " et son réglage d’activation sera supprimé. Vous pourrez le restaurer plus tard en replaçant le dossier."
+  ],
+  "c1b7649ac731ed07": "Plugins",
+  "a4f2ab80d075b199": "extensions css personnalisé styles thème apparence installer désinstaller"
 }
