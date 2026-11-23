@@ -408,6 +408,7 @@ export function applyServerSettingsPatch(
     threadSections: threadSectionsPatch,
     renameThreadSection,
     htmlLibraryEntries: htmlLibraryEntriesPatch,
+    plugins: pluginsPatch,
     usageLimitSources: usageLimitSourcesPatch,
     textGenerators: textGeneratorsPatch,
     secretProviders: secretProvidersPatch,
@@ -646,6 +647,11 @@ export function applyServerSettingsPatch(
             current.htmlLibraryEntries,
             htmlLibraryEntriesPatch,
           ),
+        }
+      : {}),
+    ...(pluginsPatch !== undefined
+      ? {
+          plugins: mergeSettingsEntries(current.plugins, pluginsPatch),
         }
       : {}),
     ...(usageLimitSourcesPatch !== undefined

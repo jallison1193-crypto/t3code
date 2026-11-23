@@ -24,6 +24,7 @@ import {
 } from "./keybindings.ts";
 import { EditorId, FileManagerRevealKind, RemoteOpenTarget } from "./editor.ts";
 import { ManagedPolicySummary } from "./managedPolicy.ts";
+import { EnvironmentPlugin } from "./plugin.ts";
 import { ModelCapabilities, ProviderOptionDescriptor } from "./model.ts";
 import { RuntimeMode } from "./providerPolicy.ts";
 import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
@@ -771,6 +772,8 @@ export const ServerConfig = Schema.Struct({
    * subscriber the same array twice per connect.
    */
   environmentThemes: Schema.optional(Schema.Array(EnvironmentTheme)),
+  /** Stream-only and opt-in; the plugin stream emits enabled plugin CSS on subscribe. */
+  environmentPlugins: Schema.optional(Schema.Array(EnvironmentPlugin)),
   /** Stream-only and opt-in; the source stream emits the current set on subscribe. */
   usageLimitSources: Schema.optional(UsageLimitSourceSnapshots),
 });
@@ -895,6 +898,20 @@ export const ServerConfigStreamEnvironmentThemesUpdatedEvent = Schema.Struct({
 export type ServerConfigStreamEnvironmentThemesUpdatedEvent =
   typeof ServerConfigStreamEnvironmentThemesUpdatedEvent.Type;
 
+export const ServerConfigEnvironmentPluginsUpdatedPayload = Schema.Struct({
+  plugins: Schema.Array(EnvironmentPlugin),
+});
+export type ServerConfigEnvironmentPluginsUpdatedPayload =
+  typeof ServerConfigEnvironmentPluginsUpdatedPayload.Type;
+
+export const ServerConfigStreamEnvironmentPluginsUpdatedEvent = Schema.Struct({
+  version: Schema.Literal(1),
+  type: Schema.Literal("environmentPluginsUpdated"),
+  payload: ServerConfigEnvironmentPluginsUpdatedPayload,
+});
+export type ServerConfigStreamEnvironmentPluginsUpdatedEvent =
+  typeof ServerConfigStreamEnvironmentPluginsUpdatedEvent.Type;
+
 export const ServerConfigUsageLimitSourcesUpdatedPayload = Schema.Struct({
   sources: UsageLimitSourceSnapshots,
 });
@@ -916,6 +933,7 @@ export const ServerConfigStreamEvent = Schema.Union([
   ServerConfigStreamProviderStatusDeltasEvent,
   ServerConfigStreamSettingsUpdatedEvent,
   ServerConfigStreamEnvironmentThemesUpdatedEvent,
+  ServerConfigStreamEnvironmentPluginsUpdatedEvent,
   ServerConfigStreamUsageLimitSourcesUpdatedEvent,
 ]);
 export type ServerConfigStreamEvent = typeof ServerConfigStreamEvent.Type;

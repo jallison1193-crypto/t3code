@@ -12675,5 +12675,57 @@
   "63e6db34aa9da336": "Inga filer hittades i de tillgängliga miljöerna.",
   "afcd3ff0d57176e6": "Sidor",
   "7a4e5e17bc86fd03": "Starta",
-  "39dc197f7836569d": "Föreslagna trådar"
+  "39dc197f7836569d": "Föreslagna trådar",
+  "c863fb8704e56cd5": "Tillägget uppdaterades inte",
+  "fd8927f12faf648b": "Kunde inte uppdatera tilläggets status.",
+  "98f26a1f3e3d587e": "Tillägget avinstallerades inte",
+  "05e7889d65b3edf5": "Kunde inte avinstallera tillägget.",
+  "cbd8c04be50de551": "Kunde inte läsa in tillägg",
+  "c72c61308fbd226a": [
+    "Uppdatera T3 Code på ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " för att hantera dess tillägg."
+  ],
+  "119fdf3a37955ebd": "Anslut en miljö för att hantera dess tillägg.",
+  "582e155f909e9bc4": "Läser in tillägg…",
+  "d82c581217d84120": "Tillägg ligger i tilläggsmappen nedan; snart kan agenter också bygga dem här.",
+  "cc0e82d6578ff61e": "Avinstallera",
+  "86c29ba4da470da1": [
+    "Tilläggsmapp:",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "734c0fead66883d0": [
+    "Avinstallera ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    "?"
+  ],
+  "0ad3072559ee9ecc": [
+    "Tilläggsmappen flyttas till",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": "plugins-archive"
+    },
+    " och dess aktiveringsinställning tas bort. Du kan återställa den senare genom att flytta tillbaka mappen."
+  ],
+  "c1b7649ac731ed07": "Tillägg",
+  "a4f2ab80d075b199": "tillägg plugins anpassad css stilar tema utseende installera avinstallera"
 }

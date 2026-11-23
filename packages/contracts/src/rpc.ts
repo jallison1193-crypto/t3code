@@ -88,6 +88,14 @@ import {
 } from "./acpRegistry.ts";
 import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
 import {
+  PluginOperationError,
+  ServerListPluginsResult,
+  ServerSetPluginEnabledInput,
+  ServerSetPluginEnabledResult,
+  ServerUninstallPluginInput,
+  ServerUninstallPluginResult,
+} from "./plugin.ts";
+import {
   ProjectKnowledgeAddInput,
   ProjectKnowledgeAddResult,
   ProjectKnowledgeDeleteInput,
@@ -619,6 +627,9 @@ export const WS_METHODS = {
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
   serverSetThreadSectionMembership: "server.setThreadSectionMembership",
+  serverListPlugins: "server.listPlugins",
+  serverSetPluginEnabled: "server.setPluginEnabled",
+  serverUninstallPlugin: "server.uninstallPlugin",
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverCheckSecretSource: "server.checkSecretSource",
   serverSearchAcpRegistry: "server.searchAcpRegistry",
@@ -1041,6 +1052,24 @@ const WsServerSetThreadSectionMembershipRpc = Rpc.make(
     error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
   },
 );
+
+const WsServerListPluginsRpc = Rpc.make(WS_METHODS.serverListPlugins, {
+  payload: Schema.Struct({}),
+  success: ServerListPluginsResult,
+  error: Schema.Union([PluginOperationError, EnvironmentAuthorizationError]),
+});
+
+const WsServerSetPluginEnabledRpc = Rpc.make(WS_METHODS.serverSetPluginEnabled, {
+  payload: ServerSetPluginEnabledInput,
+  success: ServerSetPluginEnabledResult,
+  error: Schema.Union([PluginOperationError, EnvironmentAuthorizationError]),
+});
+
+const WsServerUninstallPluginRpc = Rpc.make(WS_METHODS.serverUninstallPlugin, {
+  payload: ServerUninstallPluginInput,
+  success: ServerUninstallPluginResult,
+  error: Schema.Union([PluginOperationError, EnvironmentAuthorizationError]),
+});
 
 const WsServerDiscoverSourceControlRpc = Rpc.make(WS_METHODS.serverDiscoverSourceControl, {
   payload: Schema.Struct({}),
@@ -2348,6 +2377,8 @@ export const WsSubscribeServerConfigRpc = Rpc.make(WS_METHODS.subscribeServerCon
   payload: Schema.Struct({
     /** Opt-in protects older clients that reject unknown theme event types. */
     environmentThemes: Schema.optional(Schema.Boolean),
+    /** Opt-in protects older clients that reject unknown plugin event types. */
+    environmentPlugins: Schema.optional(Schema.Boolean),
     usageLimitSources: Schema.optional(Schema.Boolean),
     /** Advertise client handling before the server offers /usage-limits, or older clients send it as a prompt. */
     usageLimitsCommand: Schema.optional(Schema.Boolean),
@@ -2516,6 +2547,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerReclaimDatabaseSpaceRpc,
   WsServerUpdateSettingsRpc,
   WsServerSetThreadSectionMembershipRpc,
+  WsServerListPluginsRpc,
+  WsServerSetPluginEnabledRpc,
+  WsServerUninstallPluginRpc,
   WsPeerLinksListRpc,
   WsPeerLinksNamesRpc,
   WsPeerLinksLinkRpc,

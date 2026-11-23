@@ -12668,5 +12668,56 @@
   "63e6db34aa9da336": "In den verfügbaren Umgebungen wurden keine Dateien gefunden.",
   "afcd3ff0d57176e6": "Seiten",
   "7a4e5e17bc86fd03": "Starten",
-  "39dc197f7836569d": "Vorgeschlagene Threads"
+  "39dc197f7836569d": "Vorgeschlagene Threads",
+  "c863fb8704e56cd5": "Plugin nicht aktualisiert",
+  "fd8927f12faf648b": "Der Plugin-Status konnte nicht aktualisiert werden.",
+  "98f26a1f3e3d587e": "Plugin nicht deinstalliert",
+  "05e7889d65b3edf5": "Das Plugin konnte nicht deinstalliert werden.",
+  "cbd8c04be50de551": "Plugins konnten nicht geladen werden",
+  "c72c61308fbd226a": [
+    "Aktualisiere T3 Code auf ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ", um dessen Plugins zu verwalten."
+  ],
+  "119fdf3a37955ebd": "Verbinde eine Umgebung, um deren Plugins zu verwalten.",
+  "582e155f909e9bc4": "Plugins werden geladen…",
+  "d82c581217d84120": "Plugins liegen im folgenden Plugins-Ordner; bald können auch Agenten sie hier erstellen.",
+  "cc0e82d6578ff61e": "Deinstallieren",
+  "86c29ba4da470da1": [
+    "Plugins-Ordner:",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "734c0fead66883d0": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " deinstallieren?"
+  ],
+  "0ad3072559ee9ecc": [
+    "Der Plugin-Ordner wird nach",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": "plugins-archive"
+    },
+    " verschoben und seine Aktivierungs-Einstellung wird entfernt. Du kannst ihn später wiederherstellen, indem du den Ordner zurückverschiebst."
+  ],
+  "c1b7649ac731ed07": "Plugins",
+  "a4f2ab80d075b199": "erweiterungen plugins eigenes css stile theme erscheinungsbild installieren deinstallieren"
 }

@@ -1,12 +1,23 @@
+import type { EnvironmentPlugin } from "@t3tools/contracts";
 import { themeCssValueFetches } from "@t3tools/shared/themeCss";
 
-// Theme CSS comes from imported files and from agents, so it must not fetch: a
+import { orderAdoptedStyleSheets, sameStyleSheetOrder } from "./themeCss.logic";
+
+// Theme and plugin CSS come from imported files and from agents, so they must not fetch: a
 // url() on an attribute selector can send what is on screen to another host.
 // The browser parses the text first, so the checks see normalized values and
 // CSS escapes in a function name cannot dodge them.
 
 let themeSheet: CSSStyleSheet | null = null;
 let appliedCss = "";
+
+interface AppliedPluginSheet {
+  readonly sheet: CSSStyleSheet;
+  css: string;
+}
+
+const pluginSheetsById = new Map<string, AppliedPluginSheet>();
+let pluginSheetOrder: ReadonlyArray<string> = [];
 
 type RuleParent = Pick<CSSStyleSheet, "cssRules" | "deleteRule">;
 
@@ -49,6 +60,21 @@ function stripFetches(parent: RuleParent): void {
   }
 }
 
+function syncAdoptedStyleSheets(removedSheets?: ReadonlySet<CSSStyleSheet>): void {
+  const orderedPluginSheets = pluginSheetOrder.flatMap((id) => {
+    const entry = pluginSheetsById.get(id);
+    return entry ? [entry.sheet] : [];
+  });
+  const next = orderAdoptedStyleSheets(document.adoptedStyleSheets, {
+    themeSheet,
+    pluginSheets: orderedPluginSheets,
+    ...(removedSheets === undefined ? {} : { removedSheets }),
+  });
+  if (!sameStyleSheetOrder(document.adoptedStyleSheets, next)) {
+    document.adoptedStyleSheets = [...next];
+  }
+}
+
 export function applyThemeCss(css: string | undefined): void {
   if (typeof document === "undefined" || typeof CSSStyleSheet === "undefined") return;
   const next = css ?? "";
@@ -57,8 +83,43 @@ export function applyThemeCss(css: string | undefined): void {
   if (!themeSheet) {
     // Adopted sheets order after the document's own, and they cannot hold @import.
     themeSheet = new CSSStyleSheet();
-    document.adoptedStyleSheets = [...document.adoptedStyleSheets, themeSheet];
+    syncAdoptedStyleSheets();
   }
   themeSheet.replaceSync(next);
   stripFetches(themeSheet);
+}
+
+export function applyPluginCss(plugins: ReadonlyArray<EnvironmentPlugin>): void {
+  if (typeof document === "undefined" || typeof CSSStyleSheet === "undefined") return;
+  const nextIds = new Set<string>();
+  const nextOrder: Array<string> = [];
+  for (const plugin of plugins) {
+    if (nextIds.has(plugin.id)) continue;
+    nextIds.add(plugin.id);
+    nextOrder.push(plugin.id);
+    const existing = pluginSheetsById.get(plugin.id);
+    if (existing) {
+      if (existing.css !== plugin.css) {
+        existing.css = plugin.css;
+        existing.sheet.replaceSync(plugin.css);
+        stripFetches(existing.sheet);
+      }
+    } else {
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(plugin.css);
+      stripFetches(sheet);
+      pluginSheetsById.set(plugin.id, { sheet, css: plugin.css });
+    }
+  }
+
+  const removedSheets = new Set<CSSStyleSheet>();
+  for (const [id, entry] of pluginSheetsById) {
+    if (!nextIds.has(id)) {
+      removedSheets.add(entry.sheet);
+      pluginSheetsById.delete(id);
+    }
+  }
+
+  pluginSheetOrder = nextOrder;
+  syncAdoptedStyleSheets(removedSheets);
 }

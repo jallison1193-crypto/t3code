@@ -36,6 +36,7 @@ import {
   useComposerDraftStore,
 } from "./composerDraftStore";
 import { startDefaultThemeAdoption } from "./hooks/useDefaultTheme";
+import { startEnvironmentPluginCss } from "./hooks/useEnvironmentPlugins";
 import { startEnvironmentThemeRepaint } from "./hooks/useEnvironmentTheme";
 import { startThemeBackground } from "./themeBackground";
 import { readLocalStorageValue, subscribeLocalStorageKey } from "./hooks/useLocalStorage";
@@ -275,6 +276,7 @@ export function startAppServices(): AppRouter {
   startDocumentTitle(router);
   startHostEnvironmentLookup();
   startEnvironmentThemeRepaint();
+  startEnvironmentPluginCss();
   startThemeBackground();
   startBrowserChromeThemeSync(router);
   startDefaultThemeAdoption();
