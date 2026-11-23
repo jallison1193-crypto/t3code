@@ -12,3 +12,5 @@ numbers the unsent draft at the top before the threads below it
 does not re-render thread rows when a quick Mod shortcut opens and focuses the terminal
 # Needs node:sqlite StatementSync#stat (Node 26); fails on this machine's Node 24.
 reads a fixed SQL turn-item window for long histories and repeated clients
+# Expects a POSIX prefix path; fails on Windows with a mixed-separator temp path.
+publishes proven install ownership only for manually updated servers
