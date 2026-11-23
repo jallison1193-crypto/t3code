@@ -1,7 +1,10 @@
 import {
+  type HtmlLibraryEntryOverride,
   type OrchestrationV2ListHtmlLibraryInput,
   type OrchestrationV2ListHtmlLibraryResult,
   ProjectId,
+  type ServerSettingsError,
+  type SidebarModeFilter,
   StoredThreadTags,
   ThreadId,
   TurnItemId,
@@ -21,9 +24,11 @@ import {
   parseThreadSegmentFromAttachmentId,
   toSafeThreadAttachmentSegment,
 } from "../attachmentStore.ts";
+import * as ServerSettings from "../serverSettings.ts";
 
 const CANDIDATE_LIMIT = 100;
 const DEFAULT_PAGE_SIZE = 25;
+const PINNED_LOOKUP_BATCH_SIZE = 500;
 
 const decodeToolItem = Schema.decodeUnknownOption(
   Schema.fromJsonString(
@@ -46,17 +51,68 @@ interface Candidate {
   readonly payload: string | null;
 }
 
+type LibraryEntry = OrchestrationV2ListHtmlLibraryResult["entries"][number];
+
+function compareStrings(a: string, b: string) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function toLibraryEntry(
+  row: Candidate,
+  mode: SidebarModeFilter,
+  seen: Set<string>,
+  overrides: Readonly<Record<string, HtmlLibraryEntryOverride>>,
+): LibraryEntry | null {
+  if (
+    row.payload === null ||
+    row.threadTitle === null ||
+    row.projectId === null ||
+    row.projectTitle === null
+  ) {
+    return null;
+  }
+  const tags = Option.getOrUndefined(decodeTags(row.tags));
+  const threadMode = tags?.includes(WORK_MODE_TAG) ? "work" : "code";
+  if (mode !== "all" && mode !== threadMode) return null;
+
+  const item = Option.getOrUndefined(decodeToolItem(row.payload));
+  const reference = item === undefined ? undefined : htmlRenderFromToolItem(item);
+  if (reference === undefined || seen.has(reference.attachmentId)) return null;
+  const owner = parseThreadSegmentFromAttachmentId(reference.attachmentId);
+  if (owner === null || owner !== toSafeThreadAttachmentSegment(row.threadId)) return null;
+
+  seen.add(reference.attachmentId);
+  const override = Object.hasOwn(overrides, reference.attachmentId)
+    ? overrides[reference.attachmentId]
+    : undefined;
+  const pinnedAt = override?.pinnedAt;
+  return {
+    ...reference,
+    ...(override?.title === undefined ? {} : { title: override.title }),
+    pinned: pinnedAt !== undefined,
+    ...(pinnedAt === undefined ? {} : { pinnedAt }),
+    updatedAt: row.updatedAt,
+    itemId: TurnItemId.make(row.itemId),
+    threadId: ThreadId.make(row.threadId),
+    threadTitle: row.threadTitle,
+    projectId: ProjectId.make(row.projectId),
+    projectTitle: row.projectTitle,
+    mode: threadMode,
+  };
+}
+
 export class HtmlLibrary extends Context.Service<
   HtmlLibrary,
   {
     readonly list: (
       input: OrchestrationV2ListHtmlLibraryInput,
-    ) => Effect.Effect<OrchestrationV2ListHtmlLibraryResult, SqlError>;
+    ) => Effect.Effect<OrchestrationV2ListHtmlLibraryResult, SqlError | ServerSettingsError>;
   }
 >()("t3/orchestration-v2/HtmlLibrary") {}
 
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  const serverSettings = yield* ServerSettings.ServerSettingsService;
   // Fork-only index: a numbered migration would collide with upstream's next migration id.
   yield* sql`
     CREATE INDEX IF NOT EXISTS orchestration_v2_projection_turn_items_html_library_idx
@@ -69,8 +125,54 @@ const make = Effect.gen(function* () {
     mode = "all",
     limit = DEFAULT_PAGE_SIZE,
     cursor,
+    pinned,
   }: OrchestrationV2ListHtmlLibraryInput) {
     if (projectIds?.length === 0) return { entries: [], nextCursor: null };
+    const { htmlLibraryEntries } = yield* serverSettings.getSettings;
+
+    if (pinned) {
+      const itemIds = [
+        ...new Set(
+          Object.values(htmlLibraryEntries).flatMap((entry) =>
+            entry.pinnedAt === undefined ? [] : [entry.itemId],
+          ),
+        ),
+      ];
+      if (itemIds.length === 0) return { entries: [], nextCursor: null };
+
+      const entries: Array<LibraryEntry> = [];
+      const seen = new Set<string>();
+      for (let start = 0; start < itemIds.length; start += PINNED_LOOKUP_BATCH_SIZE) {
+        const batch = itemIds.slice(start, start + PINNED_LOOKUP_BATCH_SIZE);
+        const rows = yield* sql<Candidate>`
+          SELECT
+            item.turn_item_id AS itemId, item.updated_at AS updatedAt, item.thread_id AS threadId,
+            thread.title AS threadTitle, project.project_id AS projectId, project.title AS projectTitle,
+            CASE WHEN json_valid(thread.payload_json) THEN thread.payload_json -> '$.tags' END AS tags,
+            CASE WHEN thread.deleted_at IS NULL AND project.deleted_at IS NULL
+              AND project.project_id IS NOT NULL AND run.status IS NOT 'rolled_back'
+              ${projectIds === undefined ? sql`` : sql`AND project.project_id IN ${sql.in(projectIds)}`}
+              THEN item.payload_json END AS payload
+          FROM orchestration_v2_projection_turn_items AS item
+          LEFT JOIN orchestration_v2_projection_threads AS thread ON thread.thread_id = item.thread_id
+          LEFT JOIN projection_projects AS project ON project.project_id = thread.project_id
+          LEFT JOIN orchestration_v2_projection_runs AS run ON run.run_id = item.run_id
+          WHERE item.turn_item_id IN ${sql.in(batch)}
+            AND item.type = 'dynamic_tool' AND item.status = 'completed' AND item.inline_work_output = 1
+        `.pipe(NodeSqliteClient.readOnly);
+        for (const row of rows) {
+          const entry = toLibraryEntry(row, mode, seen, htmlLibraryEntries);
+          if (entry?.pinned) entries.push(entry);
+        }
+      }
+      entries.sort(
+        (a, b) =>
+          compareStrings(b.pinnedAt ?? "", a.pinnedAt ?? "") ||
+          compareStrings(b.updatedAt, a.updatedAt) ||
+          compareStrings(b.itemId, a.itemId),
+      );
+      return { entries, nextCursor: null };
+    }
 
     // Filter in the SELECT so even a sparse project or mode examines a bounded batch.
     const rows = yield* sql<Candidate>`
@@ -96,40 +198,14 @@ const make = Effect.gen(function* () {
       LIMIT ${CANDIDATE_LIMIT + 1}
     `.pipe(NodeSqliteClient.readOnly);
 
-    const entries: Array<OrchestrationV2ListHtmlLibraryResult["entries"][number]> = [];
+    const entries: Array<LibraryEntry> = [];
     const seen = new Set<string>();
     let examined = 0;
     for (const row of rows.slice(0, CANDIDATE_LIMIT)) {
       examined++;
-      if (
-        row.payload === null ||
-        row.threadTitle === null ||
-        row.projectId === null ||
-        row.projectTitle === null
-      ) {
-        continue;
-      }
-      const tags = Option.getOrUndefined(decodeTags(row.tags));
-      const threadMode = tags?.includes(WORK_MODE_TAG) ? "work" : "code";
-      if (mode !== "all" && mode !== threadMode) continue;
-
-      const item = Option.getOrUndefined(decodeToolItem(row.payload));
-      const reference = item === undefined ? undefined : htmlRenderFromToolItem(item);
-      if (reference === undefined || seen.has(reference.attachmentId)) continue;
-      const owner = parseThreadSegmentFromAttachmentId(reference.attachmentId);
-      if (owner === null || owner !== toSafeThreadAttachmentSegment(row.threadId)) continue;
-
-      seen.add(reference.attachmentId);
-      entries.push({
-        ...reference,
-        updatedAt: row.updatedAt,
-        itemId: TurnItemId.make(row.itemId),
-        threadId: ThreadId.make(row.threadId),
-        threadTitle: row.threadTitle,
-        projectId: ProjectId.make(row.projectId),
-        projectTitle: row.projectTitle,
-        mode: threadMode,
-      });
+      const entry = toLibraryEntry(row, mode, seen, htmlLibraryEntries);
+      if (entry === null) continue;
+      entries.push(entry);
       if (entries.length === limit) break;
     }
 

@@ -4644,6 +4644,7 @@ export const OrchestrationV2ListHtmlLibraryInput = Schema.Struct({
   mode: Schema.optionalKey(SidebarModeFilter),
   limit: Schema.optionalKey(PositiveInt.check(Schema.isLessThanOrEqualTo(50))),
   cursor: Schema.optionalKey(HtmlLibraryCursor),
+  pinned: Schema.optionalKey(Schema.Boolean),
 });
 export type OrchestrationV2ListHtmlLibraryInput = typeof OrchestrationV2ListHtmlLibraryInput.Type;
 
@@ -4659,6 +4660,8 @@ const HtmlLibraryEntry = Schema.Struct({
   projectId: ProjectId,
   projectTitle: Schema.String,
   mode: AppMode,
+  pinned: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  pinnedAt: Schema.optionalKey(IsoDateTime),
 });
 
 export const OrchestrationV2ListHtmlLibraryResult = Schema.Struct({

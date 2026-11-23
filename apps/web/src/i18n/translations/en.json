@@ -12656,5 +12656,15 @@
   "c00c7b62908473c5": "HTML Library",
   "1d829f40405b2c18": "Library",
   "e0aa7a66b051d7cb": "HTML Library",
-  "12f0890f800baa7a": "Page unavailable"
+  "12f0890f800baa7a": "Page unavailable",
+  "dde3a6f36853adfa": "Ask for changes",
+  "bf4875cf9e6328ca": "Page title must be a single line.",
+  "691edcc4a7bbefca": "Page actions",
+  "974add1723faa11c": "This server did not apply the library change.",
+  "66ab6f6679ccdc63": "Rename page",
+  "7bdcbe837beed0fe": "Leave blank to restore the original title.",
+  "ca5329d3b79435a3": "Page title",
+  "9b20df3e21a3d401": "Rename",
+  "b67dfd6af7548dc9": "Pinned",
+  "37e8aca9f358a91f": "Recent"
 }

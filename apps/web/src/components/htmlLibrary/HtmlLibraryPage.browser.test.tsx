@@ -1,4 +1,10 @@
-import { EnvironmentId, ProjectId, ThreadId, TurnItemId } from "@t3tools/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  EnvironmentId,
+  ProjectId,
+  ThreadId,
+  TurnItemId,
+} from "@t3tools/contracts";
 import { expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
@@ -11,10 +17,24 @@ import { HtmlLibraryPage } from "./HtmlLibraryPage";
 const primary = EnvironmentId.make("primary");
 const remote = EnvironmentId.make("remote");
 const offline = EnvironmentId.make("offline");
-const mocks = vi.hoisted(() => ({ read: vi.fn(), asset: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  read: vi.fn(),
+  asset: vi.fn(),
+  updateSettings: vi.fn(),
+  editable: new Set<EnvironmentId>(),
+}));
 
 vi.mock("~/state/use-atom-query-runner", () => ({
   useAtomQueryRunner: () => mocks.read,
+}));
+
+vi.mock("~/state/use-atom-command", () => ({
+  useAtomCommand: () => mocks.updateSettings,
+}));
+
+vi.mock("~/state/session", async (original) => ({
+  ...(await original<typeof import("~/state/session")>()),
+  useEnvironmentsWithScope: () => mocks.editable,
 }));
 
 vi.mock("~/assets/longLivedAssetUrls", () => ({
@@ -39,6 +59,8 @@ vi.mock("~/state/environments", async (original) => ({
 function setup() {
   mocks.read.mockReset();
   mocks.asset.mockReset();
+  mocks.updateSettings.mockReset();
+  mocks.editable = new Set();
   const before = getClientSettings();
   __setClientSettingsForTests({ ...before, appMode: "code", sidebarModeFilter: "all" });
   return { [Symbol.dispose]: () => __setClientSettingsForTests(before) };
@@ -47,30 +69,31 @@ function setup() {
 it("loads on opening, keeps partial results, and resolves the preview on its source host", async () => {
   using _settings = setup();
   const cursor = { updatedAt: "2026-11-20T00:00:00.000Z", itemId: TurnItemId.make("item") };
-  mocks.read
-    .mockResolvedValueOnce({ _tag: "Failure", cause: new Error("Unknown RPC") })
-    .mockResolvedValueOnce({ _tag: "Success", value: { entries: [], nextCursor: cursor } })
-    .mockResolvedValueOnce({
-      _tag: "Success",
-      value: {
-        entries: [
-          {
-            ...cursor,
-            updatedAt: "2026-11-19T00:00:00.000Z",
-            attachmentId: "attachment",
-            title: "Quarterly chart",
-            height: 300,
-            mode: "work",
-            threadId: ThreadId.make("source"),
-            threadTitle: "Analysis",
-            projectId: ProjectId.make("reports"),
-            projectTitle: "Reports",
-          },
-        ],
-        nextCursor: null,
-      },
-    })
-    .mockResolvedValue({ _tag: "Success", value: { entries: [], nextCursor: null } });
+  const chartEntry = {
+    ...cursor,
+    updatedAt: "2026-11-19T00:00:00.000Z",
+    attachmentId: "attachment",
+    title: "Quarterly chart",
+    height: 300,
+    mode: "work" as const,
+    pinned: false,
+    threadId: ThreadId.make("source"),
+    threadTitle: "Analysis",
+    projectId: ProjectId.make("reports"),
+    projectTitle: "Reports",
+  };
+  mocks.read.mockImplementation(async ({ environmentId, input }) => {
+    if (environmentId === primary && input.mode === "all") {
+      return { _tag: "Failure", cause: new Error("Unknown RPC") };
+    }
+    if (environmentId === remote && input.mode === "all" && !input.pinned && !input.cursor) {
+      return { _tag: "Success", value: { entries: [], nextCursor: cursor } };
+    }
+    if (environmentId === remote && input.mode === "all" && input.cursor) {
+      return { _tag: "Success", value: { entries: [chartEntry], nextCursor: null } };
+    }
+    return { _tag: "Success", value: { entries: [], nextCursor: null } };
+  });
   mocks.asset.mockReturnValue({
     _tag: "Success",
     url: "https://build-machine.test/attachment.html",
@@ -95,10 +118,12 @@ it("loads on opening, keeps partial results, and resolves the preview on its sou
   expect(mocks.read.mock.calls.map(([target]) => target)).toEqual([
     { environmentId: primary, input: { mode: "all" } },
     { environmentId: remote, input: { mode: "all" } },
+    { environmentId: primary, input: { mode: "all", pinned: true } },
+    { environmentId: remote, input: { mode: "all", pinned: true } },
   ]);
   await userEvent.click(screen.getByRole("button", { name: "Load more" }));
   await expect.element(screen.getByText("Quarterly chart")).toBeVisible();
-  expect(mocks.read.mock.calls[2]?.[0]).toEqual({
+  expect(mocks.read.mock.calls[4]?.[0]).toEqual({
     environmentId: remote,
     input: { mode: "all", cursor },
   });
@@ -126,8 +151,113 @@ it("loads on opening, keeps partial results, and resolves the preview on its sou
   await expect
     .element(screen.getByText("No HTML pages found in available environments."))
     .toBeVisible();
-  expect(mocks.read.mock.calls.slice(3).map(([target]) => target.input)).toEqual([
+  expect(mocks.read.mock.calls.slice(5).map(([target]) => target.input)).toEqual([
     { mode: "work" },
     { mode: "work" },
+    { mode: "work", pinned: true },
+    { mode: "work", pinned: true },
   ]);
+});
+
+it("pins and unpins a page into the Pinned section and hides it from the recent list", async () => {
+  using _settings = setup();
+  mocks.editable = new Set([remote]);
+  let pinnedAt: string | undefined;
+  const makeEntries = () => [
+    {
+      updatedAt: "2026-11-20T00:00:00.000Z",
+      itemId: TurnItemId.make("item-pin"),
+      attachmentId: "pin-att",
+      title: "Architecture diagram",
+      height: 300,
+      mode: "code" as const,
+      pinned: pinnedAt !== undefined,
+      ...(pinnedAt === undefined ? {} : { pinnedAt }),
+      threadId: ThreadId.make("thread-pin"),
+      threadTitle: "Design",
+      projectId: ProjectId.make("app"),
+      projectTitle: "App",
+    },
+    {
+      updatedAt: "2026-11-19T00:00:00.000Z",
+      itemId: TurnItemId.make("item-other"),
+      attachmentId: "other-att",
+      title: "Latency table",
+      height: 300,
+      mode: "code" as const,
+      pinned: false,
+      threadId: ThreadId.make("thread-other"),
+      threadTitle: "Perf",
+      projectId: ProjectId.make("app"),
+      projectTitle: "App",
+    },
+  ];
+  mocks.read.mockImplementation(async ({ environmentId, input }) => {
+    if (environmentId !== remote) {
+      return { _tag: "Success", value: { entries: [], nextCursor: null } };
+    }
+    const entries = makeEntries();
+    return {
+      _tag: "Success",
+      value: {
+        entries: input.pinned ? entries.filter((entry) => entry.pinned) : entries,
+        nextCursor: null,
+      },
+    };
+  });
+  mocks.updateSettings.mockImplementation(async ({ input }) => {
+    const patchEntry = input.patch.htmlLibraryEntries?.["pin-att"];
+    pinnedAt = patchEntry?.pinnedAt;
+    return {
+      _tag: "Success",
+      value: {
+        ...DEFAULT_SERVER_SETTINGS,
+        htmlLibraryEntries: patchEntry ? { "pin-att": patchEntry } : {},
+      },
+    };
+  });
+
+  await using screen = await render(
+    <SidebarProvider>
+      <HtmlLibraryPage />
+    </SidebarProvider>,
+  );
+
+  await expect.element(screen.getByText("Architecture diagram")).toBeVisible();
+  await expect.element(screen.getByText("Latency table")).toBeVisible();
+  await expect.element(screen.getByRole("heading", { name: "Pinned" })).not.toBeInTheDocument();
+
+  const actionButtons = screen.getByRole("button", { name: "Page actions" });
+  await userEvent.click(actionButtons.nth(0));
+  await userEvent.click(page.getByRole("menuitem", { name: "Pin" }));
+
+  await expect.element(screen.getByRole("heading", { name: "Pinned" })).toBeVisible();
+  await expect.element(screen.getByRole("heading", { name: "Recent" })).toBeVisible();
+  expect(mocks.updateSettings).toHaveBeenCalledTimes(1);
+  expect(mocks.updateSettings.mock.calls[0]?.[0]).toMatchObject({
+    environmentId: remote,
+    input: {
+      patch: {
+        htmlLibraryEntries: {
+          "pin-att": {
+            threadId: ThreadId.make("thread-pin"),
+            itemId: TurnItemId.make("item-pin"),
+            pinnedAt: expect.any(String),
+          },
+        },
+      },
+    },
+  });
+  // Pinned entry appears once (in Pinned) and is hidden from Recent below it.
+  expect(screen.getByRole("button", { name: /Architecture diagram/ }).elements()).toHaveLength(1);
+  expect(screen.getByRole("button", { name: /Latency table/ }).elements()).toHaveLength(1);
+
+  await userEvent.click(screen.getByRole("button", { name: "Page actions" }).nth(0));
+  await userEvent.click(page.getByRole("menuitem", { name: "Unpin" }));
+  await expect.element(screen.getByRole("heading", { name: "Pinned" })).not.toBeInTheDocument();
+  expect(mocks.updateSettings.mock.calls[1]?.[0]).toEqual({
+    environmentId: remote,
+    input: { patch: { htmlLibraryEntries: { "pin-att": null } } },
+  });
+  expect(screen.getByRole("button", { name: /Architecture diagram/ }).elements()).toHaveLength(1);
 });

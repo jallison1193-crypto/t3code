@@ -8,9 +8,12 @@ import * as SqlClient from "effect/sql/SqlClient";
 import { createAttachmentId } from "../attachmentStore.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import { traceSqlRouting } from "../persistence/testkit/SqliteRouting.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as HtmlLibrary from "./HtmlLibrary.ts";
 
-const layerTest = HtmlLibrary.layer.pipe(Layer.provideMerge(SqlitePersistence.layerMemory));
+const layerTest = HtmlLibrary.layer.pipe(
+  Layer.provideMerge(Layer.merge(SqlitePersistence.layerMemory, ServerSettings.layerTest())),
+);
 const at = "2026-11-21T13:00:00.000Z";
 
 const addProject = Effect.fn("HtmlLibraryTest.addProject")(function* (
@@ -150,6 +153,7 @@ describe("published HTML library", () => {
           entries: [
             {
               ...source,
+              pinned: false,
               itemId: TurnItemId.make("z-source"),
               threadId: ThreadId.make("Thread:Source"),
               threadTitle: "Thread:Source",
@@ -160,6 +164,7 @@ describe("published HTML library", () => {
             },
             {
               ...local,
+              pinned: false,
               itemId: TurnItemId.make("y-fork"),
               threadId: ThreadId.make("fork"),
               threadTitle: "fork",
@@ -278,5 +283,151 @@ describe("published HTML library", () => {
         assert.notInclude(plan.map((row) => row.detail).join("\n"), "TEMP B-TREE");
       }
     }).pipe(Effect.provide(layerTest)),
+  );
+
+  it.effect(
+    "applies title overrides and pin flags, and looks up pinned live entries in pin order by primary key",
+    () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        const library = yield* HtmlLibrary.HtmlLibrary;
+        const settings = yield* ServerSettings.ServerSettingsService;
+        yield* addProject("project");
+        yield* addProject("other");
+        yield* addThread("work-thread", { projectId: "project", tags: [WORK_MODE_TAG] });
+        yield* addThread("code-thread", { projectId: "other" });
+        yield* addThread("deleted-thread", { projectId: "project", deleted: true });
+        yield* sql`
+          INSERT INTO orchestration_v2_projection_runs
+            (run_id, thread_id, ordinal, provider, status, requested_at, payload_json)
+          VALUES ('rolled-back', 'work-thread', 1, 'codex', 'rolled_back', ${at}, '{}')
+        `;
+        const olderPin = referenceFor("work-thread");
+        const newerPin = referenceFor("code-thread");
+        const renamedOnly = referenceFor("code-thread");
+        const deletedRef = referenceFor("deleted-thread");
+        const rolledBackRef = referenceFor("work-thread");
+        yield* addCandidate("item-older", "work-thread", { htmlRender: olderPin });
+        yield* addCandidate("item-newer", "code-thread", { htmlRender: newerPin });
+        yield* addCandidate("item-renamed", "code-thread", { htmlRender: renamedOnly });
+        yield* addCandidate("item-deleted", "deleted-thread", { htmlRender: deletedRef });
+        yield* addCandidate(
+          "item-rollback",
+          "work-thread",
+          { htmlRender: rolledBackRef },
+          { runId: "rolled-back" },
+        );
+
+        yield* settings.updateSettings({
+          htmlLibraryEntries: {
+            [olderPin.attachmentId]: {
+              threadId: ThreadId.make("work-thread"),
+              itemId: TurnItemId.make("item-older"),
+              title: "Custom work title",
+              pinnedAt: "2026-11-22T01:00:00.000Z",
+            },
+            [newerPin.attachmentId]: {
+              threadId: ThreadId.make("code-thread"),
+              itemId: TurnItemId.make("item-newer"),
+              pinnedAt: "2026-11-22T02:00:00.000Z",
+            },
+            [renamedOnly.attachmentId]: {
+              threadId: ThreadId.make("code-thread"),
+              itemId: TurnItemId.make("item-renamed"),
+              title: "Renamed only",
+            },
+            [deletedRef.attachmentId]: {
+              threadId: ThreadId.make("deleted-thread"),
+              itemId: TurnItemId.make("item-deleted"),
+              pinnedAt: "2026-11-22T03:00:00.000Z",
+            },
+            [rolledBackRef.attachmentId]: {
+              threadId: ThreadId.make("work-thread"),
+              itemId: TurnItemId.make("item-rollback"),
+              pinnedAt: "2026-11-22T04:00:00.000Z",
+            },
+          },
+        });
+
+        const all = yield* library.list({});
+        assert.deepEqual(
+          all.entries.map((entry) => ({
+            itemId: entry.itemId,
+            title: entry.title,
+            pinned: entry.pinned,
+            pinnedAt: entry.pinnedAt,
+          })),
+          [
+            {
+              itemId: TurnItemId.make("item-renamed"),
+              title: "Renamed only",
+              pinned: false,
+              pinnedAt: undefined,
+            },
+            {
+              itemId: TurnItemId.make("item-older"),
+              title: "Custom work title",
+              pinned: true,
+              pinnedAt: "2026-11-22T01:00:00.000Z",
+            },
+            {
+              itemId: TurnItemId.make("item-newer"),
+              title: "Published page",
+              pinned: true,
+              pinnedAt: "2026-11-22T02:00:00.000Z",
+            },
+          ],
+        );
+
+        const trace = traceSqlRouting();
+        const pinnedAll = yield* trace.trace(library.list({ pinned: true }));
+        assert.isNull(pinnedAll.nextCursor);
+        assert.deepEqual(
+          pinnedAll.entries.map((entry) => ({
+            itemId: entry.itemId,
+            title: entry.title,
+            pinned: entry.pinned,
+            pinnedAt: entry.pinnedAt,
+          })),
+          [
+            {
+              itemId: TurnItemId.make("item-newer"),
+              title: "Published page",
+              pinned: true,
+              pinnedAt: "2026-11-22T02:00:00.000Z",
+            },
+            {
+              itemId: TurnItemId.make("item-older"),
+              title: "Custom work title",
+              pinned: true,
+              pinnedAt: "2026-11-22T01:00:00.000Z",
+            },
+          ],
+        );
+        assert.lengthOf(trace.queries, 1);
+        const plan = yield* sql.unsafe<{ detail: string }>(
+          `EXPLAIN QUERY PLAN ${trace.queries[0]!.query}`,
+          ["item-older", "item-newer", "item-deleted", "item-rollback"],
+        );
+        assert.include(plan[0]?.detail, "SEARCH item USING INDEX");
+        assert.notInclude(
+          plan[0]?.detail,
+          "orchestration_v2_projection_turn_items_html_library_idx",
+        );
+
+        const pinnedWork = yield* library.list({ pinned: true, mode: "work" });
+        assert.deepEqual(
+          pinnedWork.entries.map((entry) => entry.itemId),
+          [TurnItemId.make("item-older")],
+        );
+        const pinnedOther = yield* library.list({
+          pinned: true,
+          projectIds: [ProjectId.make("other")],
+        });
+        assert.deepEqual(
+          pinnedOther.entries.map((entry) => entry.itemId),
+          [TurnItemId.make("item-newer")],
+        );
+      }).pipe(Effect.provide(layerTest)),
   );
 });

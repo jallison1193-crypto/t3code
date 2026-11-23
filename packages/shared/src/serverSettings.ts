@@ -404,6 +404,7 @@ export function applyServerSettingsPatch(
     // Per-entry patches use null for deletion, which deepMerge would retain.
     threadSections: threadSectionsPatch,
     renameThreadSection,
+    htmlLibraryEntries: htmlLibraryEntriesPatch,
     usageLimitSources: usageLimitSourcesPatch,
     textGenerators: textGeneratorsPatch,
     secretProviders: secretProvidersPatch,
@@ -636,6 +637,14 @@ export function applyServerSettingsPatch(
       ? { defaultProjectScripts: patch.defaultProjectScripts }
       : {}),
     threadSections,
+    ...(htmlLibraryEntriesPatch !== undefined
+      ? {
+          htmlLibraryEntries: mergeSettingsEntries(
+            current.htmlLibraryEntries,
+            htmlLibraryEntriesPatch,
+          ),
+        }
+      : {}),
     ...(usageLimitSourcesPatch !== undefined
       ? {
           usageLimitSources: mergeSettingsEntries(

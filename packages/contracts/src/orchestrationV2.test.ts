@@ -14,6 +14,8 @@ import {
 import {
   latestProviderTurnForAttempt,
   OrchestrationV2CheckpointFileSummary,
+  OrchestrationV2ListHtmlLibraryInput,
+  OrchestrationV2ListHtmlLibraryResult,
   repositoryRewindCheckpoint,
   OrchestrationV2ProviderCapabilities,
   OrchestrationV2ProviderThread,
@@ -743,5 +745,36 @@ describe("withMessageSenderNote", () => {
     [{ createdBy: "agent", creationSource: "server" }, "Hi", "Hi"],
   ] as const)("labels %j's message %j for the provider", (message, text, expected) => {
     expect(withMessageSenderNote(message, text)).toBe(expected);
+  });
+});
+
+describe("HTML library contracts", () => {
+  const decodeInput = Schema.decodeUnknownSync(OrchestrationV2ListHtmlLibraryInput);
+  const decodeResult = Schema.decodeUnknownSync(OrchestrationV2ListHtmlLibraryResult);
+
+  it("decodes older result entries without pinned fields and accepts pinned filter input", () => {
+    expect(decodeInput({ pinned: true })).toEqual({ pinned: true });
+    expect(
+      decodeResult({
+        entries: [
+          {
+            attachmentId: "thread-1-page.html",
+            title: "Chart",
+            height: 320,
+            updatedAt: "2026-11-22T00:00:00.000Z",
+            itemId: "item-1",
+            threadId: "thread-1",
+            threadTitle: "Thread",
+            projectId: "project-1",
+            projectTitle: "Project",
+            mode: "work",
+          },
+        ],
+        nextCursor: null,
+      }),
+    ).toMatchObject({
+      entries: [{ attachmentId: "thread-1-page.html", pinned: false }],
+      nextCursor: null,
+    });
   });
 });

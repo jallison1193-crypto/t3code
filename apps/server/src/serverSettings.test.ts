@@ -18,6 +18,7 @@ import {
   ServerSettingsPatch,
   ThreadId,
   ThreadSectionId,
+  TurnItemId,
   UsageLimitSourceId,
   type SimlockDeviceHostConfig,
 } from "@t3tools/contracts";
@@ -184,6 +185,34 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
       assert.deepEqual(removed.threadSections, { [reading]: { name: "Reading" } });
       assert.equal(removed.responseStreamingMode, "turn");
       assert.isTrue(removed.defaultAutoPull);
+
+      const pinnedEntry = {
+        threadId: ThreadId.make("thread-a"),
+        itemId: TurnItemId.make("item-a"),
+        title: "Quarterly report",
+        pinnedAt: "2026-11-22T00:00:00.000Z",
+      };
+      const renamedEntry = {
+        threadId: ThreadId.make("thread-b"),
+        itemId: TurnItemId.make("item-b"),
+        title: "Overview",
+      };
+      yield* Effect.all(
+        [
+          service.updateSettings({ htmlLibraryEntries: { "a.html": pinnedEntry } }),
+          service.updateSettings({ htmlLibraryEntries: { "b.html": renamedEntry } }),
+        ],
+        { concurrency: "unbounded" },
+      );
+      assert.deepEqual((yield* readPersisted).htmlLibraryEntries, {
+        "a.html": pinnedEntry,
+        "b.html": renamedEntry,
+      });
+
+      yield* service.updateSettings({ htmlLibraryEntries: { "a.html": null } });
+      assert.deepEqual((yield* readPersisted).htmlLibraryEntries, {
+        "b.html": renamedEntry,
+      });
     }).pipe(Effect.provide(layerServerSettings())),
   );
 

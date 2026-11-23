@@ -2,9 +2,12 @@ import { EnvironmentId, ProjectId, ThreadId, TurnItemId } from "@t3tools/contrac
 import { expect, it, vi } from "vite-plus/test";
 
 import {
+  askForChangesPrompt,
+  htmlLibraryEntryOverrideChange,
   libraryPageView,
   librarySources,
   loadLibraryPages,
+  loadPinnedLibraryEntries,
   startLibrary,
 } from "./htmlLibraryPages";
 
@@ -21,7 +24,12 @@ function candidate(day: number, id: string) {
   };
 }
 
-function entry(day: number, id: string, attachmentId = id) {
+function entry(
+  day: number,
+  id: string,
+  attachmentId = id,
+  overrides: { pinned?: boolean; pinnedAt?: string } = {},
+) {
   return {
     ...candidate(day, id),
     attachmentId,
@@ -32,6 +40,8 @@ function entry(day: number, id: string, attachmentId = id) {
     threadId,
     threadTitle: "Thread",
     mode: "work" as const,
+    pinned: overrides.pinned ?? false,
+    ...(overrides.pinnedAt === undefined ? {} : { pinnedAt: overrides.pinnedAt }),
   };
 }
 
@@ -98,4 +108,80 @@ it("sends only the physical project IDs belonging to each environment", async ()
     [first, { mode: "code", projectIds: [projectId] }],
     [second, { mode: "code", projectIds: [secondProject, projectId] }],
   ]);
+});
+
+it("merges pinned entries newest pin first, ignores older servers' unpinned results, and builds override patches", async () => {
+  const read = vi.fn<Parameters<typeof loadPinnedLibraryEntries>[2]>();
+  read
+    .mockResolvedValueOnce({
+      entries: [
+        entry(20, "older-pin", "a1", { pinned: true, pinnedAt: "2026-11-22T01:00:00.000Z" }),
+        entry(21, "from-old-server", "a2", { pinned: false }),
+      ],
+      nextCursor: null,
+    })
+    .mockResolvedValueOnce({
+      entries: [
+        entry(19, "newer-pin", "b1", { pinned: true, pinnedAt: "2026-11-22T02:00:00.000Z" }),
+      ],
+      nextCursor: null,
+    });
+
+  const pinned = await loadPinnedLibraryEntries(
+    [{ environmentId: first }, { environmentId: second }],
+    "all",
+    read,
+  );
+  expect(pinned.map((item) => [item.environmentId, item.title])).toEqual([
+    [second, "newer-pin"],
+    [first, "older-pin"],
+  ]);
+  expect(read.mock.calls).toEqual([
+    [first, { mode: "all", pinned: true }],
+    [second, { mode: "all", pinned: true }],
+  ]);
+
+  const target = { threadId, itemId: TurnItemId.make("item-1") };
+  const pinnedRecord = htmlLibraryEntryOverrideChange(target, undefined, {
+    kind: "pin",
+    pinnedAt: "2026-11-22T03:00:00.000Z",
+  });
+  expect(pinnedRecord).toEqual({
+    threadId,
+    itemId: TurnItemId.make("item-1"),
+    pinnedAt: "2026-11-22T03:00:00.000Z",
+  });
+  expect(
+    htmlLibraryEntryOverrideChange(target, pinnedRecord ?? undefined, { kind: "unpin" }),
+  ).toBeNull();
+  const renamed = htmlLibraryEntryOverrideChange(target, pinnedRecord ?? undefined, {
+    kind: "rename",
+    title: "  Custom  ",
+  });
+  expect(renamed).toEqual({
+    threadId,
+    itemId: TurnItemId.make("item-1"),
+    title: "Custom",
+    pinnedAt: "2026-11-22T03:00:00.000Z",
+  });
+  expect(htmlLibraryEntryOverrideChange(target, renamed ?? undefined, { kind: "unpin" })).toEqual({
+    threadId,
+    itemId: TurnItemId.make("item-1"),
+    title: "Custom",
+  });
+  expect(
+    htmlLibraryEntryOverrideChange(
+      target,
+      { threadId, itemId: TurnItemId.make("item-1"), title: "Custom" },
+      { kind: "rename", title: null },
+    ),
+  ).toBeNull();
+
+  expect(askForChangesPrompt("", "Quarterly chart")).toBe('Change the page "Quarterly chart": ');
+  expect(askForChangesPrompt("Existing draft", "Quarterly chart")).toBe(
+    'Existing draft\nChange the page "Quarterly chart": ',
+  );
+  expect(askForChangesPrompt("Existing draft\n", "Quarterly chart")).toBe(
+    'Existing draft\nChange the page "Quarterly chart": ',
+  );
 });

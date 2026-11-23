@@ -12653,5 +12653,15 @@
   "c00c7b62908473c5": "HTML-bibliotek",
   "1d829f40405b2c18": "Bibliotek",
   "e0aa7a66b051d7cb": "HTML-bibliotek",
-  "12f0890f800baa7a": "Sidan är inte tillgänglig"
+  "12f0890f800baa7a": "Sidan är inte tillgänglig",
+  "dde3a6f36853adfa": "Begär ändringar",
+  "bf4875cf9e6328ca": "Sidtiteln måste vara en enda rad.",
+  "691edcc4a7bbefca": "Sidåtgärder",
+  "974add1723faa11c": "Den här servern tillämpade inte biblioteksändringen.",
+  "66ab6f6679ccdc63": "Byt namn på sida",
+  "7bdcbe837beed0fe": "Lämna tomt för att återställa den ursprungliga titeln.",
+  "ca5329d3b79435a3": "Sidtitel",
+  "9b20df3e21a3d401": "Byt namn",
+  "b67dfd6af7548dc9": "Fästa",
+  "37e8aca9f358a91f": "Senaste"
 }

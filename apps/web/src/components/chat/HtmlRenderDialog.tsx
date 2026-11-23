@@ -4,7 +4,7 @@ import {
   htmlRenderFrameHeight,
   type HtmlRenderReference,
 } from "@t3tools/shared/htmlRender";
-import { useGT } from "gt-react";
+import { T, useGT } from "gt-react";
 import { MinusIcon, PlusIcon, XIcon } from "lucide-react";
 import { useRef, useState } from "react";
 
@@ -19,6 +19,7 @@ export function HtmlRenderDialog(props: {
   readonly htmlRender: HtmlRenderReference;
   readonly threadRef?: ScopedThreadRef | undefined;
   readonly onClose: () => void;
+  readonly onAskForChanges?: (() => void) | undefined;
 }) {
   const gt = useGT();
   const { title } = props.htmlRender;
@@ -101,6 +102,11 @@ export function HtmlRenderDialog(props: {
               >
                 <PlusIcon />
               </Button>
+              {props.onAskForChanges ? (
+                <Button size="sm" variant="overlay" onClick={props.onAskForChanges}>
+                  <T>Ask for changes</T>
+                </Button>
+              ) : null}
             </div>
           </div>
         </div>

@@ -89,6 +89,53 @@ describe("thread sections", () => {
   );
 });
 
+describe("html library entries", () => {
+  const attachmentId = "thread-one-page.html";
+
+  it("defaults missing entries and preserves overrides and deletion patches", () => {
+    expect(decodeServerSettings({}).htmlLibraryEntries).toEqual({});
+    const input = {
+      htmlLibraryEntries: {
+        [attachmentId]: {
+          threadId: "thread-one",
+          itemId: "item-one",
+          title: "  Revenue chart  ",
+          pinnedAt: "2026-11-22T00:00:00.000Z",
+        },
+      },
+    };
+    const expected = {
+      htmlLibraryEntries: {
+        [attachmentId]: {
+          threadId: "thread-one",
+          itemId: "item-one",
+          title: "Revenue chart",
+          pinnedAt: "2026-11-22T00:00:00.000Z",
+        },
+      },
+    };
+    expect(encodeServerSettings(decodeServerSettings(input))).toMatchObject(expected);
+    expect(decodeClientServerSettingsPatch(input)).toEqual(expected);
+
+    const deletion = { htmlLibraryEntries: { [attachmentId]: null } };
+    expect(encodeServerSettingsPatch(decodeClientServerSettingsPatch(deletion))).toEqual(deletion);
+    expect(() => decodeServerSettings(deletion)).toThrow();
+  });
+
+  it.each(["", "  ", "Line\nBreak", "Line\rBreak", "Line\u2028Break"])(
+    "rejects an invalid entry title %j",
+    (title) => {
+      const input = {
+        htmlLibraryEntries: {
+          [attachmentId]: { threadId: "thread-one", itemId: "item-one", title },
+        },
+      };
+      expect(() => decodeServerSettings(input)).toThrow();
+      expect(() => decodeClientServerSettingsPatch(input)).toThrow();
+    },
+  );
+});
+
 describe("storage cleanup settings", () => {
   it("keeps cleanup disabled for existing installations", () => {
     expect(decodeServerSettings({}).worktreeCleanup).toBeNull();

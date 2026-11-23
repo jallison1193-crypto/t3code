@@ -16,11 +16,13 @@ import {
   EnvironmentId,
   ForwardCompatibleNullable,
   ForwardCompatibleOptional,
+  IsoDateTime,
   OmittedWhenNull,
   ProjectId,
   ThreadId,
   TrimmedNonEmptyString,
   TrimmedString,
+  TurnItemId,
 } from "./baseSchemas.ts";
 import { UsageLimitSourceId } from "./usageLimitSourceId.ts";
 import { UsageModelFilter } from "./usage.ts";
@@ -1417,14 +1419,26 @@ export const ThreadSectionId = Schema.String.check(Schema.isUUID()).pipe(
 );
 export type ThreadSectionId = typeof ThreadSectionId.Type;
 
+const SingleLineTrimmedNonEmptyString = TrimmedNonEmptyString.check(
+  Schema.isPattern(/^[^\r\n\v\f\u0085\u2028\u2029]+$/u),
+);
+
 const ThreadSectionMetadata = Schema.Struct({
-  name: TrimmedNonEmptyString.check(Schema.isPattern(/^[^\r\n\v\f\u0085\u2028\u2029]+$/u)),
+  name: SingleLineTrimmedNonEmptyString,
 });
 
 const ThreadSection = Schema.Struct({
   ...ThreadSectionMetadata.fields,
   members: Schema.optionalKey(Schema.Array(ScopedThreadRef)),
 });
+
+export const HtmlLibraryEntryOverride = Schema.Struct({
+  threadId: ThreadId,
+  itemId: TurnItemId,
+  title: Schema.optionalKey(SingleLineTrimmedNonEmptyString),
+  pinnedAt: Schema.optionalKey(IsoDateTime),
+});
+export type HtmlLibraryEntryOverride = typeof HtmlLibraryEntryOverride.Type;
 
 export const SetThreadSectionMembership = Schema.Struct({
   homeEnvironmentId: EnvironmentId,
@@ -1551,6 +1565,9 @@ export const ServerSettings = Schema.Struct({
   ),
   hideTaggedThreads: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   threadSections: Schema.Record(ThreadSectionId, ThreadSection).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
+  htmlLibraryEntries: Schema.Record(TrimmedNonEmptyString, HtmlLibraryEntryOverride).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
   /** Beta: guest links for this machine's threads. Off refuses new links and pauses existing ones. */
@@ -2011,6 +2028,9 @@ export const ServerSettingsPatch = Schema.Struct({
   ),
   renameThreadSection: Schema.optionalKey(
     Schema.Struct({ id: ThreadSectionId, ...ThreadSectionMetadata.fields }),
+  ),
+  htmlLibraryEntries: Schema.optionalKey(
+    Schema.Record(TrimmedNonEmptyString, Schema.NullOr(HtmlLibraryEntryOverride)),
   ),
   guestSharingEnabled: Schema.optionalKey(Schema.Boolean),
   linkedEnvironmentsEnabled: Schema.optionalKey(Schema.Boolean),
