@@ -59,6 +59,7 @@ import {
   OrchestrationSearchThreadsError,
   OrchestrationV2SearchThreadError,
   OrchestrationV2ListHtmlLibraryError,
+  OrchestrationV2ListLibraryFilesError,
   OrchestrationGetTurnDiffError,
   ORCHESTRATION_V2_WS_METHODS,
   ORCHESTRATION_PROTOCOL_QUERY_PARAM,
@@ -184,6 +185,7 @@ import { dedupeSnapshotBodies } from "@t3tools/shared/orchestrationV2DedupedBodi
 import * as ProjectStore from "./orchestration-v2/ProjectStore.ts";
 import * as ThreadSearch from "./orchestration-v2/ThreadSearch.ts";
 import * as HtmlLibrary from "./orchestration-v2/HtmlLibrary.ts";
+import * as LibraryFiles from "./orchestration-v2/LibraryFiles.ts";
 import * as OrchestrationEventStore from "./persistence/OrchestrationEventStore.ts";
 import { userFacingDispatchErrorMessage } from "./orchestration-v2/UserFacingErrors.ts";
 import * as ProviderRegistry from "./provider/ProviderRegistry.ts";
@@ -1537,6 +1539,7 @@ export const layerWsRpc = (
       const eventLoopMonitor = yield* EventLoopMonitor.EventLoopMonitor;
       const threadSearch = yield* ThreadSearch.ThreadSearch;
       const htmlLibrary = yield* HtmlLibrary.HtmlLibrary;
+      const libraryFiles = yield* LibraryFiles.LibraryFiles;
 
       const providerSessionsV2 = yield* ProviderSessionManager.ProviderSessionManagerV2;
       const mcpAppRequests = yield* McpAppRequests.McpAppRequests;
@@ -2189,6 +2192,10 @@ export const layerWsRpc = (
           htmlLibrary
             .list(input)
             .pipe(Effect.mapError((cause) => new OrchestrationV2ListHtmlLibraryError({ cause }))),
+        [ORCHESTRATION_V2_WS_METHODS.listLibraryFiles]: (input) =>
+          libraryFiles
+            .list(input)
+            .pipe(Effect.mapError((cause) => new OrchestrationV2ListLibraryFilesError({ cause }))),
         [ORCHESTRATION_V2_WS_METHODS.searchThreads]: (input) =>
           ThreadSearch.searchThreadsWithOlderSettledRows({
             request: input,
@@ -3846,7 +3853,7 @@ export const layerWsRpc = (
         yield* OtherWsRpcGroup.toHandlers(otherHandlers),
       );
     }),
-  ).pipe(Layer.provide(HtmlLibrary.layer));
+  ).pipe(Layer.provide(HtmlLibrary.layer), Layer.provide(LibraryFiles.layer));
 
 // Default socket-level Defect frames end every pending client request.
 export const WS_RPC_SERVER_OPTIONS = {
