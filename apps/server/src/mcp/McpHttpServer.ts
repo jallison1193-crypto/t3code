@@ -63,6 +63,10 @@ import { EnvironmentToolkit } from "./toolkits/environment/tools.ts";
 import * as EnvironmentHandlers from "./toolkits/environment/handlers.ts";
 import { ThemeToolkit } from "./toolkits/theme/tools.ts";
 import * as ThemeHandlers from "./toolkits/theme/handlers.ts";
+import { FolderToolkit } from "./toolkits/folder/tools.ts";
+import * as FolderHandlers from "./toolkits/folder/handlers.ts";
+import { LibraryToolkit } from "./toolkits/library/tools.ts";
+import * as LibraryHandlers from "./toolkits/library/handlers.ts";
 import { ProjectToolkit } from "./toolkits/project/tools.ts";
 import * as ProjectHandlers from "./toolkits/project/handlers.ts";
 import { ProjectMemoryToolkit } from "./toolkits/projectMemory/tools.ts";
@@ -1334,6 +1338,8 @@ const layerEnvironmentToolkit = toolkitRegistration(
 const layerThemeToolkit = toolkitRegistration(ThemeToolkit, ThemeHandlers.layer).pipe(
   Layer.provide(ThreadCommandExecutor.layer),
 );
+const layerFolderToolkit = toolkitRegistration(FolderToolkit, FolderHandlers.layer);
+const layerLibraryToolkit = toolkitRegistration(LibraryToolkit, LibraryHandlers.layer);
 
 export const layerProjectRegistration = toolkitRegistration(ProjectToolkit, ProjectHandlers.layer);
 
@@ -1418,6 +1424,8 @@ export const layerTools = Layer.mergeAll(
   layerFeedbackToolkit,
   layerEnvironmentToolkit,
   layerThemeToolkit,
+  layerFolderToolkit,
+  layerLibraryToolkit,
   layerPreviewControlsRegistration,
   layerWorktreeToolkitRegistration,
   layerPullRequestsToolkit,

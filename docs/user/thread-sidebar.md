@@ -179,7 +179,8 @@ If several servers are connected, choose a **Home server**. Each device connecte
 sees its folders, and each home keeps its own assignments. Opening a folder member takes you
 to the server where the conversation lives. In **All**, unavailable members appear as
 **Thread unavailable** and can still be removed through **Change thread folder**. Use a folder’s
-menu to rename or delete it. Deleting a folder keeps its threads.
+menu to rename or delete it. Deleting a folder keeps its threads. Agents can also list, create,
+rename, and delete thread folders, and add or remove threads.
 
 ### Work and Code threads
 

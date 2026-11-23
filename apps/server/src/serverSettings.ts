@@ -14,11 +14,14 @@ import {
   ProviderInstanceId,
   resolveProviderInstanceEnabled,
   ResponseStreamingMode,
+  type ScopedThreadRef,
   ServerSettings,
   ServerSettingsError,
   type ServerSettingsPatch,
   type SetThreadSectionMembership,
   type ManagedPolicySummary,
+  type ThreadId,
+  ThreadSectionId,
   globalIdleCompaction,
   isSecretReference,
   type SecretReference,
@@ -27,6 +30,7 @@ import {
 import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Equal from "effect/Equal";
@@ -293,6 +297,172 @@ const applyThreadSectionMembership = Effect.fn("serverSettings.applyThreadSectio
     return { ...current, threadSections: Object.fromEntries(threadSections) };
   },
 );
+
+interface ThreadFolderRecord {
+  readonly id: ThreadSectionId;
+  readonly name: string;
+  readonly members: ReadonlyArray<ScopedThreadRef>;
+}
+
+export class ThreadFolderInvalidNameError extends Schema.TaggedError<ThreadFolderInvalidNameError>()(
+  "ThreadFolderInvalidNameError",
+  {},
+) {
+  override get message(): string {
+    return "Folder name must be a non-empty single line.";
+  }
+}
+
+const SINGLE_LINE_FOLDER_NAME_PATTERN = /^[^\r\n\v\f\u0085\u2028\u2029]+$/u;
+const decodeThreadSectionIdOption = Schema.decodeUnknownOption(ThreadSectionId);
+
+const validateThreadFolderName = (
+  rawName: string,
+): Effect.Effect<string, ThreadFolderInvalidNameError> => {
+  const name = rawName.trim();
+  return name.length > 0 && SINGLE_LINE_FOLDER_NAME_PATTERN.test(name)
+    ? Effect.succeed(name)
+    : Effect.fail(new ThreadFolderInvalidNameError());
+};
+
+const parseThreadSectionId = (
+  folderId: string,
+): Effect.Effect<ThreadSectionId, ServerSettingsError> =>
+  Effect.fromOption(decodeThreadSectionIdOption(folderId)).pipe(
+    Effect.mapError(
+      () =>
+        new ServerSettingsError({
+          settingsPath: "<settings>",
+          operation: "thread-section-not-found",
+        }),
+    ),
+  );
+
+export const listThreadFolders = Effect.fn("serverSettings.listThreadFolders")(function* (filter?: {
+  readonly threadId?: ThreadId | undefined;
+  readonly environmentId?: EnvironmentId | undefined;
+}) {
+  const settings = yield* ServerSettingsService;
+  const { threadSections } = yield* settings.getSettings;
+  const folders: Array<ThreadFolderRecord> = Object.entries(threadSections).map(
+    ([id, section]) => ({
+      id: ThreadSectionId.make(id),
+      name: section.name,
+      members: section.members ?? [],
+    }),
+  );
+  if (filter?.threadId === undefined) return folders;
+  return folders.filter((folder) =>
+    folder.members.some(
+      (member) =>
+        member.threadId === filter.threadId &&
+        (filter.environmentId === undefined || member.environmentId === filter.environmentId),
+    ),
+  );
+});
+
+type UpdateThreadFolderInput =
+  | { readonly action: "create"; readonly name: string }
+  | { readonly action: "rename"; readonly folderId: string; readonly name: string }
+  | { readonly action: "delete"; readonly folderId: string }
+  | {
+      readonly action: "add_thread";
+      readonly serverEnvironmentId: EnvironmentId;
+      readonly folderId: string;
+      readonly thread: ScopedThreadRef;
+    }
+  | {
+      readonly action: "remove_thread";
+      readonly serverEnvironmentId: EnvironmentId;
+      readonly thread: ScopedThreadRef;
+    };
+
+type UpdateThreadFolderResult =
+  | { readonly folder: ThreadFolderRecord; readonly thread?: ScopedThreadRef }
+  | { readonly deleted: true; readonly folderId: ThreadSectionId }
+  | { readonly folderId: null; readonly thread: ScopedThreadRef };
+
+export const updateThreadFolder = Effect.fn("serverSettings.updateThreadFolder")(function* (
+  input: UpdateThreadFolderInput,
+): Effect.fn.Return<
+  UpdateThreadFolderResult,
+  ServerSettingsError | ThreadFolderInvalidNameError,
+  ServerSettingsService | SecureRandom.SecureRandom
+> {
+  const settings = yield* ServerSettingsService;
+  switch (input.action) {
+    case "create": {
+      const name = yield* validateThreadFolderName(input.name);
+      const random = yield* SecureRandom.SecureRandom;
+      const id = ThreadSectionId.make(yield* random.uuidV4());
+      const next = yield* settings.updateSettings({ threadSections: { [id]: { name } } });
+      const created = next.threadSections[id];
+      return {
+        folder: { id, name: created?.name ?? name, members: created?.members ?? [] },
+      };
+    }
+    case "rename": {
+      const name = yield* validateThreadFolderName(input.name);
+      const folderId = yield* parseThreadSectionId(input.folderId);
+      const next = yield* settings.updateSettings({
+        renameThreadSection: { id: folderId, name },
+      });
+      if (!Object.hasOwn(next.threadSections, folderId)) {
+        return yield* new ServerSettingsError({
+          settingsPath: "<settings>",
+          operation: "thread-section-not-found",
+          threadSectionId: folderId,
+        });
+      }
+      const updated = next.threadSections[folderId]!;
+      return {
+        folder: { id: folderId, name: updated.name, members: updated.members ?? [] },
+      };
+    }
+    case "delete": {
+      const folderId = yield* parseThreadSectionId(input.folderId);
+      const current = yield* settings.getSettings;
+      if (!Object.hasOwn(current.threadSections, folderId)) {
+        return yield* new ServerSettingsError({
+          settingsPath: "<settings>",
+          operation: "thread-section-not-found",
+          threadSectionId: folderId,
+        });
+      }
+      yield* settings.updateSettings({ threadSections: { [folderId]: null } });
+      return { deleted: true as const, folderId };
+    }
+    case "add_thread": {
+      const folderId = yield* parseThreadSectionId(input.folderId);
+      yield* settings.setThreadSectionMembership(input.serverEnvironmentId, {
+        homeEnvironmentId: input.serverEnvironmentId,
+        thread: input.thread,
+        sectionId: folderId,
+      });
+      const next = yield* settings.getSettings;
+      const updated = next.threadSections[folderId];
+      if (updated === undefined) {
+        return yield* new ServerSettingsError({
+          settingsPath: "<settings>",
+          operation: "thread-section-not-found",
+          threadSectionId: folderId,
+        });
+      }
+      return {
+        folder: { id: folderId, name: updated.name, members: updated.members ?? [] },
+        thread: input.thread,
+      };
+    }
+    case "remove_thread": {
+      yield* settings.setThreadSectionMembership(input.serverEnvironmentId, {
+        homeEnvironmentId: input.serverEnvironmentId,
+        thread: input.thread,
+        sectionId: null,
+      });
+      return { folderId: null, thread: input.thread };
+    }
+  }
+});
 
 export class ServerSettingsService extends Context.Service<
   ServerSettingsService,

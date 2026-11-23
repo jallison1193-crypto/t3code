@@ -11,12 +11,18 @@ import {
   WORK_MODE_TAG,
 } from "@t3tools/contracts";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+import {
+  htmlLibraryEntryOverrideChange,
+  isValidLibraryEntryTitle,
+} from "@t3tools/shared/serverSettings";
 import { htmlRenderFromToolItem } from "@t3tools/shared/toolOutput";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import * as SqlClient from "effect/sql/SqlClient";
 import type { SqlError } from "effect/sql/SqlError";
 
@@ -28,7 +34,30 @@ import * as ServerSettings from "../serverSettings.ts";
 
 const CANDIDATE_LIMIT = 100;
 const DEFAULT_PAGE_SIZE = 25;
+const DEFAULT_READ_LIMIT = 20;
+const MAX_READ_BATCHES = 10;
 const PINNED_LOOKUP_BATCH_SIZE = 500;
+
+export class HtmlLibraryEntryNotFoundError extends Schema.TaggedError<HtmlLibraryEntryNotFoundError>()(
+  "HtmlLibraryEntryNotFoundError",
+  {
+    threadId: ThreadId,
+    itemId: TurnItemId,
+  },
+) {
+  override get message(): string {
+    return "The HTML Library page was not found.";
+  }
+}
+
+export class HtmlLibraryInvalidTitleError extends Schema.TaggedError<HtmlLibraryInvalidTitleError>()(
+  "HtmlLibraryInvalidTitleError",
+  {},
+) {
+  override get message(): string {
+    return "Page title must be a single line.";
+  }
+}
 
 const decodeToolItem = Schema.decodeUnknownOption(
   Schema.fromJsonString(
@@ -107,12 +136,33 @@ export class HtmlLibrary extends Context.Service<
     readonly list: (
       input: OrchestrationV2ListHtmlLibraryInput,
     ) => Effect.Effect<OrchestrationV2ListHtmlLibraryResult, SqlError | ServerSettingsError>;
+    readonly read: (input: {
+      readonly projectId?: ProjectId | undefined;
+      readonly pinned?: boolean | undefined;
+      readonly limit?: number | undefined;
+    }) => Effect.Effect<
+      {
+        readonly entries: ReadonlyArray<LibraryEntry>;
+        readonly hasMore: boolean;
+      },
+      SqlError | ServerSettingsError
+    >;
+    readonly updateEntry: (input: {
+      readonly action: "pin" | "unpin" | "rename";
+      readonly threadId: ThreadId;
+      readonly itemId: TurnItemId;
+      readonly title?: string | undefined;
+    }) => Effect.Effect<
+      LibraryEntry,
+      SqlError | ServerSettingsError | HtmlLibraryEntryNotFoundError | HtmlLibraryInvalidTitleError
+    >;
   }
 >()("t3/orchestration-v2/HtmlLibrary") {}
 
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
+  const updateSemaphore = yield* Semaphore.make(1);
   // Fork-only index: a numbered migration would collide with upstream's next migration id.
   yield* sql`
     CREATE INDEX IF NOT EXISTS orchestration_v2_projection_turn_items_html_library_idx
@@ -219,7 +269,111 @@ const make = Effect.gen(function* () {
     };
   });
 
-  return HtmlLibrary.of({ list });
+  const read = Effect.fn("HtmlLibrary.read")(function* (input: {
+    readonly projectId?: ProjectId | undefined;
+    readonly pinned?: boolean | undefined;
+    readonly limit?: number | undefined;
+  }) {
+    const limit = input.limit ?? DEFAULT_READ_LIMIT;
+    const projectFilter = input.projectId === undefined ? {} : { projectIds: [input.projectId] };
+    if (input.pinned === true) {
+      const result = yield* list({ ...projectFilter, pinned: true });
+      return {
+        entries: result.entries.slice(0, limit),
+        hasMore: result.entries.length > limit,
+      };
+    }
+    const entries: Array<LibraryEntry> = [];
+    const seen = new Set<string>();
+    let cursor: OrchestrationV2ListHtmlLibraryInput["cursor"];
+    let hasMore = false;
+    for (let batch = 0; batch < MAX_READ_BATCHES && entries.length < limit; batch++) {
+      const page = yield* list({
+        ...projectFilter,
+        limit: limit - entries.length,
+        ...(cursor === undefined ? {} : { cursor }),
+      });
+      for (const entry of page.entries) {
+        if (seen.has(entry.attachmentId)) continue;
+        seen.add(entry.attachmentId);
+        entries.push(entry);
+        if (entries.length === limit) break;
+      }
+      hasMore = page.nextCursor !== null;
+      if (page.nextCursor === null) break;
+      cursor = page.nextCursor;
+    }
+    return { entries, hasMore };
+  });
+
+  const updateEntry = Effect.fn("HtmlLibrary.updateEntry")(function* (input: {
+    readonly action: "pin" | "unpin" | "rename";
+    readonly threadId: ThreadId;
+    readonly itemId: TurnItemId;
+    readonly title?: string | undefined;
+  }) {
+    if (
+      input.action === "rename" &&
+      input.title !== undefined &&
+      !isValidLibraryEntryTitle(input.title)
+    ) {
+      return yield* new HtmlLibraryInvalidTitleError();
+    }
+    return yield* updateSemaphore.withPermits(1)(
+      Effect.gen(function* () {
+        const rows = yield* sql<Candidate>`
+          SELECT
+            item.turn_item_id AS itemId, item.updated_at AS updatedAt, item.thread_id AS threadId,
+            thread.title AS threadTitle, project.project_id AS projectId, project.title AS projectTitle,
+            CASE WHEN json_valid(thread.payload_json) THEN thread.payload_json -> '$.tags' END AS tags,
+            CASE WHEN thread.deleted_at IS NULL AND project.deleted_at IS NULL
+              AND project.project_id IS NOT NULL AND run.status IS NOT 'rolled_back'
+              THEN item.payload_json END AS payload
+          FROM orchestration_v2_projection_turn_items AS item
+          LEFT JOIN orchestration_v2_projection_threads AS thread ON thread.thread_id = item.thread_id
+          LEFT JOIN projection_projects AS project ON project.project_id = thread.project_id
+          LEFT JOIN orchestration_v2_projection_runs AS run ON run.run_id = item.run_id
+          WHERE item.turn_item_id = ${input.itemId}
+            AND item.thread_id = ${input.threadId}
+            AND item.type = 'dynamic_tool' AND item.status = 'completed' AND item.inline_work_output = 1
+          LIMIT 1
+        `.pipe(NodeSqliteClient.readOnly);
+        const row = rows[0];
+        const { htmlLibraryEntries } = yield* serverSettings.getSettings;
+        const current =
+          row === undefined ? null : toLibraryEntry(row, "all", new Set(), htmlLibraryEntries);
+        if (row === undefined || current === null) {
+          return yield* new HtmlLibraryEntryNotFoundError({
+            threadId: input.threadId,
+            itemId: input.itemId,
+          });
+        }
+        const stored = Object.hasOwn(htmlLibraryEntries, current.attachmentId)
+          ? htmlLibraryEntries[current.attachmentId]
+          : undefined;
+        const change =
+          input.action === "pin"
+            ? { kind: "pin" as const, pinnedAt: DateTime.formatIso(yield* DateTime.now) }
+            : input.action === "unpin"
+              ? { kind: "unpin" as const }
+              : { kind: "rename" as const, title: input.title ?? null };
+        const nextOverride = htmlLibraryEntryOverrideChange(current, stored, change);
+        const nextSettings = yield* serverSettings.updateSettings({
+          htmlLibraryEntries: { [current.attachmentId]: nextOverride },
+        });
+        const updated = toLibraryEntry(row, "all", new Set(), nextSettings.htmlLibraryEntries);
+        if (updated === null) {
+          return yield* new HtmlLibraryEntryNotFoundError({
+            threadId: input.threadId,
+            itemId: input.itemId,
+          });
+        }
+        return updated;
+      }),
+    );
+  });
+
+  return HtmlLibrary.of({ list, read, updateEntry });
 });
 
 export const layer = Layer.effect(HtmlLibrary, make);

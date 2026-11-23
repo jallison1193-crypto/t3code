@@ -5,6 +5,7 @@ import {
   DEFAULT_TEXT_GENERATION_MODEL_BY_PROVIDER,
   defaultInstanceIdForDriver,
   globalIdleCompaction,
+  type HtmlLibraryEntryOverride,
   type IdleCompactionMode,
   isProviderAvailable,
   isUnconfiguredDefaultInstanceEnabled,
@@ -22,6 +23,8 @@ import {
   type ServerProvider,
   ServerSettings,
   type ServerSettingsPatch,
+  type ThreadId,
+  type TurnItemId,
   withIdleCompaction,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
@@ -750,4 +753,48 @@ export function modelPreferencesMigrationPatch(
           ...(providerModelPreferences === undefined ? {} : { providerModelPreferences }),
         },
       };
+}
+
+const SINGLE_LINE_LIBRARY_TITLE_PATTERN = /^[^\r\n\v\f\u0085\u2028\u2029]+$/u;
+
+export function isValidLibraryEntryTitle(title: string): boolean {
+  const trimmed = title.trim();
+  return trimmed.length === 0 || SINGLE_LINE_LIBRARY_TITLE_PATTERN.test(trimmed);
+}
+
+export function htmlLibraryEntryOverrideChange(
+  entry: {
+    readonly threadId: ThreadId;
+    readonly itemId: TurnItemId;
+    readonly pinnedAt?: string | undefined;
+  },
+  stored: HtmlLibraryEntryOverride | undefined,
+  change:
+    | { readonly kind: "pin"; readonly pinnedAt: string }
+    | { readonly kind: "unpin" }
+    | { readonly kind: "rename"; readonly title: string | null },
+): HtmlLibraryEntryOverride | null {
+  if (change.kind === "pin") {
+    const title = stored?.title;
+    return {
+      threadId: entry.threadId,
+      itemId: entry.itemId,
+      ...(title === undefined ? {} : { title }),
+      pinnedAt: change.pinnedAt,
+    };
+  }
+  if (change.kind === "unpin") {
+    const title = stored?.title;
+    return title === undefined ? null : { threadId: entry.threadId, itemId: entry.itemId, title };
+  }
+  const pinnedAt = stored?.pinnedAt ?? entry.pinnedAt;
+  const trimmed = change.title?.trim() ?? "";
+  const title = trimmed.length > 0 ? trimmed : undefined;
+  if (title === undefined && pinnedAt === undefined) return null;
+  return {
+    threadId: entry.threadId,
+    itemId: entry.itemId,
+    ...(title === undefined ? {} : { title }),
+    ...(pinnedAt === undefined ? {} : { pinnedAt }),
+  };
 }

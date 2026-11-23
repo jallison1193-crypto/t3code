@@ -7,6 +7,10 @@ import type {
   ServerSettings,
   SidebarModeFilter,
 } from "@t3tools/contracts";
+export {
+  htmlLibraryEntryOverrideChange,
+  isValidLibraryEntryTitle,
+} from "@t3tools/shared/serverSettings";
 
 type Cursor = NonNullable<OrchestrationV2ListHtmlLibraryInput["cursor"]>;
 
@@ -28,8 +32,6 @@ interface LibraryPages {
   readonly streams: readonly Stream[];
   readonly entries: readonly HtmlLibraryEntry[];
 }
-
-const SINGLE_LINE_TITLE_PATTERN = /^[^\r\n\v\f\u0085\u2028\u2029]+$/u;
 
 export function librarySources(
   members: readonly { readonly environmentId: EnvironmentId; readonly id: ProjectId }[],
@@ -69,48 +71,10 @@ export function libraryEntryKey(entry: Pick<HtmlLibraryEntry, "environmentId" | 
   return JSON.stringify([entry.environmentId, entry.attachmentId]);
 }
 
-export function isValidLibraryEntryTitle(title: string): boolean {
-  const trimmed = title.trim();
-  return trimmed.length === 0 || SINGLE_LINE_TITLE_PATTERN.test(trimmed);
-}
-
 export function askForChangesPrompt(existingPrompt: string, title: string): string {
   const line = `Change the page "${title}": `;
   if (existingPrompt.trim().length === 0) return line;
   return existingPrompt.endsWith("\n") ? `${existingPrompt}${line}` : `${existingPrompt}\n${line}`;
-}
-
-export function htmlLibraryEntryOverrideChange(
-  entry: Pick<HtmlLibraryEntry, "threadId" | "itemId" | "pinnedAt">,
-  stored: HtmlLibraryEntryOverride | undefined,
-  change:
-    | { readonly kind: "pin"; readonly pinnedAt: string }
-    | { readonly kind: "unpin" }
-    | { readonly kind: "rename"; readonly title: string | null },
-): HtmlLibraryEntryOverride | null {
-  if (change.kind === "pin") {
-    const title = stored?.title;
-    return {
-      threadId: entry.threadId,
-      itemId: entry.itemId,
-      ...(title === undefined ? {} : { title }),
-      pinnedAt: change.pinnedAt,
-    };
-  }
-  if (change.kind === "unpin") {
-    const title = stored?.title;
-    return title === undefined ? null : { threadId: entry.threadId, itemId: entry.itemId, title };
-  }
-  const pinnedAt = stored?.pinnedAt ?? entry.pinnedAt;
-  const trimmed = change.title?.trim() ?? "";
-  const title = trimmed.length > 0 ? trimmed : undefined;
-  if (title === undefined && pinnedAt === undefined) return null;
-  return {
-    threadId: entry.threadId,
-    itemId: entry.itemId,
-    ...(title === undefined ? {} : { title }),
-    ...(pinnedAt === undefined ? {} : { pinnedAt }),
-  };
 }
 
 export function htmlLibraryPatchApplied(
