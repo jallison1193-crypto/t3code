@@ -6,6 +6,10 @@ import {
   mcpToolResultOutput,
   SEND_TO_USER_MAX_LENGTH,
   sentMessageFromToolItem,
+  THREAD_SUGGEST_MAX_ITEMS,
+  THREAD_SUGGEST_MAX_PROMPT_LENGTH,
+  THREAD_SUGGEST_MAX_REASON_LENGTH,
+  THREAD_SUGGEST_MAX_TITLE_LENGTH,
   threadSuggestionsFromToolItem,
   toolOutputImages,
   toolOutputIndicatesFailure,
@@ -50,6 +54,18 @@ describe("compactDynamicToolOutput", () => {
     ] as const) {
       expect(threadSuggestionsFromToolItem({ toolName, output })).toEqual(suggestions);
     }
+    const largest = Array.from({ length: THREAD_SUGGEST_MAX_ITEMS }, () => ({
+      title: "界".repeat(THREAD_SUGGEST_MAX_TITLE_LENGTH),
+      prompt: "界".repeat(THREAD_SUGGEST_MAX_PROMPT_LENGTH),
+      reason: "界".repeat(THREAD_SUGGEST_MAX_REASON_LENGTH),
+    }));
+    const text = JSON.stringify({ suggestions: largest });
+    expect(
+      threadSuggestionsFromToolItem({
+        toolName: "t3_thread_suggest",
+        output: [{ type: "text", text }],
+      }),
+    ).toEqual(largest);
     expect(
       threadSuggestionsFromToolItem({
         toolName: "mcp__t3-code__t3_thread_suggest",

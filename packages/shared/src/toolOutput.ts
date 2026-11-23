@@ -28,8 +28,9 @@ export const THREAD_SUGGEST_TOOL_NAME = "t3_thread_suggest";
 const THREAD_SUGGEST_MIN_ITEMS = 1;
 export const THREAD_SUGGEST_MAX_ITEMS = 5;
 export const THREAD_SUGGEST_MAX_TITLE_LENGTH = 80;
-export const THREAD_SUGGEST_MAX_PROMPT_LENGTH = 4_000;
-const THREAD_SUGGEST_MAX_REASON_LENGTH = 200;
+// Five full suggestions stay inside MAX_PARSED_BYTES even as 3-byte characters.
+export const THREAD_SUGGEST_MAX_PROMPT_LENGTH = 700;
+export const THREAD_SUGGEST_MAX_REASON_LENGTH = 200;
 
 const isSingleLine = Schema.makeFilter((value: string) => !/[\r\n]/.test(value), {
   expected: "a single-line string",
