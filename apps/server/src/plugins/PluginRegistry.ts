@@ -26,6 +26,7 @@ import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
@@ -101,10 +102,28 @@ const lstatOrNull = (targetPath: string): NodeFS.Stats | null => {
 const pathExists = (targetPath: string): boolean => lstatOrNull(targetPath) !== null;
 
 const isErrnoCode = (error: unknown, code: string): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  "code" in error &&
-  (error as { readonly code?: unknown }).code === code;
+  Predicate.hasProperty(error, "code") && error.code === code;
+
+const isMissingPath = (error: unknown): boolean =>
+  isErrnoCode(error, "ENOENT") || isErrnoCode(error, "ENOTDIR");
+
+type PluginMetadata = Pick<InstalledPlugin, "displayName" | "description" | "version">;
+
+const withProblem = (
+  id: string,
+  problem: string,
+  metadata: PluginMetadata = {},
+): ScannedPlugin => ({
+  plugin: { id, ...metadata, enabled: false, contributes: [], problem },
+});
+
+const realpathOrNull = (targetPath: string): string | null => {
+  try {
+    return NodeFS.realpathSync(targetPath);
+  } catch {
+    return null;
+  }
+};
 
 const inspectPluginFolder = (
   pluginsDir: string,
@@ -113,349 +132,139 @@ const inspectPluginFolder = (
 ): ScannedPlugin | null => {
   if (folderName.startsWith(".")) return null;
   const folderPath = NodePath.join(pluginsDir, folderName);
-  let folderStat: NodeFS.Stats;
-  try {
-    folderStat = NodeFS.lstatSync(folderPath);
-  } catch {
-    return null;
-  }
+  const folderStat = lstatOrNull(folderPath);
+  if (folderStat === null) return null;
   if (folderStat.isSymbolicLink()) {
-    return {
-      plugin: {
-        id: folderName,
-        enabled: false,
-        contributes: [],
-        problem: "Plugin folder cannot be a symlink.",
-      },
-    };
+    return withProblem(folderName, "Plugin folder cannot be a symlink.");
   }
   if (!folderStat.isDirectory()) return null;
-
   if (!isPluginId(folderName)) {
-    return {
-      plugin: {
-        id: folderName,
-        enabled: false,
-        contributes: [],
-        problem: "Folder name must use lowercase letters, digits, and hyphens (max 64 characters).",
-      },
-    };
+    return withProblem(
+      folderName,
+      "Folder name must use lowercase letters, digits, and hyphens (max 64 characters).",
+    );
   }
 
-  let pluginRootReal: string;
-  try {
-    pluginRootReal = NodeFS.realpathSync(folderPath);
-  } catch {
-    return {
-      plugin: {
-        id: folderName,
-        enabled: false,
-        contributes: [],
-        problem: "Plugin folder could not be resolved.",
-      },
-    };
+  const pluginRootReal = realpathOrNull(folderPath);
+  if (pluginRootReal === null) {
+    return withProblem(folderName, "Plugin folder could not be resolved.");
   }
 
   const manifestDir = NodePath.join(folderPath, PLUGIN_MANIFEST_DIR);
-  try {
-    const manifestDirStat = NodeFS.lstatSync(manifestDir);
-    if (manifestDirStat.isSymbolicLink()) {
-      return {
-        plugin: {
-          id: folderName,
-          enabled: false,
-          contributes: [],
-          problem: "Manifest directory .t3-plugin cannot be a symlink.",
-        },
-      };
-    }
-  } catch {
-    // Missing or unreadable manifest directory is reported by the manifest check below.
+  // A missing manifest directory is reported by the manifest check below.
+  if (lstatOrNull(manifestDir)?.isSymbolicLink() === true) {
+    return withProblem(folderName, "Manifest directory .t3-plugin cannot be a symlink.");
   }
   const manifestPath = NodePath.join(manifestDir, PLUGIN_MANIFEST_FILE);
   let manifestStat: NodeFS.Stats;
   try {
     manifestStat = NodeFS.lstatSync(manifestPath);
   } catch (error) {
-    return {
-      plugin: {
-        id: folderName,
-        enabled: false,
-        contributes: [],
-        problem:
-          isErrnoCode(error, "ENOENT") || isErrnoCode(error, "ENOTDIR")
-            ? "Missing .t3-plugin/plugin.json manifest."
-            : "Manifest .t3-plugin/plugin.json could not be accessed.",
-      },
-    };
+    return withProblem(
+      folderName,
+      isMissingPath(error)
+        ? "Missing .t3-plugin/plugin.json manifest."
+        : "Manifest .t3-plugin/plugin.json could not be accessed.",
+    );
   }
   if (manifestStat.isSymbolicLink()) {
-    return {
-      plugin: {
-        id: folderName,
-        enabled: false,
-        contributes: [],
-        problem: "Manifest .t3-plugin/plugin.json cannot be a symlink.",
-      },
-    };
+    return withProblem(folderName, "Manifest .t3-plugin/plugin.json cannot be a symlink.");
   }
   if (!manifestStat.isFile()) {
-    return {
-      plugin: {
-        id: folderName,
-        enabled: false,
-        contributes: [],
-        problem: "Manifest .t3-plugin/plugin.json is not a regular file.",
-      },
-    };
+    return withProblem(folderName, "Manifest .t3-plugin/plugin.json is not a regular file.");
   }
-
-  try {
-    const manifestDirReal = NodeFS.realpathSync(manifestDir);
-    if (!isInsideDirectory(pluginRootReal, manifestDirReal, false)) {
-      return {
-        plugin: {
-          id: folderName,
-          enabled: false,
-          contributes: [],
-          problem: "Manifest directory .t3-plugin must stay inside the plugin folder.",
-        },
-      };
-    }
-  } catch {
-    return {
-      plugin: {
-        id: folderName,
-        enabled: false,
-        contributes: [],
-        problem: "Manifest directory .t3-plugin could not be resolved.",
-      },
-    };
+  const manifestDirReal = realpathOrNull(manifestDir);
+  if (manifestDirReal === null || !isInsideDirectory(pluginRootReal, manifestDirReal, false)) {
+    return withProblem(
+      folderName,
+      "Manifest directory .t3-plugin must stay inside the plugin folder.",
+    );
   }
 
   const rawManifest = readThemeFileGuarded(manifestPath, MAX_PLUGIN_MANIFEST_BYTES);
   if (rawManifest === null) {
-    return {
-      plugin: {
-        id: folderName,
-        enabled: false,
-        contributes: [],
-        problem: "Manifest .t3-plugin/plugin.json could not be read or is too large.",
-      },
-    };
+    return withProblem(
+      folderName,
+      "Manifest .t3-plugin/plugin.json could not be read or is too large.",
+    );
   }
-
   let parsedJson: unknown;
   try {
     parsedJson = JSON.parse(rawManifest);
   } catch {
-    return {
-      plugin: {
-        id: folderName,
-        enabled: false,
-        contributes: [],
-        problem: "Manifest .t3-plugin/plugin.json is not valid JSON.",
-      },
-    };
+    return withProblem(folderName, "Manifest .t3-plugin/plugin.json is not valid JSON.");
   }
 
   const decoded = decodePluginManifestExit(parsedJson);
   if (decoded._tag === "Failure") {
-    const rawName =
-      typeof parsedJson === "object" && parsedJson !== null && "name" in parsedJson
-        ? (parsedJson as { readonly name?: unknown }).name
-        : undefined;
-    const problem =
-      typeof rawName === "string" && rawName !== folderName && !isPluginId(rawName)
+    const rawName = Predicate.hasProperty(parsedJson, "name") ? parsedJson.name : undefined;
+    return withProblem(
+      folderName,
+      typeof rawName === "string" && !isPluginId(rawName)
         ? `Manifest name "${rawName}" is not a valid plugin id.`
-        : "Manifest .t3-plugin/plugin.json has invalid or missing fields.";
-    return {
-      plugin: {
-        id: folderName,
-        enabled: false,
-        contributes: [],
-        problem,
-      },
-    };
+        : "Manifest .t3-plugin/plugin.json has invalid or missing fields.",
+    );
   }
-
   const manifest = decoded.value;
   if (manifest.name !== folderName) {
-    return {
-      plugin: {
-        id: folderName,
-        enabled: false,
-        contributes: [],
-        problem: `Manifest name "${manifest.name}" does not match folder name "${folderName}".`,
-      },
-    };
+    return withProblem(
+      folderName,
+      `Manifest name "${manifest.name}" does not match folder name "${folderName}".`,
+    );
   }
 
-  const metadata = {
+  const metadata: PluginMetadata = {
     ...(manifest.displayName !== undefined ? { displayName: manifest.displayName } : {}),
     ...(manifest.description !== undefined ? { description: manifest.description } : {}),
     ...(manifest.version !== undefined ? { version: manifest.version } : {}),
   };
-
   if (manifest.css === undefined) {
-    return {
-      plugin: {
-        id: folderName,
-        ...metadata,
-        enabled: storedEnabled,
-        contributes: [],
-      },
-    };
+    return { plugin: { id: folderName, ...metadata, enabled: storedEnabled, contributes: [] } };
   }
 
+  const cssProblem = (problem: string) => withProblem(folderName, problem, metadata);
+  const cssName = manifest.css;
+  const resolvedCssPath = NodePath.resolve(folderPath, cssName);
   if (
-    !manifest.css.startsWith("./") ||
-    manifest.css.includes("\\") ||
-    manifest.css.includes("\0")
+    !cssName.startsWith("./") ||
+    cssName.includes("\\") ||
+    cssName.includes("\0") ||
+    !isInsideDirectory(NodePath.resolve(folderPath), resolvedCssPath, false)
   ) {
-    return {
-      plugin: {
-        id: folderName,
-        ...metadata,
-        enabled: false,
-        contributes: [],
-        problem: 'CSS path must start with "./" and stay inside the plugin folder.',
-      },
-    };
-  }
-
-  const resolvedFolder = NodePath.resolve(folderPath);
-  const resolvedCssPath = NodePath.resolve(folderPath, manifest.css);
-  if (!isInsideDirectory(resolvedFolder, resolvedCssPath, false)) {
-    return {
-      plugin: {
-        id: folderName,
-        ...metadata,
-        enabled: false,
-        contributes: [],
-        problem: "CSS path must stay inside the plugin folder.",
-      },
-    };
+    return cssProblem('CSS path must start with "./" and stay inside the plugin folder.');
   }
 
   let cssStat: NodeFS.Stats;
   try {
     cssStat = NodeFS.lstatSync(resolvedCssPath);
   } catch (error) {
-    return {
-      plugin: {
-        id: folderName,
-        ...metadata,
-        enabled: false,
-        contributes: [],
-        problem:
-          isErrnoCode(error, "ENOENT") || isErrnoCode(error, "ENOTDIR")
-            ? `CSS file "${manifest.css}" was not found.`
-            : `CSS file "${manifest.css}" could not be accessed.`,
-      },
-    };
+    return cssProblem(
+      isMissingPath(error)
+        ? `CSS file "${cssName}" was not found.`
+        : `CSS file "${cssName}" could not be accessed.`,
+    );
   }
-  if (cssStat.isSymbolicLink()) {
-    return {
-      plugin: {
-        id: folderName,
-        ...metadata,
-        enabled: false,
-        contributes: [],
-        problem: `CSS file "${manifest.css}" cannot be a symlink.`,
-      },
-    };
-  }
-  if (!cssStat.isFile()) {
-    return {
-      plugin: {
-        id: folderName,
-        ...metadata,
-        enabled: false,
-        contributes: [],
-        problem: `CSS file "${manifest.css}" is not a regular file.`,
-      },
-    };
-  }
+  if (cssStat.isSymbolicLink()) return cssProblem(`CSS file "${cssName}" cannot be a symlink.`);
+  if (!cssStat.isFile()) return cssProblem(`CSS file "${cssName}" is not a regular file.`);
   if (cssStat.size > MAX_PLUGIN_CSS_BYTES) {
-    return {
-      plugin: {
-        id: folderName,
-        ...metadata,
-        enabled: false,
-        contributes: [],
-        problem: `CSS exceeds the ${THEME_CSS_MAX_LENGTH} character limit.`,
-      },
-    };
+    return cssProblem(`CSS exceeds the ${THEME_CSS_MAX_LENGTH} character limit.`);
   }
-
-  try {
-    const cssDirReal = NodeFS.realpathSync(NodePath.dirname(resolvedCssPath));
-    if (!isInsideDirectory(pluginRootReal, cssDirReal, true)) {
-      return {
-        plugin: {
-          id: folderName,
-          ...metadata,
-          enabled: false,
-          contributes: [],
-          problem: "CSS path must stay inside the plugin folder.",
-        },
-      };
-    }
-  } catch {
-    return {
-      plugin: {
-        id: folderName,
-        ...metadata,
-        enabled: false,
-        contributes: [],
-        problem: "CSS path could not be resolved.",
-      },
-    };
+  const cssDirReal = realpathOrNull(NodePath.dirname(resolvedCssPath));
+  if (cssDirReal === null || !isInsideDirectory(pluginRootReal, cssDirReal, true)) {
+    return cssProblem("CSS path must stay inside the plugin folder.");
   }
 
   const css = readThemeFileGuarded(resolvedCssPath, MAX_PLUGIN_CSS_BYTES);
-  if (css === null) {
-    return {
-      plugin: {
-        id: folderName,
-        ...metadata,
-        enabled: false,
-        contributes: [],
-        problem: `CSS file "${manifest.css}" could not be read.`,
-      },
-    };
-  }
+  if (css === null) return cssProblem(`CSS file "${cssName}" could not be read.`);
   if (css.length > THEME_CSS_MAX_LENGTH) {
-    return {
-      plugin: {
-        id: folderName,
-        ...metadata,
-        enabled: false,
-        contributes: [],
-        problem: `CSS exceeds the ${THEME_CSS_MAX_LENGTH} character limit.`,
-      },
-    };
+    return cssProblem(`CSS exceeds the ${THEME_CSS_MAX_LENGTH} character limit.`);
   }
   if (themeCssLoadsRemoteFiles(css)) {
-    return {
-      plugin: {
-        id: folderName,
-        ...metadata,
-        enabled: false,
-        contributes: [],
-        problem: "CSS cannot load remote files (@import, image-set(), or non-local url()).",
-      },
-    };
+    return cssProblem("CSS cannot load remote files (@import, image-set(), or non-local url()).");
   }
 
   return {
-    plugin: {
-      id: folderName,
-      ...metadata,
-      enabled: storedEnabled,
-      contributes: ["css"],
-    },
+    plugin: { id: folderName, ...metadata, enabled: storedEnabled, contributes: ["css"] },
     css,
   };
 };
@@ -516,12 +325,11 @@ const make = Effect.gen(function* () {
 
   const refresh = refreshSemaphore.withPermits(1)(
     Effect.gen(function* () {
-      const currentSettings = yield* settings.getSettings.pipe(
-        Effect.orElseSucceed(() => ({
-          plugins: {} as Readonly<Record<string, PluginSettingEntry>>,
-        })),
+      const pluginSettings = yield* settings.getSettings.pipe(
+        Effect.map((current) => current.plugins),
+        Effect.orElseSucceed((): Readonly<Record<string, PluginSettingEntry>> => ({})),
       );
-      const { plugins, active } = yield* scanPlugins(pluginsDir, currentSettings.plugins).pipe(
+      const { plugins, active } = yield* scanPlugins(pluginsDir, pluginSettings).pipe(
         Effect.provideService(FileSystem.FileSystem, fs),
       );
       const [activeChanged, next] = yield* Ref.modify(
@@ -576,7 +384,11 @@ const make = Effect.gen(function* () {
     Effect.forkIn(watcherScope),
     Effect.asVoid,
   );
-  yield* Stream.runForEach(settings.streamChanges, () =>
+  const pluginSettingChanges = settings.streamChanges.pipe(
+    Stream.map((current) => current.plugins),
+    Stream.changesWith(Equal.equals),
+  );
+  yield* Stream.runForEach(pluginSettingChanges, () =>
     refresh.pipe(Effect.ignoreCause({ log: true })),
   ).pipe(Effect.ignoreCause({ log: true }), Effect.forkIn(watcherScope), Effect.asVoid);
 
