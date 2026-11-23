@@ -47,3 +47,11 @@ New plugins start **off**. Open **Settings → Plugins** to turn each plugin on 
 - Edits to a plugin's manifest or CSS file on disk are picked up automatically.
 - A plugin with a missing or invalid manifest, a name that does not match its folder, or invalid CSS still appears in **Settings → Plugins** with a problem message, its switch disabled, and no CSS applied.
 - **Uninstall** asks for confirmation, removes the plugin's enabled setting, and moves the folder to `<stateDir>/plugins-archive/<id>-<timestamp>/` instead of deleting it. To restore an uninstalled plugin, move the archived folder back to `<stateDir>/plugins/<id>/` by hand and turn it on again in **Settings → Plugins**.
+
+## Creating and editing plugins with agents
+
+You can ask an agent to create or update a CSS plugin for you.
+
+- A **new** plugin is saved disabled and shows a card in the chat listing what it adds, with **Install** to turn it on and **Cancel** to archive it. After **Install**, the card offers **Turn off**; after **Cancel**, it offers **Install anyway**.
+- An **edit** to an existing plugin saves right away (and applies live if the plugin is enabled), with **Undo** on its card and **Restore** after undoing.
+- Each write and restore snapshots the plugin's manifest and CSS under `<stateDir>/plugins-history/<id>/`, keeping the newest 20 revisions per plugin.

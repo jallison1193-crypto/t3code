@@ -12720,5 +12720,19 @@
     " e sua configuração de ativação será removida. Você pode restaurá-lo depois movendo a pasta de volta."
   ],
   "c1b7649ac731ed07": "Plugins",
-  "a4f2ab80d075b199": "extensões css personalizado estilos tema aparência instalar desinstalar"
+  "a4f2ab80d075b199": "extensões css personalizado estilos tema aparência instalar desinstalar",
+  "6b77b59ddb720321": "Plugin não restaurado",
+  "22db7b7686cf81c7": "Não foi possível restaurar a revisão do plugin.",
+  "4fcb236959551fa1": "Novo plugin",
+  "5c174688fdb31c00": "Instalado",
+  "fdbef417d4c9a964": "Cancelado",
+  "94493230e3966179": "Atualizado",
+  "eb2762ced90b31fa": "Desfeito",
+  "4a866ed9d49f7ccb": "Alterado depois",
+  "ba5ce6350c9183ed": "Reestiliza o T3 com CSS",
+  "b848773fd942cc02": "Instalar",
+  "a780192787ba0339": "Desativar",
+  "de5d81466963b903": "Instalar mesmo assim",
+  "f510356291976f4f": "Desfazer",
+  "4fc630d6b2bf647f": "Restaurar"
 }

@@ -1501,6 +1501,46 @@ describe("HTML renders in the timeline", () => {
     );
   });
 
+  it("shows plugin changes in place through the turn fold, and only once completed", () => {
+    const change = {
+      pluginId: "compact-sidebar",
+      created: true,
+      after: "0123456789ab",
+      contributes: ["css"] as const,
+    };
+    const writePlugin = (
+      status: OrchestrationV2TurnItem["status"],
+      output?: unknown,
+    ): OrchestrationV2TurnItem => ({
+      ...base("plugin", 2),
+      status,
+      type: "dynamic_tool",
+      toolName: "mcp__t3-code__t3_plugin_write",
+      input: { pluginId: "compact-sidebar", css: ":root {}" },
+      ...(output === undefined ? {} : { output }),
+    });
+    const entries = turn(
+      writePlugin("completed", {
+        structuredContent: {
+          ...change,
+          enabled: false,
+          applied: false,
+          next: "The user turns it on with Install on the card in the chat.",
+        },
+        content: [],
+      }),
+    );
+    expect(entries.find((entry) => entry.kind === "plugin-change")).toMatchObject({
+      id: "plugin",
+      runId,
+      pluginChange: change,
+    });
+    expect(rowsFor(entries, false)).toEqual(["message", "turn-fold", "plugin-change", "message"]);
+    expect(turn(writePlugin("running")).some((entry) => entry.kind === "plugin-change")).toBe(
+      false,
+    );
+  });
+
   it("hosts a captured MCP app after its tool row, from any provider's tool", () => {
     const mcpApp = {
       attachmentId: "render-thread-app-html",

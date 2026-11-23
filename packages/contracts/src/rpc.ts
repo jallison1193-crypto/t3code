@@ -90,6 +90,8 @@ import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
 import {
   PluginOperationError,
   ServerListPluginsResult,
+  ServerRestorePluginRevisionInput,
+  ServerRestorePluginRevisionResult,
   ServerSetPluginEnabledInput,
   ServerSetPluginEnabledResult,
   ServerUninstallPluginInput,
@@ -630,6 +632,7 @@ export const WS_METHODS = {
   serverListPlugins: "server.listPlugins",
   serverSetPluginEnabled: "server.setPluginEnabled",
   serverUninstallPlugin: "server.uninstallPlugin",
+  serverRestorePluginRevision: "server.restorePluginRevision",
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverCheckSecretSource: "server.checkSecretSource",
   serverSearchAcpRegistry: "server.searchAcpRegistry",
@@ -1068,6 +1071,12 @@ const WsServerSetPluginEnabledRpc = Rpc.make(WS_METHODS.serverSetPluginEnabled, 
 const WsServerUninstallPluginRpc = Rpc.make(WS_METHODS.serverUninstallPlugin, {
   payload: ServerUninstallPluginInput,
   success: ServerUninstallPluginResult,
+  error: Schema.Union([PluginOperationError, EnvironmentAuthorizationError]),
+});
+
+const WsServerRestorePluginRevisionRpc = Rpc.make(WS_METHODS.serverRestorePluginRevision, {
+  payload: ServerRestorePluginRevisionInput,
+  success: ServerRestorePluginRevisionResult,
   error: Schema.Union([PluginOperationError, EnvironmentAuthorizationError]),
 });
 
@@ -2550,6 +2559,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerListPluginsRpc,
   WsServerSetPluginEnabledRpc,
   WsServerUninstallPluginRpc,
+  WsServerRestorePluginRevisionRpc,
   WsPeerLinksListRpc,
   WsPeerLinksNamesRpc,
   WsPeerLinksLinkRpc,

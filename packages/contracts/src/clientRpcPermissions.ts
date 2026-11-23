@@ -28,6 +28,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.serverSetThreadSectionMembership]: AuthSettingsWriteScope,
   [WS_METHODS.serverSetPluginEnabled]: AuthSettingsWriteScope,
   [WS_METHODS.serverUninstallPlugin]: AuthSettingsWriteScope,
+  [WS_METHODS.serverRestorePluginRevision]: AuthSettingsWriteScope,
   // Restarts the server, as an update does.
   [WS_METHODS.serverReclaimDatabaseSpace]: AuthEnvironmentMaintainScope,
   [WS_METHODS.serverCheckOtlpEndpoint]: AuthSettingsWriteScope,

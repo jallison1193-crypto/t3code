@@ -108,6 +108,8 @@ describe("PluginRegistry", () => {
 
           const listed = yield* registry.list;
           assert.strictEqual(listed.pluginsDir, config.pluginsDir);
+          assert.strictEqual(listed.plugins.length, 1);
+          assert.match(listed.plugins[0]?.revision ?? "", /^[a-f0-9]{12}$/);
           assert.deepEqual(listed.plugins, [
             {
               id: "compact-sidebar",
@@ -116,6 +118,7 @@ describe("PluginRegistry", () => {
               version: "1.2.3",
               enabled: false,
               contributes: ["css"],
+              revision: listed.plugins[0]!.revision,
             },
           ]);
 
@@ -219,6 +222,29 @@ describe("PluginRegistry", () => {
     ),
   );
 
+  it.effect.skipIf(!symlinksSupported)("refuses writing to a symlinked plugin folder", () =>
+    withPluginRegistry(
+      {},
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const { pluginsDir } = yield* ServerConfig.ServerConfig;
+        const registry = yield* PluginRegistry.PluginRegistry;
+
+        const targetDir = path.join(pluginsDir, "..", "external-plugin");
+        yield* fs.makeDirectory(targetDir, { recursive: true });
+        yield* fs.symlink(targetDir, path.join(pluginsDir, "linked-dir"));
+
+        const failed = yield* registry
+          .write({ id: "linked-dir", css: ":root { --x: 1; }" })
+          .pipe(Effect.flip);
+        assert.strictEqual(failed._tag, "PluginOperationError");
+        assert.strictEqual(failed.reason, "has_problem");
+        assert.isFalse(yield* fs.exists(path.join(targetDir, "plugin.css")));
+      }),
+    ),
+  );
+
   it.effect("toggles streamChanges emissions via setEnabled", () => {
     const css = "[data-chat-header] { border-bottom-width: 2px; }";
     return withPluginRegistry(
@@ -311,5 +337,205 @@ describe("PluginRegistry", () => {
         }),
       );
     },
+  );
+
+  it.effect(
+    "write creates a disabled plugin with a revision and same content keeps the same revision id",
+    () =>
+      withPluginRegistry(
+        {},
+        Effect.gen(function* () {
+          const registry = yield* PluginRegistry.PluginRegistry;
+          const css = "[data-thread-item] { padding-block: 3px; }";
+
+          const created = yield* registry.write({
+            id: "dense-rows",
+            displayName: "Dense Rows",
+            description: "Tighter thread list rows.",
+            version: "0.1.0",
+            css,
+          });
+          assert.strictEqual(created.created, true);
+          assert.isUndefined(created.before);
+          assert.match(created.after, /^[a-f0-9]{12}$/);
+          assert.deepEqual(created.plugin, {
+            id: "dense-rows",
+            displayName: "Dense Rows",
+            description: "Tighter thread list rows.",
+            version: "0.1.0",
+            enabled: false,
+            contributes: ["css"],
+            revision: created.after,
+          });
+
+          const readBack = yield* registry.read("dense-rows");
+          assert.deepEqual(readBack, {
+            displayName: "Dense Rows",
+            description: "Tighter thread list rows.",
+            version: "0.1.0",
+            css,
+          });
+
+          const same = yield* registry.write({
+            id: "dense-rows",
+            displayName: "Dense Rows",
+            description: "Tighter thread list rows.",
+            version: "0.1.0",
+            css,
+          });
+          assert.strictEqual(same.created, false);
+          assert.strictEqual(same.before, created.after);
+          assert.strictEqual(same.after, created.after);
+        }),
+      ),
+  );
+
+  it.effect(
+    "write on an existing enabled plugin keeps it on, returns before and after, and restore(before) emits old CSS",
+    () =>
+      withPluginRegistry(
+        {},
+        Effect.gen(function* () {
+          const registry = yield* PluginRegistry.PluginRegistry;
+          const cssV1 = "[data-chat-header] { border-bottom-width: 1px; }";
+          const cssV2 = "[data-chat-header] { border-bottom-width: 3px; }";
+
+          const first = yield* registry.write({
+            id: "header-accent",
+            displayName: "Header Accent",
+            css: cssV1,
+          });
+          yield* registry.setEnabled("header-accent", true);
+
+          const seen =
+            yield* Queue.unbounded<ReadonlyArray<{ readonly id: string; readonly css: string }>>();
+          yield* Stream.runForEach(registry.streamChanges, (active) =>
+            Queue.offer(seen, active),
+          ).pipe(Effect.forkScoped);
+          assert.deepEqual(yield* Queue.take(seen), [{ id: "header-accent", css: cssV1 }]);
+
+          const edited = yield* registry.write({
+            id: "header-accent",
+            displayName: "Header Accent",
+            css: cssV2,
+          });
+          assert.strictEqual(edited.created, false);
+          assert.strictEqual(edited.plugin.enabled, true);
+          assert.strictEqual(edited.before, first.after);
+          assert.notStrictEqual(edited.after, first.after);
+          assert.strictEqual(edited.plugin.revision, edited.after);
+          assert.deepEqual(yield* Queue.take(seen), [{ id: "header-accent", css: cssV2 }]);
+
+          const restored = yield* registry.restore("header-accent", edited.before!);
+          assert.strictEqual(restored.plugin.enabled, true);
+          assert.strictEqual(restored.plugin.revision, first.after);
+          assert.strictEqual((yield* registry.read("header-accent")).css, cssV1);
+          assert.deepEqual(yield* Queue.take(seen), [{ id: "header-accent", css: cssV1 }]);
+
+          const missingRev = yield* registry
+            .restore("header-accent", "ffffffffffff")
+            .pipe(Effect.flip);
+          assert.strictEqual(missingRev._tag, "PluginOperationError");
+          assert.strictEqual(missingRev.reason, "not_found");
+        }),
+      ),
+  );
+
+  it.effect("write with remote-fetching CSS fails invalid_css and changes no files", () =>
+    withPluginRegistry(
+      {},
+      Effect.gen(function* () {
+        const registry = yield* PluginRegistry.PluginRegistry;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const { pluginsDir } = yield* ServerConfig.ServerConfig;
+
+        const failedNew = yield* registry
+          .write({
+            id: "remote-new",
+            css: "@import url(https://example.com/a.css);",
+          })
+          .pipe(Effect.flip);
+        assert.strictEqual(failedNew._tag, "PluginOperationError");
+        assert.strictEqual(failedNew.reason, "invalid_css");
+        assert.isFalse(yield* fs.exists(path.join(pluginsDir, "remote-new")));
+
+        const originalCss = "[data-chat-header] { opacity: 0.9; }";
+        const initial = yield* registry.write({
+          id: "safe-plugin",
+          css: originalCss,
+        });
+        const failedEdit = yield* registry
+          .write({
+            id: "safe-plugin",
+            css: "body { background: url(https://example.com/bg.png); }",
+          })
+          .pipe(Effect.flip);
+        assert.strictEqual(failedEdit._tag, "PluginOperationError");
+        assert.strictEqual(failedEdit.reason, "invalid_css");
+
+        const afterFailed = yield* registry.read("safe-plugin");
+        assert.strictEqual(afterFailed.css, originalCss);
+        assert.strictEqual((yield* registry.list).plugins[0]?.revision, initial.after);
+      }),
+    ),
+  );
+
+  it.effect("restore(after, true) after uninstall recreates and enables the plugin", () =>
+    withPluginRegistry(
+      {},
+      Effect.gen(function* () {
+        const registry = yield* PluginRegistry.PluginRegistry;
+        const css = '[data-slot="sidebar"] { letter-spacing: 0.01em; }';
+
+        const created = yield* registry.write({
+          id: "restorable",
+          displayName: "Restorable",
+          css,
+        });
+        yield* registry.uninstall("restorable");
+        assert.deepEqual((yield* registry.list).plugins, []);
+
+        const restored = yield* registry.restore("restorable", created.after, true);
+        assert.strictEqual(restored.plugin.enabled, true);
+        assert.strictEqual(restored.plugin.revision, created.after);
+        assert.strictEqual((yield* registry.read("restorable")).css, css);
+
+        const snapshots = yield* registry.streamChanges.pipe(Stream.take(1), Stream.runCollect);
+        assert.deepEqual(Array.from(snapshots), [[{ id: "restorable", css }]]);
+      }),
+    ),
+  );
+
+  it.effect("history keeps only the newest 20 revisions per plugin", () =>
+    withPluginRegistry(
+      {},
+      Effect.gen(function* () {
+        const registry = yield* PluginRegistry.PluginRegistry;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const { stateDir } = yield* ServerConfig.ServerConfig;
+
+        const revisions: Array<string> = [];
+        for (let index = 0; index < 25; index += 1) {
+          const result = yield* registry.write({
+            id: "history-cap",
+            css: `:root { --step: ${index}; }`,
+          });
+          revisions.push(result.after);
+        }
+
+        const historyDir = path.join(stateDir, "plugins-history", "history-cap");
+        const stored = yield* fs.readDirectory(historyDir);
+        assert.strictEqual(stored.length, 20);
+        const storedSet = new Set(stored);
+        for (const oldest of revisions.slice(0, 5)) {
+          assert.isFalse(storedSet.has(oldest), `expected oldest revision ${oldest} to be pruned`);
+        }
+        for (const newest of revisions.slice(5)) {
+          assert.isTrue(storedSet.has(newest), `expected recent revision ${newest} to be kept`);
+        }
+      }),
+    ),
   );
 });

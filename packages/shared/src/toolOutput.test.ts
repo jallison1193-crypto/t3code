@@ -4,6 +4,7 @@ import {
   compactDynamicToolOutput,
   MAX_TOOL_OUTPUT_IMAGES,
   mcpToolResultOutput,
+  pluginChangeFromToolItem,
   SEND_TO_USER_MAX_LENGTH,
   sentMessageFromToolItem,
   THREAD_SUGGEST_MAX_ITEMS,
@@ -84,6 +85,57 @@ describe("compactDynamicToolOutput", () => {
         output: { suggestions: [] },
       }),
     ).toBeUndefined();
+  });
+
+  it("extracts t3_plugin_write changes through envelopes and compaction and rejects anything else", () => {
+    const created = {
+      pluginId: "compact-sidebar",
+      created: true,
+      after: "0123456789ab",
+      contributes: ["css"] as const,
+    };
+    const edited = {
+      pluginId: "compact-sidebar",
+      created: false,
+      before: "0123456789ab",
+      after: "fedcba987654",
+      contributes: ["css"] as const,
+    };
+    const rawCreated = {
+      ...created,
+      enabled: false,
+      applied: false,
+      next: "The user turns it on with Install on the card in the chat.",
+    };
+    const rawEdited = {
+      ...edited,
+      enabled: true,
+      applied: true,
+      next: "Live now; the user can Undo from the card.",
+    };
+    for (const [toolName, output, expected] of [
+      ["mcp__t3-code__t3_plugin_write", { structuredContent: rawCreated, content: [] }, created],
+      ["t3_plugin_write", [{ type: "text", text: JSON.stringify(rawEdited) }], edited],
+      ["t3_plugin_write", compactDynamicToolOutput(rawEdited), edited],
+      ["execute", JSON.stringify(rawCreated), created],
+    ] as const) {
+      expect(pluginChangeFromToolItem({ toolName, output })).toEqual(expected);
+    }
+    for (const [toolName, output] of [
+      ["mcp__t3-code__t3_plugin_write", { isError: true, structuredContent: rawCreated }],
+      ["mcp__t3-code__t3_plugin_read", { structuredContent: rawCreated }],
+      [
+        "t3_plugin_write",
+        { pluginId: "compact-sidebar", created: true, after: "not-hex", contributes: ["css"] },
+      ],
+      [
+        "t3_plugin_write",
+        { pluginId: "../escape", created: true, after: "0123456789ab", contributes: ["css"] },
+      ],
+      ["t3_plugin_write", undefined],
+    ] as const) {
+      expect(pluginChangeFromToolItem({ toolName, output })).toBeNull();
+    }
   });
 
   it("keeps nested thread identity and scalar task IDs without result bodies", () => {

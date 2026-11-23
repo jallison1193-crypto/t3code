@@ -1,0 +1,351 @@
+import { expect, it } from "@effect/vitest";
+import {
+  EnvironmentId,
+  PluginOperationError,
+  ProviderInstanceId,
+  ThreadId,
+} from "@t3tools/contracts";
+import { THEME_GUIDE } from "@t3tools/shared/themeCss";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
+
+import * as ThreadCommandExecutor from "../../../orchestration-v2/ThreadCommandExecutor.ts";
+import * as ThreadManagement from "../../../orchestration-v2/ThreadManagementService.ts";
+import * as PluginRegistry from "../../../plugins/PluginRegistry.ts";
+import { advertisedJsonSchema } from "../../advertisedJsonSchema.ts";
+import * as McpInvocationContext from "../../McpInvocationContext.ts";
+import * as McpToolAccess from "../../McpToolAccess.ts";
+import { liveThreadShell } from "../../McpToolAccess.testkit.ts";
+import * as PluginHandlers from "./handlers.ts";
+import { PluginToolkit } from "./tools.ts";
+
+const environmentId = EnvironmentId.make("environment:plugin");
+const threadId = ThreadId.make("thread:plugin");
+
+const makeThreadScope = (): McpInvocationContext.McpInvocationScope => ({
+  environmentId,
+  requestNamespace: "provider:plugin",
+  thread: {
+    threadId,
+    providerSessionId: "provider:plugin",
+    providerInstanceId: ProviderInstanceId.make("codex"),
+  },
+  client: undefined,
+  capabilities: new Set(["orchestration" as const]),
+  issuedAt: 0,
+});
+
+const readOnlyClientScope: McpInvocationContext.McpInvocationScope = {
+  environmentId,
+  requestNamespace: "client:plugin",
+  thread: undefined,
+  client: {
+    sessionId: "session",
+    label: "Read-only Client",
+    access: "read-only",
+  },
+  capabilities: new Set(["orchestration" as const]),
+  issuedAt: 0,
+};
+
+const runWithRegistry = (
+  registry: Partial<PluginRegistry.PluginRegistry["Service"]>,
+  options: {
+    readonly scope?: McpInvocationContext.McpInvocationScope;
+    readonly runtimeMode?: "full-access" | "auto";
+  } = {},
+) => {
+  const layerDependencies = Layer.mergeAll(
+    ThreadCommandExecutor.layer,
+    Layer.succeed(McpInvocationContext.McpInvocationContext, options.scope ?? makeThreadScope()),
+    Layer.mock(ThreadManagement.ThreadManagementService)({
+      getThreadShell: () =>
+        Effect.succeed(
+          liveThreadShell(threadId, {
+            runtimeMode: options.runtimeMode ?? "full-access",
+          }),
+        ),
+    }),
+    Layer.mock(PluginRegistry.PluginRegistry)(registry),
+  );
+  return McpToolAccess.HandlersLayer.layer(PluginHandlers.layer).pipe(
+    Layer.provideMerge(layerDependencies),
+  );
+};
+
+it.effect("reads plugins, returns one plugin's CSS, and includes the plugin + theme guide", () =>
+  Effect.gen(function* () {
+    const layer = runWithRegistry({
+      list: Effect.succeed({
+        pluginsDir: "/state/plugins",
+        plugins: [
+          {
+            id: "compact-sidebar",
+            displayName: "Compact Sidebar",
+            description: "Tighter rows.",
+            version: "1.0.0",
+            enabled: false,
+            contributes: ["css" as const],
+            revision: "0123456789ab",
+          },
+        ],
+      }),
+      read: (id) =>
+        id === "compact-sidebar"
+          ? Effect.succeed({
+              displayName: "Compact Sidebar",
+              description: "Tighter rows.",
+              version: "1.0.0",
+              css: "[data-thread-item] { padding-block: 2px; }",
+            })
+          : Effect.fail(
+              new PluginOperationError({
+                pluginId: id,
+                operation: "read",
+                reason: "not_found",
+              }),
+            ),
+    });
+
+    yield* Effect.gen(function* () {
+      const toolkit = yield* PluginToolkit;
+      const callRead = (params: Parameters<typeof toolkit.handle<"t3_plugin_read">>[1]) =>
+        toolkit.handle("t3_plugin_read", params).pipe(
+          Stream.unwrap,
+          Stream.runCollect,
+          Effect.map((parts) => parts.at(-1)?.result),
+        );
+
+      const listed = yield* callRead({});
+      expect(listed).toMatchObject({
+        pluginsDir: "/state/plugins",
+        plugins: [
+          {
+            id: "compact-sidebar",
+            displayName: "Compact Sidebar",
+            enabled: false,
+            contributes: ["css"],
+            revision: "0123456789ab",
+          },
+        ],
+        guide: expect.stringContaining(THEME_GUIDE),
+      });
+      expect(listed).toMatchObject({
+        guide: expect.stringMatching(/layered after the active theme/i),
+      });
+
+      const detailed = yield* callRead({ pluginId: "compact-sidebar" });
+      expect(detailed).toMatchObject({
+        pluginsDir: "/state/plugins",
+        plugin: {
+          displayName: "Compact Sidebar",
+          description: "Tighter rows.",
+          version: "1.0.0",
+          css: "[data-thread-item] { padding-block: 2px; }",
+        },
+      });
+
+      const missing = yield* callRead({ pluginId: "missing" });
+      expect(missing).toMatchObject({
+        code: "invalid_request",
+        message: 'Plugin "missing" is not installed.',
+      });
+    }).pipe(Effect.provide(layer));
+  }),
+);
+
+it.effect("writes plugins with authoritative applied/next fields and maps errors", () =>
+  Effect.gen(function* () {
+    const layer = runWithRegistry({
+      write: (input) => {
+        if (input.id === "new-plugin") {
+          return Effect.succeed({
+            plugin: {
+              id: "new-plugin",
+              displayName: input.displayName,
+              enabled: false,
+              contributes: ["css" as const],
+              revision: "aaaaaaaaaaaa",
+            },
+            created: true,
+            after: "aaaaaaaaaaaa",
+          });
+        }
+        if (input.id === "live-plugin") {
+          return Effect.succeed({
+            plugin: {
+              id: "live-plugin",
+              enabled: true,
+              contributes: ["css" as const],
+              revision: "bbbbbbbbbbbb",
+            },
+            created: false,
+            before: "aaaaaaaaaaaa",
+            after: "bbbbbbbbbbbb",
+          });
+        }
+        if (input.id === "off-plugin") {
+          return Effect.succeed({
+            plugin: {
+              id: "off-plugin",
+              enabled: false,
+              contributes: ["css" as const],
+              revision: "cccccccccccc",
+            },
+            created: false,
+            before: "aaaaaaaaaaaa",
+            after: "cccccccccccc",
+          });
+        }
+        if (input.id === "bad-css") {
+          return Effect.fail(
+            new PluginOperationError({
+              pluginId: input.id,
+              operation: "write",
+              reason: "invalid_css",
+            }),
+          );
+        }
+        return Effect.fail(
+          new PluginOperationError({
+            pluginId: input.id,
+            operation: "write",
+            reason: "write_failed",
+          }),
+        );
+      },
+    });
+
+    yield* Effect.gen(function* () {
+      const toolkit = yield* PluginToolkit;
+      const callWrite = (params: Parameters<typeof toolkit.handle<"t3_plugin_write">>[1]) =>
+        toolkit.handle("t3_plugin_write", params).pipe(
+          Stream.unwrap,
+          Stream.runCollect,
+          Effect.map((parts) => parts.at(-1)?.result),
+        );
+
+      expect(
+        yield* callWrite({
+          pluginId: "new-plugin",
+          displayName: "New Plugin",
+          css: "[data-chat-header] { opacity: 0.9; }",
+        }),
+      ).toEqual({
+        pluginId: "new-plugin",
+        created: true,
+        enabled: false,
+        applied: false,
+        contributes: ["css"],
+        after: "aaaaaaaaaaaa",
+        next: "The user turns it on with Install on the card in the chat.",
+      });
+
+      expect(
+        yield* callWrite({
+          pluginId: "live-plugin",
+          css: "[data-chat-header] { opacity: 0.8; }",
+        }),
+      ).toEqual({
+        pluginId: "live-plugin",
+        created: false,
+        enabled: true,
+        applied: true,
+        contributes: ["css"],
+        before: "aaaaaaaaaaaa",
+        after: "bbbbbbbbbbbb",
+        next: "Live now; the user can Undo from the card.",
+      });
+
+      expect(
+        yield* callWrite({
+          pluginId: "off-plugin",
+          css: "[data-chat-header] { opacity: 0.7; }",
+        }),
+      ).toEqual({
+        pluginId: "off-plugin",
+        created: false,
+        enabled: false,
+        applied: false,
+        contributes: ["css"],
+        before: "aaaaaaaaaaaa",
+        after: "cccccccccccc",
+        next: "Saved; it is off, so turn it on in Settings > Plugins.",
+      });
+
+      expect(
+        yield* callWrite({
+          pluginId: "bad-css",
+          css: "@import url(https://example.com/x.css);",
+        }),
+      ).toMatchObject({
+        code: "invalid_request",
+        message: 'CSS for plugin "bad-css" exceeds the size limit or loads remote files.',
+      });
+
+      expect(
+        yield* callWrite({
+          pluginId: "disk-error",
+          css: ":root {}",
+        }),
+      ).toMatchObject({
+        code: "orchestration_error",
+      });
+    }).pipe(Effect.provide(layer));
+  }),
+);
+
+it.effect("refuses plugin writes without full-access or from read-only clients", () =>
+  Effect.gen(function* () {
+    const autoLayer = runWithRegistry(
+      {
+        write: () => Effect.die("must not write without full-access"),
+      },
+      { runtimeMode: "auto" },
+    );
+    const autoResult = yield* Effect.gen(function* () {
+      const toolkit = yield* PluginToolkit;
+      return yield* toolkit.handle("t3_plugin_write", { pluginId: "demo", css: ":root {}" }).pipe(
+        Stream.unwrap,
+        Stream.runCollect,
+        Effect.map((parts) => parts.at(-1)?.result),
+      );
+    }).pipe(Effect.provide(autoLayer));
+    expect(autoResult).toMatchObject({
+      code: "capability_denied",
+      message: expect.stringMatching(/full-access/i),
+    });
+
+    const readOnlyLayer = runWithRegistry(
+      {
+        write: () => Effect.die("must not write from read-only client"),
+      },
+      { scope: readOnlyClientScope },
+    );
+    const readOnlyResult = yield* Effect.gen(function* () {
+      const toolkit = yield* PluginToolkit;
+      return yield* toolkit.handle("t3_plugin_write", { pluginId: "demo", css: ":root {}" }).pipe(
+        Stream.unwrap,
+        Stream.runCollect,
+        Effect.map((parts) => parts.at(-1)?.result),
+      );
+    }).pipe(Effect.provide(readOnlyLayer));
+    expect(readOnlyResult).toMatchObject({ code: "capability_denied" });
+  }),
+);
+
+it("advertises Gemini-compatible JSON schemas with only string enums", () => {
+  const enumValues: Array<unknown> = [];
+  const collect = (node: unknown): void => {
+    if (Array.isArray(node)) return node.forEach(collect);
+    if (typeof node !== "object" || node === null) return;
+    for (const [key, value] of Object.entries(node)) {
+      if (key === "enum" && Array.isArray(value)) enumValues.push(...value);
+      else collect(value);
+    }
+  };
+  collect(advertisedJsonSchema(PluginToolkit.tools.t3_plugin_read));
+  collect(advertisedJsonSchema(PluginToolkit.tools.t3_plugin_write));
+  expect(enumValues.filter((value) => typeof value !== "string")).toEqual([]);
+});

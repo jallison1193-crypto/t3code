@@ -2869,6 +2869,8 @@ export const layerWsRpc = (
         [WS_METHODS.serverSetPluginEnabled]: (input) =>
           pluginRegistry.setEnabled(input.id, input.enabled),
         [WS_METHODS.serverUninstallPlugin]: (input) => pluginRegistry.uninstall(input.id),
+        [WS_METHODS.serverRestorePluginRevision]: (input) =>
+          pluginRegistry.restore(input.id, input.revision, input.enable),
         [WS_METHODS.serverDiscoverSourceControl]: (_input) => sourceControlDiscovery.discover,
         [WS_METHODS.serverCheckSecretSource]: (input) => secretCheck.check(input.source),
         [WS_METHODS.serverGetTraceDiagnostics]: (_input) =>

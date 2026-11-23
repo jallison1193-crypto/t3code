@@ -26,8 +26,10 @@ import type { McpAppReference } from "@t3tools/shared/mcpApp";
 import {
   htmlRenderFromToolItem,
   mcpAppFromToolItem,
+  pluginChangeFromToolItem,
   sentMessageFromToolItem,
   threadSuggestionsFromToolItem,
+  type PluginChange,
   type ThreadSuggestion,
 } from "@t3tools/shared/toolOutput";
 import {
@@ -141,6 +143,13 @@ export type TimelineEntry = (
       readonly createdAt: string;
       readonly runId: RunId | null;
       readonly suggestions: ReadonlyArray<ThreadSuggestion>;
+    }
+  | {
+      readonly id: string;
+      readonly kind: "plugin-change";
+      readonly createdAt: string;
+      readonly runId: RunId | null;
+      readonly pluginChange: PluginChange;
     }
   | {
       readonly id: string;
@@ -745,6 +754,22 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
         createdAt,
         runId: item.runId,
         suggestions: threadSuggestions,
+        ...attemptMetadata,
+      });
+      continue;
+    }
+
+    const pluginChange =
+      item.type === "dynamic_tool" && item.status === "completed"
+        ? pluginChangeFromToolItem(item)
+        : null;
+    if (pluginChange !== null) {
+      entries.push({
+        id: item.id,
+        kind: "plugin-change",
+        createdAt,
+        runId: item.runId,
+        pluginChange,
         ...attemptMetadata,
       });
       continue;
