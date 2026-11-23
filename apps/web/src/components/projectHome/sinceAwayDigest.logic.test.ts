@@ -45,12 +45,10 @@ function makeThread(
 ): SinceAwayDigestThread & { readonly id: string } {
   return {
     id,
-    hasActionableProposedPlan: false,
     hasPendingApprovals: false,
     hasPendingUserInput: false,
     pendingSubagentRequest: null,
     pendingGuestMessageCount: 0,
-    interactionMode: "default",
     latestRun: makeLatestRun(),
     runtime: makeRuntime(),
     lastVisitedAt: AFTER_COMPLETE,
