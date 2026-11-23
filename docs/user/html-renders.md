@@ -16,6 +16,8 @@ On web and desktop, open **HTML Library** from the sidebar to find pages across 
 
 Select a page to open it full screen, or use **Open source thread** to return to the conversation. From a page's menu, you can pin it to the top of the library, rename it (leave the name blank to restore the original title), or choose **Ask for changes** (also available in the full-screen preview) to open its source thread with a draft prompt ready to edit. When the library shows **Load more**, it can still find pages further back. A notice lists environments it could not search. Agents can also list, pin, unpin, and rename pages in the library.
 
+Switch to **Files** to browse files threads wrote or edited, newest first, across the same mode and project filters. Use **Open** to view a workspace file in its source thread's file viewer, or **Show thread** to jump to the conversation.
+
 ## MCP apps
 
 Some MCP servers return an interactive app with their tool results, following the [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) standard. When an agent calls one of those tools, the app appears in the thread below the tool call, on web, desktop, and mobile. The tool call keeps its input and result, so you can still read them when an app shows nothing. Codex and Claude support this today, for any MCP server you have configured for them. Claude needs Claude Code 2.1.301 or newer; older versions and other providers show these calls as ordinary tool calls.

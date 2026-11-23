@@ -10,6 +10,7 @@ import { page, userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
 import { __setClientSettingsForTests, getClientSettings } from "~/hooks/useSettings";
+import { useRightPanelStore } from "~/rightPanelStore";
 import { render } from "../../../test/render";
 import { SidebarProvider } from "../ui/sidebar";
 import { HtmlLibraryPage } from "./HtmlLibraryPage";
@@ -260,4 +261,71 @@ it("pins and unpins a page into the Pinned section and hides it from the recent 
     input: { patch: { htmlLibraryEntries: { "pin-att": null } } },
   });
   expect(screen.getByRole("button", { name: /Architecture diagram/ }).elements()).toHaveLength(1);
+});
+
+it("switches to Files via URL search param, hides Open outside workspace, and opens workspace files in the source thread", async () => {
+  using _settings = setup();
+  mocks.read.mockImplementation(async ({ environmentId }) => {
+    if (environmentId !== remote) {
+      return { _tag: "Success", value: { entries: [], nextCursor: null } };
+    }
+    return {
+      _tag: "Success",
+      value: {
+        entries: [
+          {
+            path: "C:\\work\\budget\\reports\\q4.xlsx",
+            fileName: "q4.xlsx",
+            itemId: TurnItemId.make("item-in"),
+            threadId: ThreadId.make("thread-budget"),
+            threadTitle: "Q4 budget",
+            projectId: ProjectId.make("proj-budget"),
+            projectTitle: "Finance",
+            workspaceRoot: "C:\\work\\budget",
+            mode: "work" as const,
+            updatedAt: "2026-11-22T20:00:00.000Z",
+          },
+          {
+            path: "C:\\outside\\scratch.txt",
+            fileName: "scratch.txt",
+            itemId: TurnItemId.make("item-out"),
+            threadId: ThreadId.make("thread-budget"),
+            threadTitle: "Q4 budget",
+            projectId: ProjectId.make("proj-budget"),
+            projectTitle: "Finance",
+            workspaceRoot: "C:\\work\\budget",
+            mode: "work" as const,
+            updatedAt: "2026-11-22T19:00:00.000Z",
+          },
+        ],
+        nextCursor: null,
+      },
+    };
+  });
+
+  await using screen = await render(
+    <SidebarProvider>
+      <HtmlLibraryPage />
+    </SidebarProvider>,
+    { router: "/library" },
+  );
+  using openFileSpy = vi.spyOn(useRightPanelStore.getState(), "openFile");
+
+  await userEvent.click(screen.getByRole("button", { name: "Files", exact: true }));
+  await expect.element(screen.getByText("q4.xlsx")).toBeVisible();
+  await expect.element(screen.getByText("reports")).toBeVisible();
+  await expect.element(screen.getByText("scratch.txt")).toBeVisible();
+  expect(screen.router?.state.location.searchStr).toBe("?view=files");
+
+  expect(screen.getByRole("button", { name: "Open", exact: true }).elements()).toHaveLength(1);
+  const threadLinks = screen.getByRole("link", { name: "Show thread" }).elements();
+  expect(threadLinks).toHaveLength(2);
+  expect(threadLinks[0]?.getAttribute("href")).toBe("/remote/thread-budget");
+
+  await userEvent.click(screen.getByRole("button", { name: "Open", exact: true }));
+  expect(openFileSpy).toHaveBeenCalledWith(
+    { environmentId: remote, threadId: ThreadId.make("thread-budget") },
+    "reports/q4.xlsx",
+  );
+  expect(screen.router?.state.location.pathname).toBe("/remote/thread-budget");
 });

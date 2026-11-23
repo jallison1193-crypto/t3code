@@ -4056,6 +4056,7 @@ export const ORCHESTRATION_V2_WS_METHODS = {
   getFullThreadDiff: "orchestration.getFullThreadDiff",
   searchThreads: "orchestration.searchThreads",
   listHtmlLibrary: "orchestration.listHtmlLibrary",
+  listLibraryFiles: "orchestration.listLibraryFiles",
   searchThread: "orchestration.searchThread",
   searchThreadStream: "orchestration.searchThreadStream",
   getArchivedShellSnapshot: "orchestration.getArchivedShellSnapshot",
@@ -4677,6 +4678,44 @@ export class OrchestrationV2ListHtmlLibraryError extends Schema.TaggedError<Orch
 ) {
   override get message(): string {
     return "Failed to load the HTML library.";
+  }
+}
+
+export const OrchestrationV2ListLibraryFilesInput = Schema.Struct({
+  projectIds: Schema.optionalKey(Schema.Array(ProjectId).check(Schema.isMaxLength(100))),
+  mode: Schema.optionalKey(SidebarModeFilter),
+  limit: Schema.optionalKey(PositiveInt.check(Schema.isLessThanOrEqualTo(50))),
+  cursor: Schema.optionalKey(HtmlLibraryCursor),
+});
+export type OrchestrationV2ListLibraryFilesInput = typeof OrchestrationV2ListLibraryFilesInput.Type;
+
+const LibraryFileEntry = Schema.Struct({
+  path: Schema.String,
+  fileName: Schema.String,
+  itemId: TurnItemId,
+  threadId: ThreadId,
+  threadTitle: Schema.String,
+  projectId: ProjectId,
+  projectTitle: Schema.String,
+  workspaceRoot: Schema.optionalKey(Schema.String),
+  mode: AppMode,
+  updatedAt: IsoDateTime,
+});
+
+export const OrchestrationV2ListLibraryFilesResult = Schema.Struct({
+  entries: Schema.Array(LibraryFileEntry),
+  // Sparse filters can produce an empty page with more candidates to examine.
+  nextCursor: Schema.NullOr(HtmlLibraryCursor),
+});
+export type OrchestrationV2ListLibraryFilesResult =
+  typeof OrchestrationV2ListLibraryFilesResult.Type;
+
+export class OrchestrationV2ListLibraryFilesError extends Schema.TaggedError<OrchestrationV2ListLibraryFilesError>()(
+  "OrchestrationV2ListLibraryFilesError",
+  { cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return "Failed to load library files.";
   }
 }
 

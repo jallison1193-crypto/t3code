@@ -1,6 +1,11 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import {
+  scopedProjectKey,
+  scopedThreadKey,
+  scopeProjectRef,
+  scopeThreadRef,
+} from "@t3tools/client-runtime/environment";
 import {
   createEnvironmentRpcQueryAtomFamily,
   settlePromise,
@@ -11,6 +16,7 @@ import {
   type EnvironmentId,
   ORCHESTRATION_V2_WS_METHODS,
   type OrchestrationV2ListHtmlLibraryInput,
+  type OrchestrationV2ListLibraryFilesInput,
   type SidebarModeFilter as Mode,
 } from "@t3tools/contracts";
 import { htmlRenderFileName } from "@t3tools/shared/htmlRender";
@@ -33,6 +39,8 @@ import { isElectron } from "~/env";
 import { useClientSettings, useClientSettingsHydrated } from "~/hooks/useSettings";
 import { useStableCallback } from "~/hooks/useStableCallback";
 import { dispatchSnapShotComposerFocus } from "~/lib/desktopSnapShot";
+import { useRightPanelStore } from "~/rightPanelStore";
+import { useProjects, useQuietThreadShells } from "~/state/entities";
 import { useConnectedEnvironmentIds, useEnvironments } from "~/state/environments";
 import { serverEnvironment } from "~/state/server";
 import { useEnvironmentsWithScope } from "~/state/session";
@@ -40,6 +48,7 @@ import { useAtomCommand } from "~/state/use-atom-command";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
 import { HtmlRenderDialog } from "../chat/HtmlRenderDialog";
 import { ProjectViewTabs } from "../projectHome/CoordinatorHeaderTabs";
+import { RelativeTime } from "../RelativeTime";
 import { useSettingsProjectGroups } from "../settings/useSettingsProjectGroups";
 import { SidebarModeFilter } from "../sidebar/SidebarModeFilter";
 import { Button } from "../ui/button";
@@ -57,6 +66,7 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { SidebarInset } from "../ui/sidebar";
+import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import {
@@ -72,10 +82,29 @@ import {
   startLibrary,
   type HtmlLibraryEntry,
 } from "./htmlLibraryPages";
+import {
+  libraryFileEntryKey,
+  libraryFileOpenPath,
+  libraryFilesView,
+  libraryUrlWithView,
+  libraryViewFromSearch,
+  loadLibraryFiles,
+  splitLibraryFilePath,
+  startLibraryFiles,
+  type LibraryFileEntry,
+  type LibraryView,
+} from "./libraryFiles.logic";
 
 const listHtmlLibrary = createEnvironmentRpcQueryAtomFamily(connectionAtomRuntime, {
   label: "environment-data:orchestration:html-library",
   tag: ORCHESTRATION_V2_WS_METHODS.listHtmlLibrary,
+  staleTimeMs: 0,
+  idleTtlMs: 0,
+});
+
+const listLibraryFiles = createEnvironmentRpcQueryAtomFamily(connectionAtomRuntime, {
+  label: "environment-data:orchestration:library-files",
+  tag: ORCHESTRATION_V2_WS_METHODS.listLibraryFiles,
   staleTimeMs: 0,
   idleTtlMs: 0,
 });
@@ -614,6 +643,249 @@ function LibraryResults({
   );
 }
 
+function LibraryFileRow({
+  entry,
+  showProject,
+  label,
+  workspaceRoot,
+  onOpenFile,
+}: {
+  readonly entry: LibraryFileEntry;
+  readonly showProject: boolean;
+  readonly label: string | undefined;
+  readonly workspaceRoot: string | undefined;
+  readonly onOpenFile: (entry: LibraryFileEntry, relativePath: string) => void;
+}) {
+  const gt = useGT();
+  const { fileName, parentFolder } = splitLibraryFilePath(entry.path, workspaceRoot);
+  const openPath = libraryFileOpenPath(entry, workspaceRoot);
+  const source = [showProject ? entry.projectTitle : null, entry.threadTitle, label]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <li className="flex min-w-0 items-center justify-between gap-2 px-3 py-2">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <span className="truncate text-sm font-medium">{fileName}</span>
+          {parentFolder ? (
+            <span className="min-w-0 truncate text-xs text-muted-foreground">{parentFolder}</span>
+          ) : null}
+        </div>
+        <span className="w-full truncate text-xs text-muted-foreground">
+          {source ? `${source} · ` : null}
+          <RelativeTime timestamp={entry.updatedAt} />
+        </span>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        {openPath !== null ? (
+          <Button variant="outline" size="xs" onClick={() => onOpenFile(entry, openPath)}>
+            <T>Open</T>
+          </Button>
+        ) : null}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={gt("Show thread")}
+                render={
+                  <Link
+                    to="/$environmentId/$threadId"
+                    params={{
+                      environmentId: entry.environmentId,
+                      threadId: entry.threadId,
+                    }}
+                  />
+                }
+              />
+            }
+          >
+            <ArrowUpRightIcon />
+          </TooltipTrigger>
+          <TooltipPopup>{gt("Show thread")}</TooltipPopup>
+        </Tooltip>
+      </div>
+    </li>
+  );
+}
+
+function LibraryFilesResults({
+  sources,
+  mode,
+  environments,
+  showProject,
+}: {
+  readonly sources: Parameters<typeof startLibraryFiles>[0];
+  readonly mode: Mode;
+  readonly environments: ReturnType<typeof useEnvironments>["environments"];
+  readonly showProject: boolean;
+}) {
+  const navigate = useNavigate();
+  const connected = useConnectedEnvironmentIds();
+  const projects = useProjects();
+  const threadShells = useQuietThreadShells();
+  const read = useAtomQueryRunner(listLibraryFiles, { reportFailure: false, reportDefect: false });
+  const [initialFiles] = useState(() => startLibraryFiles(sources));
+  const [files, setFiles] = useState(initialFiles);
+  const [pending, setPending] = useState(true);
+  const activeRequest = useRef<AbortController | null>(null);
+
+  const startRequest = () => {
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    return controller.signal;
+  };
+
+  const readSource = useStableCallback(
+    async (
+      environmentId: EnvironmentId,
+      input: OrchestrationV2ListLibraryFilesInput,
+      signal: AbortSignal,
+    ) => {
+      if (!connected.includes(environmentId)) throw new Error("Environment offline");
+      const result = await read(
+        { environmentId, input },
+        { signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]) },
+      );
+      if (result._tag === "Failure") throw result.cause;
+      return result.value;
+    },
+  );
+
+  const refresh = useStableCallback(async () => {
+    const signal = startRequest();
+    setPending(true);
+    const loaded = await loadLibraryFiles(initialFiles, mode, (environmentId, input) =>
+      readSource(environmentId, input, signal),
+    );
+    if (signal.aborted) return;
+    setFiles(loaded);
+    setPending(false);
+  });
+
+  const loadMore = useStableCallback(async (current: typeof files) => {
+    const signal = startRequest();
+    setPending(true);
+    const loaded = await loadLibraryFiles(current, mode, (environmentId, input) =>
+      readSource(environmentId, input, signal),
+    );
+    if (signal.aborted) return;
+    setFiles(loaded);
+    setPending(false);
+  });
+
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- opening the files view starts an RPC round, which is cancelled when the view closes
+  useEffect(() => {
+    void refresh();
+    return () => activeRequest.current?.abort();
+  }, [refresh]);
+
+  const handleOpenFile = useStableCallback((entry: LibraryFileEntry, relativePath: string) => {
+    const threadRef = scopeThreadRef(entry.environmentId, entry.threadId);
+    useRightPanelStore.getState().openFile(threadRef, relativePath);
+    void navigate({
+      to: "/$environmentId/$threadId",
+      params: { environmentId: entry.environmentId, threadId: entry.threadId },
+    });
+  });
+
+  const projectWorkspaceByKey = new Map(
+    projects.map((project) => [
+      scopedProjectKey(scopeProjectRef(project.environmentId, project.id)),
+      project.workspaceRoot,
+    ]),
+  );
+  const threadWorktreeByKey = new Map(
+    threadShells.flatMap((thread) =>
+      thread.worktreePath
+        ? [
+            [
+              scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+              thread.worktreePath,
+            ] as const,
+          ]
+        : [],
+    ),
+  );
+  const view = libraryFilesView(files);
+  const labels = new Map(environments.map(({ environmentId, label }) => [environmentId, label]));
+  const empty = view.entries.length === 0;
+  const allUnavailable = files.streams.length > 0 && files.streams.every((s) => s.unavailable);
+
+  return (
+    <>
+      {view.unavailable.length > 0 ? (
+        <div role="status" className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          <span className="text-muted-foreground">
+            <T>
+              Library unavailable on{" "}
+              <Var>{view.unavailable.map((id) => labels.get(id) ?? id).join(", ")}</Var>.
+            </T>
+          </span>
+          <Button variant="outline" size="sm" disabled={pending} onClick={() => void refresh()}>
+            <T>Retry</T>
+          </Button>
+        </div>
+      ) : null}
+      {empty && allUnavailable && !pending ? null : !empty ? (
+        <ul className="divide-y divide-border rounded-lg border bg-card">
+          {view.entries.map((entry) => {
+            const workspaceRoot =
+              threadWorktreeByKey.get(
+                scopedThreadKey(scopeThreadRef(entry.environmentId, entry.threadId)),
+              ) ??
+              entry.workspaceRoot ??
+              projectWorkspaceByKey.get(
+                scopedProjectKey(scopeProjectRef(entry.environmentId, entry.projectId)),
+              );
+            return (
+              <LibraryFileRow
+                key={libraryFileEntryKey(entry)}
+                entry={entry}
+                showProject={showProject}
+                label={labels.get(entry.environmentId)}
+                workspaceRoot={workspaceRoot}
+                onOpenFile={handleOpenFile}
+              />
+            );
+          })}
+        </ul>
+      ) : (
+        <p role="status" className="py-6 text-sm text-muted-foreground">
+          {pending ? (
+            <T>Loading files…</T>
+          ) : view.hasMore ? (
+            <T>Keep searching to see more results.</T>
+          ) : view.unavailable.length === 0 ? (
+            <T>No files found.</T>
+          ) : (
+            <T>No files found in available environments.</T>
+          )}
+        </p>
+      )}
+      {!empty && view.hasMore && !pending ? (
+        <p role="status" className="py-3 text-sm text-muted-foreground">
+          <T>Keep searching to see more results.</T>
+        </p>
+      ) : null}
+      {view.hasMore && !(pending && empty) ? (
+        <div className="mt-3">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pending}
+            onClick={() => void loadMore(files)}
+          >
+            {pending ? <T>Loading…</T> : <T>Load more</T>}
+          </Button>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 function HtmlLibraryContent({
   projectKey,
   group,
@@ -622,6 +894,9 @@ function HtmlLibraryContent({
   readonly group?: ReturnType<typeof useSettingsProjectGroups>[number];
 }) {
   const gt = useGT();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const view = libraryViewFromSearch(location.searchStr);
   const mode = useClientSettings((settings) => settings.sidebarModeFilter);
   const settingsReady = useClientSettingsHydrated();
   const { environments, isReady } = useEnvironments();
@@ -631,6 +906,11 @@ function HtmlLibraryContent({
     : environments
         .map(({ environmentId }) => ({ environmentId }))
         .sort((a, b) => a.environmentId.localeCompare(b.environmentId));
+  const resultsKey = JSON.stringify([
+    mode,
+    sources,
+    sources.map((s) => connected.includes(s.environmentId)),
+  ]);
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
@@ -645,7 +925,33 @@ function HtmlLibraryContent({
         </WorkspacePageHeader>
         <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
           <div className="mx-auto w-full max-w-3xl px-4 py-4 sm:px-6">
-            <div className="mb-4">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <ToggleGroup
+                aria-label={gt("Library view")}
+                variant="segmented"
+                size="segmented"
+                value={[view]}
+                onValueChange={(next) => {
+                  const target = next.find((value): value is LibraryView => value !== view);
+                  if (!target) return;
+                  void navigate({
+                    href: libraryUrlWithView(
+                      location.pathname,
+                      location.searchStr,
+                      location.hash,
+                      target,
+                    ),
+                    replace: true,
+                  });
+                }}
+              >
+                <Toggle value="pages">
+                  <T>Pages</T>
+                </Toggle>
+                <Toggle value="files">
+                  <T>Files</T>
+                </Toggle>
+              </ToggleGroup>
               <SidebarModeFilter label={gt("Library mode filter")} />
             </div>
             {isReady && settingsReady ? (
@@ -653,13 +959,17 @@ function HtmlLibraryContent({
                 <p role="status" className="py-6 text-sm text-muted-foreground">
                   <T>Project not found</T>
                 </p>
+              ) : view === "files" ? (
+                <LibraryFilesResults
+                  key={resultsKey}
+                  sources={sources}
+                  mode={mode}
+                  environments={environments}
+                  showProject={!projectKey}
+                />
               ) : (
                 <LibraryResults
-                  key={JSON.stringify([
-                    mode,
-                    sources,
-                    sources.map((s) => connected.includes(s.environmentId)),
-                  ])}
+                  key={resultsKey}
                   sources={sources}
                   mode={mode}
                   environments={environments}
@@ -667,7 +977,7 @@ function HtmlLibraryContent({
               )
             ) : (
               <p role="status" className="py-6 text-sm text-muted-foreground">
-                <T>Loading HTML pages…</T>
+                {view === "files" ? <T>Loading files…</T> : <T>Loading HTML pages…</T>}
               </p>
             )}
           </div>

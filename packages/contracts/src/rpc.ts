@@ -302,6 +302,9 @@ import {
   OrchestrationV2ListHtmlLibraryError,
   OrchestrationV2ListHtmlLibraryInput,
   OrchestrationV2ListHtmlLibraryResult,
+  OrchestrationV2ListLibraryFilesError,
+  OrchestrationV2ListLibraryFilesInput,
+  OrchestrationV2ListLibraryFilesResult,
   OrchestrationV2RpcSchemas,
   OrchestrationV2ThreadHistoryPage,
   OrchestrationV2ThreadLaunchError,
@@ -2192,6 +2195,15 @@ const WsOrchestrationV2ListHtmlLibraryRpc = Rpc.make(ORCHESTRATION_V2_WS_METHODS
   error: Schema.Union([OrchestrationV2ListHtmlLibraryError, EnvironmentAuthorizationError]),
 });
 
+const WsOrchestrationV2ListLibraryFilesRpc = Rpc.make(
+  ORCHESTRATION_V2_WS_METHODS.listLibraryFiles,
+  {
+    payload: OrchestrationV2ListLibraryFilesInput,
+    success: OrchestrationV2ListLibraryFilesResult,
+    error: Schema.Union([OrchestrationV2ListLibraryFilesError, EnvironmentAuthorizationError]),
+  },
+);
+
 const WsOrchestrationV2GetArchivedShellSnapshotRpc = Rpc.make(
   ORCHESTRATION_V2_WS_METHODS.getArchivedShellSnapshot,
   {
@@ -2699,6 +2711,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationV2GetFullThreadDiffRpc,
   WsOrchestrationV2SearchThreadsRpc,
   WsOrchestrationV2ListHtmlLibraryRpc,
+  WsOrchestrationV2ListLibraryFilesRpc,
   WsOrchestrationV2SearchThreadRpc,
   WsOrchestrationV2SearchThreadStreamRpc,
   WsOrchestrationV2GetArchivedShellSnapshotRpc,
