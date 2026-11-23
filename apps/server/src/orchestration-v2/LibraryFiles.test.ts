@@ -6,7 +6,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as NodeOS from "node:os";
-import * as NodePath from "node:path";
 
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import { traceSqlRouting } from "../persistence/testkit/SqliteRouting.ts";
@@ -404,7 +403,7 @@ describe("library files", () => {
       yield* addFileChange(
         "item-5",
         "thread",
-        { fileName: NodePath.join(NodeOS.tmpdir(), "scratchpad", "notes.md") },
+        { fileName: `${NodeOS.tmpdir()}${NodeOS.tmpdir().includes("\\") ? "\\" : "/"}notes.md` },
         { updatedAt: "2026-11-21T15:00:00.000Z" },
       );
 
