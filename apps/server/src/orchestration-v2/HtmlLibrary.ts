@@ -170,6 +170,21 @@ const make = Effect.gen(function* () {
     WHERE type = 'dynamic_tool' AND status = 'completed' AND inline_work_output = 1
   `;
 
+  const selectCandidates = (projectIds: ReadonlyArray<ProjectId> | undefined) => sql`
+    SELECT
+      item.turn_item_id AS itemId, item.updated_at AS updatedAt, item.thread_id AS threadId,
+      thread.title AS threadTitle, project.project_id AS projectId, project.title AS projectTitle,
+      CASE WHEN json_valid(thread.payload_json) THEN thread.payload_json -> '$.tags' END AS tags,
+      CASE WHEN thread.deleted_at IS NULL AND project.deleted_at IS NULL
+        AND project.project_id IS NOT NULL AND run.status IS NOT 'rolled_back'
+        ${projectIds === undefined ? sql`` : sql`AND project.project_id IN ${sql.in(projectIds)}`}
+        THEN item.payload_json END AS payload
+    FROM orchestration_v2_projection_turn_items AS item
+    LEFT JOIN orchestration_v2_projection_threads AS thread ON thread.thread_id = item.thread_id
+    LEFT JOIN projection_projects AS project ON project.project_id = thread.project_id
+    LEFT JOIN orchestration_v2_projection_runs AS run ON run.run_id = item.run_id
+  `;
+
   const list = Effect.fn("HtmlLibrary.list")(function* ({
     projectIds,
     mode = "all",
@@ -195,18 +210,7 @@ const make = Effect.gen(function* () {
       for (let start = 0; start < itemIds.length; start += PINNED_LOOKUP_BATCH_SIZE) {
         const batch = itemIds.slice(start, start + PINNED_LOOKUP_BATCH_SIZE);
         const rows = yield* sql<Candidate>`
-          SELECT
-            item.turn_item_id AS itemId, item.updated_at AS updatedAt, item.thread_id AS threadId,
-            thread.title AS threadTitle, project.project_id AS projectId, project.title AS projectTitle,
-            CASE WHEN json_valid(thread.payload_json) THEN thread.payload_json -> '$.tags' END AS tags,
-            CASE WHEN thread.deleted_at IS NULL AND project.deleted_at IS NULL
-              AND project.project_id IS NOT NULL AND run.status IS NOT 'rolled_back'
-              ${projectIds === undefined ? sql`` : sql`AND project.project_id IN ${sql.in(projectIds)}`}
-              THEN item.payload_json END AS payload
-          FROM orchestration_v2_projection_turn_items AS item
-          LEFT JOIN orchestration_v2_projection_threads AS thread ON thread.thread_id = item.thread_id
-          LEFT JOIN projection_projects AS project ON project.project_id = thread.project_id
-          LEFT JOIN orchestration_v2_projection_runs AS run ON run.run_id = item.run_id
+          ${selectCandidates(projectIds)}
           WHERE item.turn_item_id IN ${sql.in(batch)}
             AND item.type = 'dynamic_tool' AND item.status = 'completed' AND item.inline_work_output = 1
         `.pipe(NodeSqliteClient.readOnly);
@@ -226,18 +230,7 @@ const make = Effect.gen(function* () {
 
     // Filter in the SELECT so even a sparse project or mode examines a bounded batch.
     const rows = yield* sql<Candidate>`
-      SELECT
-        item.turn_item_id AS itemId, item.updated_at AS updatedAt, item.thread_id AS threadId,
-        thread.title AS threadTitle, project.project_id AS projectId, project.title AS projectTitle,
-        CASE WHEN json_valid(thread.payload_json) THEN thread.payload_json -> '$.tags' END AS tags,
-        CASE WHEN thread.deleted_at IS NULL AND project.deleted_at IS NULL
-          AND project.project_id IS NOT NULL AND run.status IS NOT 'rolled_back'
-          ${projectIds === undefined ? sql`` : sql`AND project.project_id IN ${sql.in(projectIds)}`}
-          THEN item.payload_json END AS payload
-      FROM orchestration_v2_projection_turn_items AS item
-      LEFT JOIN orchestration_v2_projection_threads AS thread ON thread.thread_id = item.thread_id
-      LEFT JOIN projection_projects AS project ON project.project_id = thread.project_id
-      LEFT JOIN orchestration_v2_projection_runs AS run ON run.run_id = item.run_id
+      ${selectCandidates(projectIds)}
       WHERE item.type = 'dynamic_tool' AND item.status = 'completed' AND item.inline_work_output = 1
         ${
           cursor === undefined
@@ -322,17 +315,7 @@ const make = Effect.gen(function* () {
     return yield* updateSemaphore.withPermits(1)(
       Effect.gen(function* () {
         const rows = yield* sql<Candidate>`
-          SELECT
-            item.turn_item_id AS itemId, item.updated_at AS updatedAt, item.thread_id AS threadId,
-            thread.title AS threadTitle, project.project_id AS projectId, project.title AS projectTitle,
-            CASE WHEN json_valid(thread.payload_json) THEN thread.payload_json -> '$.tags' END AS tags,
-            CASE WHEN thread.deleted_at IS NULL AND project.deleted_at IS NULL
-              AND project.project_id IS NOT NULL AND run.status IS NOT 'rolled_back'
-              THEN item.payload_json END AS payload
-          FROM orchestration_v2_projection_turn_items AS item
-          LEFT JOIN orchestration_v2_projection_threads AS thread ON thread.thread_id = item.thread_id
-          LEFT JOIN projection_projects AS project ON project.project_id = thread.project_id
-          LEFT JOIN orchestration_v2_projection_runs AS run ON run.run_id = item.run_id
+          ${selectCandidates(undefined)}
           WHERE item.turn_item_id = ${input.itemId}
             AND item.thread_id = ${input.threadId}
             AND item.type = 'dynamic_tool' AND item.status = 'completed' AND item.inline_work_output = 1
