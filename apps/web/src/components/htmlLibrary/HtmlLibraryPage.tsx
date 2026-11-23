@@ -10,6 +10,7 @@ import {
   AuthSettingsWriteScope,
   type EnvironmentId,
   ORCHESTRATION_V2_WS_METHODS,
+  type OrchestrationV2ListHtmlLibraryInput,
   type SidebarModeFilter as Mode,
 } from "@t3tools/contracts";
 import { htmlRenderFileName } from "@t3tools/shared/htmlRender";
@@ -329,16 +330,13 @@ function LibraryResults({
 
   const environmentsById = new Map(environments.map((env) => [env.environmentId, env]));
   const connectedSources = sources.filter((source) => connected.includes(source.environmentId));
-  const remoteEntriesSignature = JSON.stringify(
-    connectedSources.map((source) => [
-      source.environmentId,
-      JSON.stringify(
+  const entriesSignature = JSON.stringify(
+    connectedSources.map(
+      (source) =>
         environmentsById.get(source.environmentId)?.serverConfig?.settings.htmlLibraryEntries ??
-          null,
-      ),
-    ]),
+        null,
+    ),
   );
-  const lastKnownEntriesByEnv = useRef<Map<EnvironmentId, string> | null>(null);
 
   const startRequest = () => {
     activeRequest.current?.abort();
@@ -350,12 +348,7 @@ function LibraryResults({
   const readSource = useStableCallback(
     async (
       environmentId: EnvironmentId,
-      input: Parameters<typeof loadLibraryPages>[2] extends (
-        env: EnvironmentId,
-        arg: infer I,
-      ) => unknown
-        ? I
-        : never,
+      input: OrchestrationV2ListHtmlLibraryInput,
       signal: AbortSignal,
     ) => {
       if (!connected.includes(environmentId)) throw new Error("Environment offline");
@@ -402,25 +395,13 @@ function LibraryResults({
     return () => activeRequest.current?.abort();
   }, [refresh]);
 
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- another client's settings update arrives over the config stream and refreshes this list
+  const seenEntriesSignature = useRef(entriesSignature);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- a pin or rename from another client arrives over the config stream
   useEffect(() => {
-    const entries = JSON.parse(remoteEntriesSignature) as ReadonlyArray<
-      readonly [EnvironmentId, string]
-    >;
-    const known = lastKnownEntriesByEnv.current;
-    if (known === null) {
-      lastKnownEntriesByEnv.current = new Map(entries);
-      return;
-    }
-    let changed = false;
-    for (const [environmentId, serialized] of entries) {
-      if (known.get(environmentId) !== serialized) {
-        known.set(environmentId, serialized);
-        changed = true;
-      }
-    }
-    if (changed) void refresh();
-  }, [remoteEntriesSignature, refresh]);
+    if (seenEntriesSignature.current === entriesSignature) return;
+    seenEntriesSignature.current = entriesSignature;
+    void refresh();
+  }, [entriesSignature, refresh]);
 
   const applyEntryChange = useStableCallback(
     async (
@@ -442,9 +423,6 @@ function LibraryResults({
         if (!htmlLibraryPatchApplied(result.value, entry.attachmentId, nextOverride)) {
           return gt("This server did not apply the library change.");
         }
-        const known = lastKnownEntriesByEnv.current ?? new Map<EnvironmentId, string>();
-        known.set(entry.environmentId, JSON.stringify(result.value.htmlLibraryEntries));
-        lastKnownEntriesByEnv.current = known;
         return null;
       });
       setMutating(false);
