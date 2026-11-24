@@ -120,7 +120,8 @@ Slices, in order:
 2. P2 authoring: MCP tools to list, read, create and edit plugins, the install card, Undo. Done 2026-11-23.
 3. P3 right panel tab slot, then the agent-built panel. Done 2026-11-23 (an agent on Haiku built a working pomodoro tab).
 4. P4 server worker, then Obsidian vault sync. Done 2026-11-24 (Node child process under `--permission` with user-picked folders and approval per powers change; an agent on Haiku built a vault sync plugin that wrote one note per project and an index into a test vault). Node 24 and Electron 44 lock folders but cannot block network yet, so Settings says so.
-5. P5 repo plugins and behavior parts, Claude Code plugin compatibility.
+5. P5a skills, slash commands, instructions, repo plugins, Claude Code plugin folders. Done 2026-11-24 (T3 delivers these parts itself for every provider: instructions and a skill list in the project context, slash commands expanded before the prompt; repo plugins in `.t3/plugins/` stay off until turned on and stop applying after any change; an agent on Haiku built a working `/standup`).
+6. P5b MCP servers and hooks behind approval, keybindings, agents, and passing approved plugin folders to Claude natively.
 
 - Later: project templates (instructions, memory skeleton, scripts, plugins).
 
