@@ -134,7 +134,18 @@ Target: always-on agents like Grok Bot, OpenAI dots and Claude Duet, but on the 
 - Bots live in their own sidebar tab; their working threads stay inside the bot. Approvals and questions still reach Needs you.
 - Daily summary; approval gates for sending, paying and deleting, since bots read untrusted email and web pages.
 - Builds on existing pieces: scheduled tasks, webhook automations, coordinator completion wakes, project memory, approvals, phone notifications, linked environments. Chat-app bridges (Telegram, iMessage, Slack) ship as plugins.
-- Open questions: an unattended signed-in browser for bots, and per-bot usage limits.
+- Decided with Josh 2026-11-24:
+  - Each bot is backed by a hidden project (scheduled tasks, memory and delegation all key on a project); bots stay out of the Projects list. Each trigger run gets its own thread that reports back to the bot.
+  - Usage limits: runs per day and tokens per day by default; a per-bot setting switches to runs per day only or no limits. Hitting a limit pauses schedules and webhooks, never chatting with the bot.
+  - Send and delete wait for Josh (Needs you plus a phone alert) and fail closed while he is away. Paying is blocked in M6 and added in a later stage.
+  - Bots run on the laptop first; a linked VPS home comes later.
+  - Signed-in browser: each bot gets its own browser profile and asks Josh to sign in once when a site needs a login or 2FA; never his everyday browser.
+- Slices:
+  1. B1 bot core: named bot (goal, model, memory, schedule and webhook triggers), Bots sidebar tab, bot home with its runs.
+  2. B2 safety: T3 pauses a bot's send and delete tool calls for approval and blocks pay; per-bot usage limits.
+  3. B3 daily summary and VPS home.
+  4. B4 bot browser profiles with sign-in handoff.
+  5. B5 chat bridges (Telegram, Slack, iMessage) as plugins.
 
 ## Going public
 
