@@ -9,7 +9,7 @@ import { scoreProviderSkill } from "../../providerSkillSearch";
 
 type SlashSearchItem = Extract<
   ComposerCommandItem,
-  { type: "slash-command" | "provider-slash-command" | "skill" }
+  { type: "slash-command" | "plugin-slash-command" | "provider-slash-command" | "skill" }
 >;
 
 /** Provider commands, `/side`, `/btw` and `/clear` work only at the message start. */
@@ -43,21 +43,43 @@ function scoreSlashCommandItem(item: SlashSearchItem, query: string): number | n
     return "skill".startsWith(query) ? Number.MAX_SAFE_INTEGER : null;
   }
 
-  const primaryValue =
-    item.type === "slash-command" ? item.command.toLowerCase() : item.command.name.toLowerCase();
+  const primaryValues =
+    item.type === "slash-command"
+      ? [item.command.toLowerCase()]
+      : item.type === "plugin-slash-command"
+        ? [
+            item.invocation.toLowerCase(),
+            item.commandName.toLowerCase(),
+            `${item.pluginId}:${item.commandName}`.toLowerCase(),
+          ]
+        : [item.command.name.toLowerCase()];
   const description = item.description.toLowerCase();
 
   const scores = [
-    scoreQueryMatch({
-      value: primaryValue,
-      query,
-      exactBase: 0,
-      prefixBase: 2,
-      boundaryBase: 4,
-      includesBase: 6,
-      fuzzyBase: 100,
-      boundaryMarkers: ["-", "_", "/"],
-    }),
+    ...primaryValues.map((value) =>
+      scoreQueryMatch({
+        value,
+        query,
+        exactBase: 0,
+        prefixBase: 2,
+        boundaryBase: 4,
+        includesBase: 6,
+        fuzzyBase: 100,
+        boundaryMarkers: ["-", "_", "/", ":"],
+      }),
+    ),
+    ...(item.type === "plugin-slash-command"
+      ? [
+          scoreQueryMatch({
+            value: item.pluginName.toLowerCase(),
+            query,
+            exactBase: 16,
+            prefixBase: 18,
+            boundaryBase: 20,
+            includesBase: 22,
+          }),
+        ]
+      : []),
     scoreQueryMatch({
       value: description,
       query,
@@ -104,9 +126,11 @@ export function searchSlashCommandItems(
         tieBreaker:
           item.type === "slash-command"
             ? `0\u0000${item.command}`
-            : item.type === "provider-slash-command"
-              ? `1\u0000${item.command.name}\u0000${item.provider}`
-              : `2\u0000${item.skill.name}\u0000${item.provider}`,
+            : item.type === "plugin-slash-command"
+              ? `1\u0000${item.invocation}\u0000${item.pluginId}`
+              : item.type === "provider-slash-command"
+                ? `2\u0000${item.command.name}\u0000${item.provider}`
+                : `3\u0000${item.skill.name}\u0000${item.provider}`,
       },
       Number.POSITIVE_INFINITY,
     );

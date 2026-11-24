@@ -11,6 +11,8 @@ import { useAtomValue } from "@effect/atom-react";
 import { useState } from "react";
 import type {
   EnvironmentId,
+  EnvironmentPlugin,
+  PluginId,
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
@@ -44,6 +46,7 @@ import {
 } from "~/state/pullRequests";
 import { useEnvironmentQuery } from "~/state/query";
 import { useComposerPathSearch, useDebouncedValue, useThreadSearch } from "~/state/queries";
+import { serverEnvironment } from "~/state/server";
 import {
   matchesPullRequestQuery,
   rankPullRequestMatches,
@@ -61,6 +64,8 @@ const COMPOSER_PULL_REQUEST_LIST_LIMIT = 99;
 const COMPOSER_PULL_REQUEST_RESULT_LIMIT = 12;
 const EMPTY_PULL_REQUEST_LIST_TARGETS: ReadonlyArray<EnvironmentQueryTarget<PullRequestListInput>> =
   [];
+const EMPTY_ENVIRONMENT_PLUGINS: ReadonlyArray<EnvironmentPlugin> = [];
+const BUILT_IN_SLASH_COMMAND_NAMES = new Set(["model", "side", "btw", "clear", "compact"]);
 
 /** Builds the @, /, $ and # suggestion lists, running the searches each trigger needs. */
 export function useComposerMenuItems({
@@ -69,6 +74,7 @@ export function useComposerMenuItems({
   linkedEnvironments,
   gitCwd,
   activeThreadId,
+  activeProjectId,
   pullRequestProjectId,
   pullRequestRepository,
   threadPullRequests,
@@ -89,6 +95,7 @@ export function useComposerMenuItems({
   readonly linkedEnvironments: ReadonlyMap<EnvironmentId, string>;
   readonly gitCwd: string | null;
   readonly activeThreadId: ThreadId | null;
+  readonly activeProjectId: ProjectId | null;
   readonly pullRequestProjectId: ProjectId | null;
   readonly pullRequestRepository: string | null;
   readonly threadPullRequests: ReadonlyArray<ThreadPullRequestLink> | undefined;
@@ -137,6 +144,9 @@ export function useComposerMenuItems({
   const environmentIdentities = useEnvironmentIdentities();
   const environmentMachines = useEnvironmentMachines();
   const offersMachines = useAtomValue(offersLinkedEnvironmentsAtom(environmentId));
+  const environmentPlugins =
+    useAtomValue(serverEnvironment.configValueAtom(environmentId))?.environmentPlugins ??
+    EMPTY_ENVIRONMENT_PLUGINS;
   const mentionableEnvironments = environmentIdentities.map((identity) => ({
     ...identity,
     machine: environmentMachines.get(identity.environmentId) ?? ("server" as const),
@@ -325,8 +335,61 @@ export function useComposerMenuItems({
           (item.command.name !== "compact" || compactSlashCommandAvailable) &&
           (item.command.name !== "clear" || !freshSessionAvailable),
       );
+      const pluginCommandsByKey = new Map<
+        string,
+        {
+          readonly pluginId: PluginId;
+          readonly pluginName: string;
+          readonly commandName: PluginId;
+          readonly description?: string | undefined;
+          readonly argumentHint?: string | undefined;
+        }
+      >();
+      const applicablePlugins = [
+        ...environmentPlugins.filter((plugin) => plugin.projectId === undefined),
+        ...(activeProjectId === null
+          ? []
+          : environmentPlugins.filter((plugin) => plugin.projectId === activeProjectId)),
+      ];
+      for (const plugin of applicablePlugins) {
+        for (const command of plugin.commands ?? []) {
+          pluginCommandsByKey.set(`${plugin.id}:${command.name}`, {
+            pluginId: plugin.id,
+            pluginName: plugin.displayName ?? plugin.id,
+            commandName: command.name,
+            description: command.description,
+            argumentHint: command.argumentHint,
+          });
+        }
+      }
+      const pluginNameCounts = new Map<string, number>();
+      for (const entry of pluginCommandsByKey.values()) {
+        pluginNameCounts.set(entry.commandName, (pluginNameCounts.get(entry.commandName) ?? 0) + 1);
+      }
+      const pluginSlashCommandItems = [...pluginCommandsByKey.values()].map((entry) => {
+        const useShort =
+          (pluginNameCounts.get(entry.commandName) ?? 0) === 1 &&
+          !BUILT_IN_SLASH_COMMAND_NAMES.has(entry.commandName);
+        const invocation = useShort ? entry.commandName : `${entry.pluginId}:${entry.commandName}`;
+        return {
+          id: `plugin-slash-command:${entry.pluginId}:${entry.commandName}`,
+          type: "plugin-slash-command" as const,
+          pluginId: entry.pluginId,
+          pluginName: entry.pluginName,
+          commandName: entry.commandName,
+          invocation,
+          ...(entry.argumentHint !== undefined ? { argumentHint: entry.argumentHint } : {}),
+          label: `/${invocation}`,
+          description: entry.description ?? "",
+        };
+      });
       const slashCommandItems = slashCommandItemsForPromptPosition(
-        [...builtInSlashCommandItems, ...visibleProviderSlashCommandItems, ...skillItems],
+        [
+          ...builtInSlashCommandItems,
+          ...pluginSlashCommandItems,
+          ...visibleProviderSlashCommandItems,
+          ...skillItems,
+        ],
         composerTrigger.rangeStart === 0,
       );
       return searchSlashCommandItems(slashCommandItems, query);

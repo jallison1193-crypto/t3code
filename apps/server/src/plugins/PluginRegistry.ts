@@ -4,15 +4,20 @@ import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
 import {
+  CLAUDE_PLUGIN_MANIFEST_DIR,
   type EnvironmentPlugin,
+  type EnvironmentPluginCommand,
   type InstalledPlugin,
   type InstalledPluginPanel,
   type InstalledPluginWorker,
   type IsoDateTime,
+  PLUGIN_INSTRUCTIONS_MAX_BYTES,
   PLUGIN_MANIFEST_DIR,
   PLUGIN_MANIFEST_FILE,
   PLUGIN_MAX_PANELS,
+  PLUGIN_MAX_SKILLS,
   PLUGIN_PANEL_HTML_MAX_CHARS,
+  PLUGIN_SKILL_MAX_BYTES,
   PLUGIN_WORKER_CODE_MAX_CHARS,
   PLUGIN_WORKER_MAX_FOLDERS,
   type PluginContribution,
@@ -24,6 +29,9 @@ import {
   type PluginWorkerEveryMinutes,
   type PluginWorkerFolderAccess,
   type PluginWorkerStatus,
+  type ProjectId,
+  REPO_PLUGIN_MAX_FOLDERS,
+  type RepoPluginStatus,
   type ServerApprovePluginWorkerResult,
   type ServerListPluginsResult,
   type ServerRestorePluginRevisionResult,
@@ -32,10 +40,12 @@ import {
   type ServerUninstallPluginResult,
   THEME_CSS_MAX_LENGTH,
 } from "@t3tools/contracts";
+import type { ProjectContextPlugin } from "@t3tools/provider-core/server/projectInstructions";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { MCP_APP_MAX_HTML_BYTES } from "@t3tools/shared/mcpApp";
 import { fromJsonStringPretty } from "@t3tools/shared/schemaJson";
 import { themeCssLoadsRemoteFiles } from "@t3tools/shared/themeCss";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
@@ -45,6 +55,7 @@ import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
@@ -55,9 +66,15 @@ import * as Stream from "effect/Stream";
 
 import * as ServerConfig from "../config.ts";
 import { readThemeFileGuarded } from "../environmentTheme.ts";
+import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { watchDirectoryPath } from "../watchDirectoryReplacements.ts";
 import { writeFileAtomic } from "./atomicFile.ts";
+import {
+  formatPluginSkillMarkdown,
+  parsePluginSkillMarkdown,
+  type PluginSlashCommandEntry,
+} from "./pluginSlashCommand.ts";
 import {
   computePluginWorkerPowersHash,
   detectPluginWorkerRuntimeCapabilities,
@@ -68,14 +85,20 @@ const PLUGINS_ARCHIVE_DIR_NAME = "plugins-archive";
 const PLUGINS_HISTORY_DIR_NAME = "plugins-history";
 const PLUGIN_CSS_FILE = "plugin.css";
 const PLUGIN_WORKER_FILE = "worker.mjs";
+const PLUGIN_INSTRUCTIONS_FILE = "AGENTS.md";
+const PLUGIN_SKILLS_DIR = "skills";
+const PLUGIN_SKILL_FILE = "SKILL.md";
+const PLUGIN_COMMANDS_DIR = "commands";
 const MAX_PLUGIN_FOLDERS = 64;
 const MAX_PLUGIN_HISTORY_REVISIONS = 20;
 const MAX_PLUGIN_MANIFEST_BYTES = 64 * 1024;
 const MAX_PLUGIN_CSS_BYTES = 4 * THEME_CSS_MAX_LENGTH;
 const MAX_PLUGIN_WORKER_BYTES = 4 * PLUGIN_WORKER_CODE_MAX_CHARS;
+const RACY_MTIME_WINDOW_MS = 2_000;
 const PLUGIN_REVISION_PATTERN = /^[a-f0-9]{12}$/;
 const PANEL_ROOT_ENTRY_PATTERN = /^\.\/(?!\.)[^/\\\0]+\.html$/;
 const WORKER_ROOT_ENTRY_PATTERN = /^\.\/(?!\.)[^/\\\0]+\.mjs$/;
+const UNSUPPORTED_PART_ORDER = ["hooks", "mcp", "agents", "css", "panels", "worker"] as const;
 
 const isPluginId = Schema.is(PluginId);
 const isPluginRevision = (value: string): boolean => PLUGIN_REVISION_PATTERN.test(value);
@@ -85,11 +108,24 @@ const decodePluginManifestJsonExit = Schema.decodeUnknownExit(
 );
 const encodePluginManifestJson = Schema.encodeEffect(fromJsonStringPretty(PluginManifest));
 
+interface RawPluginTextFile {
+  readonly relativePath: string;
+  readonly content: string;
+}
+
+const sortRawTextFiles = (
+  files: ReadonlyArray<RawPluginTextFile>,
+): ReadonlyArray<RawPluginTextFile> =>
+  [...files].sort((left, right) =>
+    left.relativePath < right.relativePath ? -1 : left.relativePath > right.relativePath ? 1 : 0,
+  );
+
 const computePluginRevision = (
   manifestText: string,
   cssText: string,
   panelHtmls: ReadonlyArray<string> = [],
   workerCode?: string,
+  textFiles: ReadonlyArray<RawPluginTextFile> = [],
 ): string => {
   const hash = NodeCrypto.createHash("sha256").update(manifestText).update("\0").update(cssText);
   for (const html of panelHtmls) {
@@ -97,6 +133,11 @@ const computePluginRevision = (
   }
   if (workerCode !== undefined) {
     hash.update("\0").update(workerCode);
+  }
+  if (textFiles.length > 0) {
+    for (const file of sortRawTextFiles(textFiles)) {
+      hash.update("\0").update(file.relativePath).update("\0").update(file.content);
+    }
   }
   return hash.digest("hex").slice(0, 12);
 };
@@ -141,6 +182,21 @@ interface PluginSnapshot {
   readonly active: ReadonlyArray<EnvironmentPlugin>;
   readonly panelEntries: ReadonlyMap<string, ReadonlyMap<string, string>>;
   readonly workerSpecs: ReadonlyArray<PluginWorkerDesiredSpec>;
+  readonly activeUserScanned: ReadonlyArray<ScannedPlugin>;
+  readonly activeRepoScannedByProject: ReadonlyMap<ProjectId, ReadonlyArray<ScannedPlugin>>;
+}
+
+interface ScannedSkill {
+  readonly name: PluginId;
+  readonly description?: string;
+  readonly argumentHint?: string;
+  readonly userInvocable: boolean;
+  readonly modelInvocable: boolean;
+  readonly body: string;
+  readonly filePath: string;
+  readonly skillDir: string;
+  readonly source: "skill" | "command";
+  readonly relativePath: string;
 }
 
 interface ScannedPanel {
@@ -166,20 +222,33 @@ interface ScannedWorker {
 
 interface ScannedPlugin {
   readonly plugin: InstalledPlugin;
+  readonly pluginRootReal?: string;
   readonly css?: string;
   readonly cssPath?: string;
   readonly panels?: ReadonlyArray<ScannedPanel>;
   readonly worker?: ScannedWorker;
+  readonly skills?: ReadonlyArray<ScannedSkill>;
+  readonly instructions?: string;
   readonly rawManifest?: string;
   readonly rawCss?: string;
   readonly rawPanels?: ReadonlyArray<{ readonly fileName: string; readonly html: string }>;
   readonly rawWorker?: { readonly fileName: string; readonly code: string };
+  readonly rawTextFiles?: ReadonlyArray<RawPluginTextFile>;
 }
 
 export interface PluginPanelContent {
   readonly id: PluginId;
   readonly title: string;
   readonly html: string;
+}
+
+export interface PluginSkillContent {
+  readonly name: PluginId;
+  readonly description?: string;
+  readonly argumentHint?: string;
+  readonly userInvocable?: boolean;
+  readonly modelInvocable?: boolean;
+  readonly body: string;
 }
 
 export interface PluginReadResult {
@@ -189,6 +258,8 @@ export interface PluginReadResult {
   readonly css?: string;
   readonly panels?: ReadonlyArray<PluginPanelContent>;
   readonly worker?: PluginWorkerContent;
+  readonly skills?: ReadonlyArray<PluginSkillContent>;
+  readonly instructions?: string;
 }
 
 export interface PluginWriteInput {
@@ -199,6 +270,8 @@ export interface PluginWriteInput {
   readonly css?: string;
   readonly panels?: ReadonlyArray<PluginPanelContent>;
   readonly worker?: PluginWorkerContent;
+  readonly skills?: ReadonlyArray<PluginSkillContent>;
+  readonly instructions?: string;
 }
 
 export interface PluginWriteResult {
@@ -206,6 +279,11 @@ export interface PluginWriteResult {
   readonly created: boolean;
   readonly before?: string;
   readonly after: string;
+}
+
+export interface PluginTurnContext {
+  readonly contextPlugins: ReadonlyArray<ProjectContextPlugin>;
+  readonly commands: ReadonlyArray<PluginSlashCommandEntry>;
 }
 
 export class PluginRegistry extends Context.Service<
@@ -220,12 +298,16 @@ export class PluginRegistry extends Context.Service<
       id: string,
       revision: string,
       enable?: boolean,
-      options?: { readonly approveWorker?: boolean },
+      options?: { readonly approveWorker?: boolean; readonly projectId?: ProjectId },
     ) => Effect.Effect<ServerRestorePluginRevisionResult, PluginOperationError>;
     readonly setEnabled: (
       id: string,
       enabled: boolean,
-      options?: { readonly approveWorker?: boolean; readonly revision?: string },
+      options?: {
+        readonly approveWorker?: boolean;
+        readonly revision?: string;
+        readonly projectId?: ProjectId;
+      },
     ) => Effect.Effect<ServerSetPluginEnabledResult, PluginOperationError>;
     readonly approveWorker: (
       id: string,
@@ -238,6 +320,7 @@ export class PluginRegistry extends Context.Service<
     ) => Effect.Effect<ServerSetPluginWorkerFolderResult, PluginOperationError>;
     readonly uninstall: (
       id: string,
+      projectId?: ProjectId,
     ) => Effect.Effect<ServerUninstallPluginResult, PluginOperationError>;
     readonly resolvePanelEntry: (
       pluginId: string,
@@ -247,6 +330,7 @@ export class PluginRegistry extends Context.Service<
       pluginId: string,
       state: PluginWorkerRuntimeState | null,
     ) => Effect.Effect<void>;
+    readonly getTurnContext: (projectId: ProjectId) => Effect.Effect<PluginTurnContext>;
     /** Subscribes before reading to retain changes during connection. */
     readonly streamChanges: Stream.Stream<ReadonlyArray<EnvironmentPlugin>>;
     readonly streamWorkerDesiredState: Stream.Stream<ReadonlyArray<PluginWorkerDesiredSpec>>;
@@ -294,11 +378,13 @@ const withProblem = (
   metadata: PluginMetadata = {},
   extra: {
     readonly revision?: string;
+    readonly unsupported?: ReadonlyArray<string>;
     readonly rawManifest?: string;
     readonly rawCss?: string;
     readonly cssPath?: string;
     readonly rawPanels?: ReadonlyArray<{ readonly fileName: string; readonly html: string }>;
     readonly rawWorker?: { readonly fileName: string; readonly code: string };
+    readonly rawTextFiles?: ReadonlyArray<RawPluginTextFile>;
     readonly workerPath?: string;
   } = {},
 ): ScannedPlugin => ({
@@ -307,6 +393,9 @@ const withProblem = (
     ...metadata,
     enabled: false,
     contributes: [],
+    ...(extra.unsupported !== undefined && extra.unsupported.length > 0
+      ? { unsupported: extra.unsupported }
+      : {}),
     ...(extra.revision !== undefined ? { revision: extra.revision } : {}),
     problem,
   },
@@ -315,6 +404,9 @@ const withProblem = (
   ...(extra.cssPath !== undefined ? { cssPath: extra.cssPath } : {}),
   ...(extra.rawPanels !== undefined ? { rawPanels: extra.rawPanels } : {}),
   ...(extra.rawWorker !== undefined ? { rawWorker: extra.rawWorker } : {}),
+  ...(extra.rawTextFiles !== undefined && extra.rawTextFiles.length > 0
+    ? { rawTextFiles: extra.rawTextFiles }
+    : {}),
 });
 
 const resolveSafePluginFilePath = (
@@ -423,11 +515,383 @@ const readPluginFileGuarded = (
   };
 };
 
+const relativePosixToFsPath = (baseDir: string, relativePath: string): string =>
+  NodePath.join(baseDir, ...relativePath.split("/"));
+
+const hasNonEmptyManifestField = (raw: unknown, key: string): boolean => {
+  if (!Predicate.hasProperty(raw, key)) return false;
+  const value = raw[key];
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (Predicate.isObject(value)) return Object.keys(value).length > 0;
+  return false;
+};
+
+const detectUnsupportedParts = (
+  folderPath: string,
+  parsedJson: unknown,
+  manifest: PluginManifest,
+  isRepo: boolean,
+): ReadonlyArray<string> => {
+  const found = new Set<string>();
+  if (
+    hasNonEmptyManifestField(parsedJson, "hooks") ||
+    lstatOrNull(NodePath.join(folderPath, "hooks", "hooks.json")) !== null
+  ) {
+    found.add("hooks");
+  }
+  if (
+    hasNonEmptyManifestField(parsedJson, "mcpServers") ||
+    lstatOrNull(NodePath.join(folderPath, ".mcp.json")) !== null
+  ) {
+    found.add("mcp");
+  }
+  if (
+    hasNonEmptyManifestField(parsedJson, "agents") ||
+    lstatOrNull(NodePath.join(folderPath, "agents"))?.isDirectory() === true
+  ) {
+    found.add("agents");
+  }
+  if (isRepo) {
+    if (manifest.css !== undefined) found.add("css");
+    if (manifest.panels !== undefined && manifest.panels.length > 0) found.add("panels");
+    if (manifest.worker !== undefined) found.add("worker");
+  }
+  return UNSUPPORTED_PART_ORDER.filter((part) => found.has(part));
+};
+
+const readDirEntriesSorted = (dirPath: string): ReadonlyArray<string> => {
+  try {
+    return NodeFS.readdirSync(dirPath).toSorted();
+  } catch {
+    return [];
+  }
+};
+
+const readGuardedTextPart = (
+  filePath: string,
+  pluginRootReal: string,
+  relativeLabel: string,
+  kindLabel: string,
+  maxBytes: number,
+  maxKbLabel: string,
+):
+  | { readonly ok: true; readonly canonicalPath: string; readonly content: string }
+  | { readonly ok: false; readonly problem: string } => {
+  const stat = lstatOrNull(filePath);
+  if (stat === null) {
+    return { ok: false, problem: `${kindLabel} "${relativeLabel}" could not be accessed.` };
+  }
+  if (stat.isSymbolicLink()) {
+    return { ok: false, problem: `${kindLabel} "${relativeLabel}" cannot be a symlink.` };
+  }
+  if (!stat.isFile()) {
+    return { ok: false, problem: `${kindLabel} "${relativeLabel}" is not a regular file.` };
+  }
+  if (stat.size > maxBytes) {
+    return {
+      ok: false,
+      problem: `${kindLabel} "${relativeLabel}" exceeds the ${maxKbLabel} limit.`,
+    };
+  }
+  const dirReal = realpathOrNull(NodePath.dirname(filePath));
+  if (dirReal === null || !isInsideDirectory(pluginRootReal, dirReal, true)) {
+    return {
+      ok: false,
+      problem: `${kindLabel} "${relativeLabel}" must stay inside the plugin folder.`,
+    };
+  }
+  const content = readThemeFileGuarded(filePath, maxBytes);
+  if (content === null) {
+    return { ok: false, problem: `${kindLabel} "${relativeLabel}" could not be read.` };
+  }
+  return {
+    ok: true,
+    canonicalPath: NodePath.join(dirReal, NodePath.basename(filePath)),
+    content,
+  };
+};
+
+interface ScannedTextParts {
+  readonly ok: true;
+  readonly instructions?: string;
+  readonly skills: ReadonlyArray<ScannedSkill>;
+  readonly rawTextFiles: ReadonlyArray<RawPluginTextFile>;
+}
+
+const scanPluginTextParts = (
+  folderPath: string,
+  pluginRootReal: string,
+):
+  | ScannedTextParts
+  | {
+      readonly ok: false;
+      readonly problem: string;
+      readonly rawTextFiles: ReadonlyArray<RawPluginTextFile>;
+    } => {
+  const rawTextFiles: Array<RawPluginTextFile> = [];
+  const skills: Array<ScannedSkill> = [];
+  const skillDirNames = new Set<string>();
+  const seenSkillNames = new Set<string>();
+  let instructions: string | undefined;
+  let totalEntries = 0;
+
+  const instructionsPath = NodePath.join(folderPath, PLUGIN_INSTRUCTIONS_FILE);
+  if (lstatOrNull(instructionsPath) !== null) {
+    const read = readGuardedTextPart(
+      instructionsPath,
+      pluginRootReal,
+      PLUGIN_INSTRUCTIONS_FILE,
+      "Instructions file",
+      PLUGIN_INSTRUCTIONS_MAX_BYTES,
+      "8 KB",
+    );
+    if (!read.ok) return { ok: false, problem: read.problem, rawTextFiles };
+    rawTextFiles.push({ relativePath: PLUGIN_INSTRUCTIONS_FILE, content: read.content });
+    if (read.content.trim().length > 0) {
+      instructions = read.content;
+    }
+  }
+
+  const skillsDir = NodePath.join(folderPath, PLUGIN_SKILLS_DIR);
+  const skillsDirStat = lstatOrNull(skillsDir);
+  if (skillsDirStat !== null) {
+    if (skillsDirStat.isSymbolicLink()) {
+      return {
+        ok: false,
+        problem: `Directory "${PLUGIN_SKILLS_DIR}" cannot be a symlink.`,
+        rawTextFiles,
+      };
+    }
+    if (skillsDirStat.isDirectory()) {
+      for (const entry of readDirEntriesSorted(skillsDir)) {
+        if (entry.startsWith(".")) continue;
+        const entryDir = NodePath.join(skillsDir, entry);
+        const entryStat = lstatOrNull(entryDir);
+        if (entryStat === null) continue;
+        if (entryStat.isSymbolicLink()) {
+          return {
+            ok: false,
+            problem: `Skill folder "${PLUGIN_SKILLS_DIR}/${entry}" cannot be a symlink.`,
+            rawTextFiles,
+          };
+        }
+        if (!entryStat.isDirectory()) continue;
+        const skillFilePath = NodePath.join(entryDir, PLUGIN_SKILL_FILE);
+        if (lstatOrNull(skillFilePath) === null) continue;
+
+        totalEntries += 1;
+        if (totalEntries > PLUGIN_MAX_SKILLS) {
+          return {
+            ok: false,
+            problem: `Plugin exceeds the ${PLUGIN_MAX_SKILLS} skills and commands limit.`,
+            rawTextFiles,
+          };
+        }
+        const relativePath = `${PLUGIN_SKILLS_DIR}/${entry}/${PLUGIN_SKILL_FILE}`;
+        const read = readGuardedTextPart(
+          skillFilePath,
+          pluginRootReal,
+          relativePath,
+          "Skill file",
+          PLUGIN_SKILL_MAX_BYTES,
+          "32 KB",
+        );
+        if (!read.ok) return { ok: false, problem: read.problem, rawTextFiles };
+        rawTextFiles.push({ relativePath, content: read.content });
+
+        const parsed = parsePluginSkillMarkdown(read.content);
+        if (!parsed.ok) {
+          return {
+            ok: false,
+            problem: `Invalid frontmatter in "${relativePath}": ${parsed.problem}`,
+            rawTextFiles,
+          };
+        }
+        const effectiveName = parsed.name ?? entry;
+        if (!isPluginId(effectiveName)) {
+          return {
+            ok: false,
+            problem: `Skill name "${effectiveName}" in "${relativePath}" is not a valid plugin id.`,
+            rawTextFiles,
+          };
+        }
+        if (seenSkillNames.has(effectiveName)) {
+          return {
+            ok: false,
+            problem: `Duplicate skill name "${effectiveName}" in "${relativePath}".`,
+            rawTextFiles,
+          };
+        }
+        skillDirNames.add(entry);
+        seenSkillNames.add(effectiveName);
+        skills.push({
+          name: effectiveName,
+          ...(parsed.description !== undefined ? { description: parsed.description } : {}),
+          ...(parsed.argumentHint !== undefined ? { argumentHint: parsed.argumentHint } : {}),
+          userInvocable: parsed.userInvocable,
+          modelInvocable: parsed.modelInvocable,
+          body: parsed.body,
+          filePath: read.canonicalPath,
+          skillDir: NodePath.dirname(read.canonicalPath),
+          source: "skill",
+          relativePath,
+        });
+      }
+    }
+  }
+
+  const commandsDir = NodePath.join(folderPath, PLUGIN_COMMANDS_DIR);
+  const commandsDirStat = lstatOrNull(commandsDir);
+  if (commandsDirStat !== null) {
+    if (commandsDirStat.isSymbolicLink()) {
+      return {
+        ok: false,
+        problem: `Directory "${PLUGIN_COMMANDS_DIR}" cannot be a symlink.`,
+        rawTextFiles,
+      };
+    }
+    if (commandsDirStat.isDirectory()) {
+      for (const entry of readDirEntriesSorted(commandsDir)) {
+        if (entry.startsWith(".") || !entry.endsWith(".md")) continue;
+        const commandFilePath = NodePath.join(commandsDir, entry);
+        const entryStat = lstatOrNull(commandFilePath);
+        if (entryStat === null || entryStat.isDirectory()) continue;
+        const relativePath = `${PLUGIN_COMMANDS_DIR}/${entry}`;
+        if (entryStat.isSymbolicLink()) {
+          return {
+            ok: false,
+            problem: `Command file "${relativePath}" cannot be a symlink.`,
+            rawTextFiles,
+          };
+        }
+        if (!entryStat.isFile()) continue;
+
+        totalEntries += 1;
+        if (totalEntries > PLUGIN_MAX_SKILLS) {
+          return {
+            ok: false,
+            problem: `Plugin exceeds the ${PLUGIN_MAX_SKILLS} skills and commands limit.`,
+            rawTextFiles,
+          };
+        }
+        const read = readGuardedTextPart(
+          commandFilePath,
+          pluginRootReal,
+          relativePath,
+          "Command file",
+          PLUGIN_SKILL_MAX_BYTES,
+          "32 KB",
+        );
+        if (!read.ok) return { ok: false, problem: read.problem, rawTextFiles };
+        rawTextFiles.push({ relativePath, content: read.content });
+
+        const parsed = parsePluginSkillMarkdown(read.content);
+        if (!parsed.ok) {
+          return {
+            ok: false,
+            problem: `Invalid frontmatter in "${relativePath}": ${parsed.problem}`,
+            rawTextFiles,
+          };
+        }
+        const stem = entry.slice(0, -3);
+        const effectiveName = parsed.name ?? stem;
+        if (!isPluginId(effectiveName)) {
+          return {
+            ok: false,
+            problem: `Command name "${effectiveName}" in "${relativePath}" is not a valid plugin id.`,
+            rawTextFiles,
+          };
+        }
+        // When a skill and a legacy command collide by folder/file name or resolved name, skill wins.
+        if (skillDirNames.has(stem) || seenSkillNames.has(effectiveName)) {
+          continue;
+        }
+        seenSkillNames.add(effectiveName);
+        skills.push({
+          name: effectiveName,
+          ...(parsed.description !== undefined ? { description: parsed.description } : {}),
+          ...(parsed.argumentHint !== undefined ? { argumentHint: parsed.argumentHint } : {}),
+          userInvocable: parsed.userInvocable,
+          modelInvocable: parsed.modelInvocable,
+          body: parsed.body,
+          filePath: read.canonicalPath,
+          skillDir: NodePath.dirname(read.canonicalPath),
+          source: "command",
+          relativePath,
+        });
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    ...(instructions !== undefined ? { instructions } : {}),
+    skills,
+    rawTextFiles: sortRawTextFiles(rawTextFiles),
+  };
+};
+
+const readHistoryTextFiles = (
+  revisionDir: string,
+):
+  | { readonly ok: true; readonly files: ReadonlyArray<RawPluginTextFile> }
+  | { readonly ok: false } => {
+  const files: Array<RawPluginTextFile> = [];
+  const checkNoSymlink = (targetPath: string): boolean =>
+    lstatOrNull(targetPath)?.isSymbolicLink() !== true;
+
+  const instructionsPath = NodePath.join(revisionDir, PLUGIN_INSTRUCTIONS_FILE);
+  const instructionsStat = lstatOrNull(instructionsPath);
+  if (instructionsStat !== null) {
+    if (instructionsStat.isSymbolicLink() || !instructionsStat.isFile()) return { ok: false };
+    const content = readThemeFileGuarded(instructionsPath, PLUGIN_INSTRUCTIONS_MAX_BYTES);
+    if (content === null) return { ok: false };
+    files.push({ relativePath: PLUGIN_INSTRUCTIONS_FILE, content });
+  }
+
+  const skillsDir = NodePath.join(revisionDir, PLUGIN_SKILLS_DIR);
+  const skillsDirStat = lstatOrNull(skillsDir);
+  if (skillsDirStat !== null) {
+    if (skillsDirStat.isSymbolicLink() || !skillsDirStat.isDirectory()) return { ok: false };
+    for (const entry of readDirEntriesSorted(skillsDir)) {
+      if (!isSafeFolderName(entry)) return { ok: false };
+      const entryDir = NodePath.join(skillsDir, entry);
+      const entryStat = lstatOrNull(entryDir);
+      if (entryStat === null || entryStat.isSymbolicLink() || !entryStat.isDirectory()) {
+        return { ok: false };
+      }
+      const skillFile = NodePath.join(entryDir, PLUGIN_SKILL_FILE);
+      if (!checkNoSymlink(skillFile)) return { ok: false };
+      const content = readThemeFileGuarded(skillFile, PLUGIN_SKILL_MAX_BYTES);
+      if (content === null) return { ok: false };
+      files.push({ relativePath: `${PLUGIN_SKILLS_DIR}/${entry}/${PLUGIN_SKILL_FILE}`, content });
+    }
+  }
+
+  const commandsDir = NodePath.join(revisionDir, PLUGIN_COMMANDS_DIR);
+  const commandsDirStat = lstatOrNull(commandsDir);
+  if (commandsDirStat !== null) {
+    if (commandsDirStat.isSymbolicLink() || !commandsDirStat.isDirectory()) return { ok: false };
+    for (const entry of readDirEntriesSorted(commandsDir)) {
+      if (!isSafeFolderName(entry) || !entry.endsWith(".md")) return { ok: false };
+      const commandFile = NodePath.join(commandsDir, entry);
+      if (!checkNoSymlink(commandFile)) return { ok: false };
+      const content = readThemeFileGuarded(commandFile, PLUGIN_SKILL_MAX_BYTES);
+      if (content === null) return { ok: false };
+      files.push({ relativePath: `${PLUGIN_COMMANDS_DIR}/${entry}`, content });
+    }
+  }
+
+  return { ok: true, files: sortRawTextFiles(files) };
+};
+
 const isExistingTargetSafe = (
   folderPath: string,
   targetCssPath: string | null,
   targetPanelPaths: ReadonlyArray<string>,
   targetWorkerPath: string | null = null,
+  targetTextRelativePaths: ReadonlyArray<string> = [],
 ): boolean => {
   const folderStat = lstatOrNull(folderPath);
   if (folderStat === null) return true;
@@ -453,11 +917,22 @@ const isExistingTargetSafe = (
   if (targetWorkerPath !== null && lstatOrNull(targetWorkerPath)?.isSymbolicLink() === true) {
     return false;
   }
+  for (const rel of targetTextRelativePaths) {
+    const parts = rel.split("/");
+    let current = folderPath;
+    for (let index = 0; index < parts.length; index += 1) {
+      current = NodePath.join(current, parts[index]!);
+      const stat = lstatOrNull(current);
+      if (stat === null) break;
+      if (stat.isSymbolicLink()) return false;
+      if (index < parts.length - 1 && !stat.isDirectory()) return false;
+    }
+  }
   return true;
 };
 
 // Untraced: called inside traced PluginRegistry write/restore spans.
-// Removes only files the previous manifest named; their copies are in the `before` revision.
+// Removes only files the previous scan owned; their copies are in the `before` revision.
 const cleanupStalePluginFiles = Effect.fnUntraced(function* (
   fs: FileSystem.FileSystem,
   folderPath: string,
@@ -467,6 +942,8 @@ const cleanupStalePluginFiles = Effect.fnUntraced(function* (
   nextCssPath: string | null,
   previousWorkerPath: string | null = null,
   nextWorkerPath: string | null = null,
+  previousTextRelativePaths: ReadonlyArray<string> = [],
+  keepTextRelativePaths: ReadonlySet<string> = new Set(),
 ) {
   const stale = previousPanelFileNames
     .filter((fileName) => !keepPanelFileNames.has(fileName))
@@ -475,10 +952,31 @@ const cleanupStalePluginFiles = Effect.fnUntraced(function* (
   if (previousWorkerPath !== null && previousWorkerPath !== nextWorkerPath) {
     stale.push(previousWorkerPath);
   }
+  const staleTextDirs = new Set<string>();
+  for (const rel of previousTextRelativePaths) {
+    if (keepTextRelativePaths.has(rel)) continue;
+    const full = relativePosixToFsPath(folderPath, rel);
+    stale.push(full);
+    let parent = NodePath.dirname(full);
+    while (parent !== folderPath && isInsideDirectory(folderPath, parent, false)) {
+      staleTextDirs.add(parent);
+      parent = NodePath.dirname(parent);
+    }
+  }
   for (const candidate of stale) {
     const stat = lstatOrNull(candidate);
     if (stat !== null && !stat.isSymbolicLink() && stat.isFile()) {
       yield* fs.remove(candidate, { force: true }).pipe(Effect.ignoreCause({ log: true }));
+    }
+  }
+  // Remove emptied skill/command subdirectories deepest-first without touching unrelated user files.
+  const dirsDeepestFirst = [...staleTextDirs].sort((left, right) => right.length - left.length);
+  for (const dir of dirsDeepestFirst) {
+    const stat = lstatOrNull(dir);
+    if (stat !== null && !stat.isSymbolicLink() && stat.isDirectory()) {
+      if (readDirEntriesSorted(dir).length === 0) {
+        yield* fs.remove(dir).pipe(Effect.ignoreCause({ log: true }));
+      }
     }
   }
 });
@@ -493,12 +991,15 @@ const saveHistoryRevision = Effect.fnUntraced(function* (
   panels: ReadonlyArray<{ readonly fileName: string; readonly html: string }>,
   operation: "write" | "restore",
   worker?: { readonly fileName: string; readonly code: string },
+  textFiles: ReadonlyArray<RawPluginTextFile> = [],
 ) {
+  const sortedTextFiles = sortRawTextFiles(textFiles);
   const revision = computePluginRevision(
     manifestText,
     cssText,
     panels.map((panel) => panel.html),
     worker?.code,
+    sortedTextFiles,
   );
   const historyRoot = NodePath.join(stateDir, PLUGINS_HISTORY_DIR_NAME);
   const pluginHistoryDir = NodePath.join(historyRoot, pluginId);
@@ -513,6 +1014,10 @@ const saveHistoryRevision = Effect.fnUntraced(function* (
     worker === undefined
       ? null
       : { path: NodePath.join(revisionDir, worker.fileName), code: worker.code };
+  const textTargets = sortedTextFiles.map((file) => ({
+    path: relativePosixToFsPath(revisionDir, file.relativePath),
+    content: file.content,
+  }));
   const mapError = (cause: unknown) =>
     new PluginOperationError({
       pluginId,
@@ -529,6 +1034,7 @@ const saveHistoryRevision = Effect.fnUntraced(function* (
     cssPath,
     ...panelTargets.map((panel) => panel.path),
     ...(workerTarget === null ? [] : [workerTarget.path]),
+    ...textTargets.map((file) => file.path),
   ]) {
     if (lstatOrNull(candidate)?.isSymbolicLink() === true) {
       return yield* new PluginOperationError({
@@ -545,7 +1051,8 @@ const saveHistoryRevision = Effect.fnUntraced(function* (
     existingManifest?.isFile() &&
     existingCss?.isFile() &&
     panelTargets.every((panel) => lstatOrNull(panel.path)?.isFile() === true) &&
-    (workerTarget === null || lstatOrNull(workerTarget.path)?.isFile() === true)
+    (workerTarget === null || lstatOrNull(workerTarget.path)?.isFile() === true) &&
+    textTargets.every((file) => lstatOrNull(file.path)?.isFile() === true)
   ) {
     return revision;
   }
@@ -575,6 +1082,12 @@ const saveHistoryRevision = Effect.fnUntraced(function* (
   }
   if (workerTarget !== null) {
     yield* writeFileAtomic(fs, workerTarget.path, workerTarget.code, mapError);
+  }
+  for (const textFile of textTargets) {
+    yield* fs
+      .makeDirectory(NodePath.dirname(textFile.path), { recursive: true })
+      .pipe(Effect.mapError(mapError));
+    yield* writeFileAtomic(fs, textFile.path, textFile.content, mapError);
   }
 
   // Keep mtimes strictly ordered across back-to-back writes within one OS timer tick.
@@ -625,6 +1138,54 @@ const realpathOrNull = (targetPath: string): string | null => {
   }
 };
 
+const resolveManifestLocation = (
+  folderPath: string,
+  pluginRootReal: string,
+):
+  | { readonly ok: true; readonly manifestPath: string; readonly label: string }
+  | { readonly ok: false; readonly problem: string } => {
+  const candidates = [PLUGIN_MANIFEST_DIR, CLAUDE_PLUGIN_MANIFEST_DIR] as const;
+  let allMissing = true;
+  for (const dirName of candidates) {
+    const manifestDir = NodePath.join(folderPath, dirName);
+    if (lstatOrNull(manifestDir)?.isSymbolicLink() === true) {
+      return { ok: false, problem: `Manifest directory ${dirName} cannot be a symlink.` };
+    }
+    const manifestPath = NodePath.join(manifestDir, PLUGIN_MANIFEST_FILE);
+    const label = `${dirName}/${PLUGIN_MANIFEST_FILE}`;
+    let manifestStat: NodeFS.Stats;
+    try {
+      manifestStat = NodeFS.lstatSync(manifestPath);
+    } catch (error) {
+      if (isMissingPath(error)) {
+        continue;
+      }
+      return { ok: false, problem: `Manifest ${label} could not be accessed.` };
+    }
+    allMissing = false;
+    if (manifestStat.isSymbolicLink()) {
+      return { ok: false, problem: `Manifest ${label} cannot be a symlink.` };
+    }
+    if (!manifestStat.isFile()) {
+      return { ok: false, problem: `Manifest ${label} is not a regular file.` };
+    }
+    const manifestDirReal = realpathOrNull(manifestDir);
+    if (manifestDirReal === null || !isInsideDirectory(pluginRootReal, manifestDirReal, false)) {
+      return {
+        ok: false,
+        problem: `Manifest directory ${dirName} must stay inside the plugin folder.`,
+      };
+    }
+    return { ok: true, manifestPath, label };
+  }
+  return {
+    ok: false,
+    problem: allMissing
+      ? "Missing .t3-plugin/plugin.json or .claude-plugin/plugin.json manifest."
+      : "Manifest .t3-plugin/plugin.json could not be accessed.",
+  };
+};
+
 const inspectPluginFolder = (
   pluginsDir: string,
   folderName: string,
@@ -632,8 +1193,9 @@ const inspectPluginFolder = (
   homeDirectory: string,
   runtimeState: PluginWorkerRuntimeState | undefined,
   defaultNetworkRestricted: boolean,
+  isRepo = false,
 ): ScannedPlugin | null => {
-  const storedEnabled = storedSetting?.enabled === true;
+  const storedEnabled = !isRepo && storedSetting?.enabled === true;
   if (folderName.startsWith(".")) return null;
   const folderPath = NodePath.join(pluginsDir, folderName);
   const folderStat = lstatOrNull(folderPath);
@@ -654,49 +1216,23 @@ const inspectPluginFolder = (
     return withProblem(folderName, "Plugin folder could not be resolved.");
   }
 
-  const manifestDir = NodePath.join(folderPath, PLUGIN_MANIFEST_DIR);
-  // A missing manifest directory is reported by the manifest check below.
-  if (lstatOrNull(manifestDir)?.isSymbolicLink() === true) {
-    return withProblem(folderName, "Manifest directory .t3-plugin cannot be a symlink.");
-  }
-  const manifestPath = NodePath.join(manifestDir, PLUGIN_MANIFEST_FILE);
-  let manifestStat: NodeFS.Stats;
-  try {
-    manifestStat = NodeFS.lstatSync(manifestPath);
-  } catch (error) {
-    return withProblem(
-      folderName,
-      isMissingPath(error)
-        ? "Missing .t3-plugin/plugin.json manifest."
-        : "Manifest .t3-plugin/plugin.json could not be accessed.",
-    );
-  }
-  if (manifestStat.isSymbolicLink()) {
-    return withProblem(folderName, "Manifest .t3-plugin/plugin.json cannot be a symlink.");
-  }
-  if (!manifestStat.isFile()) {
-    return withProblem(folderName, "Manifest .t3-plugin/plugin.json is not a regular file.");
-  }
-  const manifestDirReal = realpathOrNull(manifestDir);
-  if (manifestDirReal === null || !isInsideDirectory(pluginRootReal, manifestDirReal, false)) {
-    return withProblem(
-      folderName,
-      "Manifest directory .t3-plugin must stay inside the plugin folder.",
-    );
+  const manifestLoc = resolveManifestLocation(folderPath, pluginRootReal);
+  if (!manifestLoc.ok) {
+    return withProblem(folderName, manifestLoc.problem);
   }
 
-  const rawManifest = readThemeFileGuarded(manifestPath, MAX_PLUGIN_MANIFEST_BYTES);
+  const rawManifest = readThemeFileGuarded(manifestLoc.manifestPath, MAX_PLUGIN_MANIFEST_BYTES);
   if (rawManifest === null) {
     return withProblem(
       folderName,
-      "Manifest .t3-plugin/plugin.json could not be read or is too large.",
+      `Manifest ${manifestLoc.label} could not be read or is too large.`,
     );
   }
   let parsedJson: unknown;
   try {
     parsedJson = JSON.parse(rawManifest);
   } catch {
-    return withProblem(folderName, "Manifest .t3-plugin/plugin.json is not valid JSON.");
+    return withProblem(folderName, `Manifest ${manifestLoc.label} is not valid JSON.`);
   }
 
   const decoded = decodePluginManifestExit(parsedJson);
@@ -706,7 +1242,7 @@ const inspectPluginFolder = (
       folderName,
       typeof rawName === "string" && !isPluginId(rawName)
         ? `Manifest name "${rawName}" is not a valid plugin id.`
-        : "Manifest .t3-plugin/plugin.json has invalid or missing fields.",
+        : `Manifest ${manifestLoc.label} has invalid or missing fields.`,
     );
   }
   const manifest = decoded.value;
@@ -725,22 +1261,11 @@ const inspectPluginFolder = (
     ...(manifest.description !== undefined ? { description: manifest.description } : {}),
     ...(manifest.version !== undefined ? { version: manifest.version } : {}),
   };
-  if (
-    manifest.css === undefined &&
-    manifest.panels === undefined &&
-    manifest.worker === undefined
-  ) {
-    return withProblem(
-      folderName,
-      "Plugin manifest must define css, at least one panel, or a worker.",
-      metadata,
-      { revision: emptyCssRevision, rawManifest },
-    );
-  }
+  const unsupported = detectUnsupportedParts(folderPath, parsedJson, manifest, isRepo);
 
   let css: string | undefined;
   let cssPath: string | undefined;
-  if (manifest.css !== undefined) {
+  if (!isRepo && manifest.css !== undefined) {
     const cssRead = readPluginFileGuarded(folderPath, pluginRootReal, manifest.css, {
       kind: "CSS",
       maxBytes: MAX_PLUGIN_CSS_BYTES,
@@ -750,6 +1275,7 @@ const inspectPluginFolder = (
     if (!cssRead.ok) {
       return withProblem(folderName, cssRead.problem, metadata, {
         revision: emptyCssRevision,
+        unsupported,
         rawManifest,
       });
     }
@@ -762,6 +1288,7 @@ const inspectPluginFolder = (
         metadata,
         {
           revision: computePluginRevision(rawManifest, css),
+          unsupported,
           rawManifest,
           rawCss: css,
           cssPath,
@@ -775,6 +1302,7 @@ const inspectPluginFolder = (
         metadata,
         {
           revision: computePluginRevision(rawManifest, css),
+          unsupported,
           rawManifest,
           rawCss: css,
           cssPath,
@@ -784,7 +1312,7 @@ const inspectPluginFolder = (
   }
 
   const panels: Array<ScannedPanel> = [];
-  if (manifest.panels !== undefined) {
+  if (!isRepo && manifest.panels !== undefined) {
     for (const panel of manifest.panels) {
       const panelRead = readPluginFileGuarded(folderPath, pluginRootReal, panel.entry, {
         kind: "Panel",
@@ -799,6 +1327,7 @@ const inspectPluginFolder = (
             css ?? "",
             panels.map((item) => item.html),
           ),
+          unsupported,
           rawManifest,
           ...(css !== undefined ? { rawCss: css } : {}),
           ...(cssPath !== undefined ? { cssPath } : {}),
@@ -820,7 +1349,7 @@ const inspectPluginFolder = (
   let scannedWorker: ScannedWorker | undefined;
   let installedWorker: InstalledPluginWorker | undefined;
   let runtimeProblem: string | undefined;
-  if (manifest.worker !== undefined) {
+  if (!isRepo && manifest.worker !== undefined) {
     const workerRead = readPluginFileGuarded(folderPath, pluginRootReal, manifest.worker.entry, {
       kind: "Worker",
       maxBytes: MAX_PLUGIN_WORKER_BYTES,
@@ -835,6 +1364,7 @@ const inspectPluginFolder = (
           css ?? "",
           panels.map((item) => item.html),
         ),
+        unsupported,
         rawManifest,
         ...(css !== undefined ? { rawCss: css } : {}),
         ...(cssPath !== undefined ? { cssPath } : {}),
@@ -855,6 +1385,7 @@ const inspectPluginFolder = (
             panels.map((item) => item.html),
             workerRead.content,
           ),
+          unsupported,
           rawManifest,
           ...(css !== undefined ? { rawCss: css } : {}),
           ...(cssPath !== undefined ? { cssPath } : {}),
@@ -954,10 +1485,69 @@ const inspectPluginFolder = (
     };
   }
 
+  const textParts = scanPluginTextParts(folderPath, pluginRootReal);
+  if (!textParts.ok) {
+    return withProblem(folderName, textParts.problem, metadata, {
+      revision: computePluginRevision(
+        rawManifest,
+        css ?? "",
+        panels.map((item) => item.html),
+        scannedWorker?.code,
+        textParts.rawTextFiles,
+      ),
+      unsupported,
+      rawManifest,
+      ...(css !== undefined ? { rawCss: css } : {}),
+      ...(cssPath !== undefined ? { cssPath } : {}),
+      ...(panels.length > 0
+        ? { rawPanels: panels.map(({ fileName, html }) => ({ fileName, html })) }
+        : {}),
+      ...(scannedWorker !== undefined
+        ? { rawWorker: { fileName: scannedWorker.fileName, code: scannedWorker.code } }
+        : {}),
+      rawTextFiles: textParts.rawTextFiles,
+    });
+  }
+
+  const commandNames = textParts.skills
+    .filter((skill) => skill.userInvocable)
+    .map((skill) => skill.name);
+  const skillNames = textParts.skills
+    .filter((skill) => skill.modelInvocable)
+    .map((skill) => skill.name);
   const contributes: Array<PluginContribution> = [];
   if (css !== undefined) contributes.push("css");
   if (panels.length > 0) contributes.push("panel");
   if (scannedWorker !== undefined) contributes.push("worker");
+  if (commandNames.length > 0) contributes.push("command");
+  if (skillNames.length > 0) contributes.push("skill");
+  if (textParts.instructions !== undefined) contributes.push("instructions");
+
+  const revision = computePluginRevision(
+    rawManifest,
+    css ?? "",
+    panels.map((panel) => panel.html),
+    scannedWorker?.code,
+    textParts.rawTextFiles,
+  );
+  if (contributes.length === 0) {
+    return withProblem(
+      folderName,
+      unsupported.length > 0
+        ? isRepo
+          ? "Repo plugin has no supported parts (only skills, commands, and AGENTS.md are supported in repo plugins)."
+          : "Plugin has no supported parts in T3 yet."
+        : "Plugin manifest must define css, at least one panel, a worker, skills, commands, or AGENTS.md.",
+      metadata,
+      {
+        revision,
+        unsupported,
+        rawManifest,
+        ...(textParts.rawTextFiles.length > 0 ? { rawTextFiles: textParts.rawTextFiles } : {}),
+      },
+    );
+  }
+
   const installedPanels: ReadonlyArray<InstalledPluginPanel> | undefined =
     panels.length > 0 ? panels.map(({ id, title }) => ({ id, title })) : undefined;
 
@@ -969,14 +1559,13 @@ const inspectPluginFolder = (
       contributes,
       ...(installedPanels !== undefined ? { panels: installedPanels } : {}),
       ...(installedWorker !== undefined ? { worker: installedWorker } : {}),
-      revision: computePluginRevision(
-        rawManifest,
-        css ?? "",
-        panels.map((panel) => panel.html),
-        scannedWorker?.code,
-      ),
+      ...(commandNames.length > 0 ? { commands: commandNames } : {}),
+      ...(skillNames.length > 0 ? { skills: skillNames } : {}),
+      ...(unsupported.length > 0 ? { unsupported } : {}),
+      revision,
       ...(runtimeProblem !== undefined ? { problem: runtimeProblem } : {}),
     },
+    pluginRootReal,
     ...(css !== undefined ? { css, rawCss: css } : {}),
     ...(cssPath !== undefined ? { cssPath } : {}),
     ...(panels.length > 0
@@ -991,8 +1580,240 @@ const inspectPluginFolder = (
           rawWorker: { fileName: scannedWorker.fileName, code: scannedWorker.code },
         }
       : {}),
+    ...(textParts.skills.length > 0 ? { skills: textParts.skills } : {}),
+    ...(textParts.instructions !== undefined ? { instructions: textParts.instructions } : {}),
+    ...(textParts.rawTextFiles.length > 0 ? { rawTextFiles: textParts.rawTextFiles } : {}),
     rawManifest,
   };
+};
+
+const toEnvironmentCommands = (
+  skills: ReadonlyArray<ScannedSkill> | undefined,
+): ReadonlyArray<EnvironmentPluginCommand> | undefined => {
+  if (skills === undefined || skills.length === 0) return undefined;
+  const commands = skills
+    .filter((skill) => skill.userInvocable)
+    .map((skill) => ({
+      name: skill.name,
+      ...(skill.description !== undefined ? { description: skill.description } : {}),
+      ...(skill.argumentHint !== undefined ? { argumentHint: skill.argumentHint } : {}),
+    }));
+  return commands.length > 0 ? commands : undefined;
+};
+
+const buildEnvironmentPlugin = (
+  scanned: ScannedPlugin,
+  projectId?: ProjectId,
+): EnvironmentPlugin | null => {
+  if (
+    !scanned.plugin.enabled ||
+    scanned.plugin.problem !== undefined ||
+    !isPluginId(scanned.plugin.id)
+  ) {
+    return null;
+  }
+  const activeCommands = toEnvironmentCommands(scanned.skills);
+  if (projectId !== undefined) {
+    if (activeCommands === undefined) return null;
+    return {
+      id: scanned.plugin.id,
+      ...(scanned.plugin.displayName !== undefined
+        ? { displayName: scanned.plugin.displayName }
+        : {}),
+      css: "",
+      commands: activeCommands,
+      projectId,
+    };
+  }
+  const activePanels =
+    scanned.panels !== undefined && scanned.panels.length > 0
+      ? scanned.panels.map(({ id, title }) => ({ id, title }))
+      : undefined;
+  if (
+    scanned.css === undefined &&
+    activePanels === undefined &&
+    scanned.plugin.worker === undefined &&
+    activeCommands === undefined
+  ) {
+    return null;
+  }
+  return {
+    id: scanned.plugin.id,
+    // Omit displayName when there are no commands so CSS/panel/worker snapshots stay compact.
+    ...(activeCommands !== undefined && scanned.plugin.displayName !== undefined
+      ? { displayName: scanned.plugin.displayName }
+      : {}),
+    css: scanned.css ?? "",
+    ...(activePanels !== undefined ? { panels: activePanels } : {}),
+    ...(scanned.plugin.worker !== undefined ? { worker: scanned.plugin.worker } : {}),
+    ...(activeCommands !== undefined ? { commands: activeCommands } : {}),
+  };
+};
+
+interface CachedRepoProjectScan {
+  readonly workspaceRoot: string;
+  readonly fingerprint: string;
+  readonly scanned: ReadonlyArray<ScannedPlugin>;
+}
+
+const fingerprintRepoPluginsDir = (
+  repoPluginsDir: string,
+): { readonly fingerprint: string; readonly maxMtimeMs: number } | null => {
+  const dotT3Dir = NodePath.dirname(repoPluginsDir);
+  const dotT3Stat = lstatOrNull(dotT3Dir);
+  if (dotT3Stat === null || dotT3Stat.isSymbolicLink() || !dotT3Stat.isDirectory()) return null;
+  const dirStat = lstatOrNull(repoPluginsDir);
+  if (dirStat === null || dirStat.isSymbolicLink() || !dirStat.isDirectory()) return null;
+
+  const parts: Array<string> = [`root:${dirStat.mtimeMs}`];
+  let maxMtimeMs = dirStat.mtimeMs;
+  const record = (label: string, targetPath: string): NodeFS.Stats | null => {
+    const stat = lstatOrNull(targetPath);
+    if (stat === null) return null;
+    if (stat.mtimeMs > maxMtimeMs) maxMtimeMs = stat.mtimeMs;
+    parts.push(
+      `${label}:${stat.isSymbolicLink() ? "L" : stat.isDirectory() ? "D" : "F"}:${stat.mtimeMs}:${stat.size}`,
+    );
+    return stat;
+  };
+
+  let examined = 0;
+  for (const folderName of readDirEntriesSorted(repoPluginsDir)) {
+    if (folderName.startsWith(".")) continue;
+    const folderPath = NodePath.join(repoPluginsDir, folderName);
+    const folderStat = record(`d/${folderName}`, folderPath);
+    if (folderStat === null || (!folderStat.isDirectory() && !folderStat.isSymbolicLink()))
+      continue;
+    examined += 1;
+    if (examined > REPO_PLUGIN_MAX_FOLDERS) break;
+    if (folderStat.isSymbolicLink()) continue;
+
+    record(
+      `m1/${folderName}`,
+      NodePath.join(folderPath, PLUGIN_MANIFEST_DIR, PLUGIN_MANIFEST_FILE),
+    );
+    record(
+      `m2/${folderName}`,
+      NodePath.join(folderPath, CLAUDE_PLUGIN_MANIFEST_DIR, PLUGIN_MANIFEST_FILE),
+    );
+    record(`a/${folderName}`, NodePath.join(folderPath, PLUGIN_INSTRUCTIONS_FILE));
+    record(`h/${folderName}`, NodePath.join(folderPath, "hooks", "hooks.json"));
+    record(`c/${folderName}`, NodePath.join(folderPath, ".mcp.json"));
+    record(`g/${folderName}`, NodePath.join(folderPath, "agents"));
+
+    const skillsDir = NodePath.join(folderPath, PLUGIN_SKILLS_DIR);
+    const skillsStat = record(`s/${folderName}`, skillsDir);
+    if (skillsStat !== null && !skillsStat.isSymbolicLink() && skillsStat.isDirectory()) {
+      for (const child of readDirEntriesSorted(skillsDir)) {
+        if (child.startsWith(".")) continue;
+        const childDir = NodePath.join(skillsDir, child);
+        const childStat = record(`sd/${folderName}/${child}`, childDir);
+        if (childStat !== null && !childStat.isSymbolicLink() && childStat.isDirectory()) {
+          record(`sf/${folderName}/${child}`, NodePath.join(childDir, PLUGIN_SKILL_FILE));
+        }
+      }
+    }
+
+    const commandsDir = NodePath.join(folderPath, PLUGIN_COMMANDS_DIR);
+    const commandsStat = record(`k/${folderName}`, commandsDir);
+    if (commandsStat !== null && !commandsStat.isSymbolicLink() && commandsStat.isDirectory()) {
+      for (const child of readDirEntriesSorted(commandsDir)) {
+        if (child.startsWith(".") || !child.endsWith(".md")) continue;
+        record(`kf/${folderName}/${child}`, NodePath.join(commandsDir, child));
+      }
+    }
+  }
+
+  return { fingerprint: parts.join("|"), maxMtimeMs };
+};
+
+const applyRepoPluginApproval = (
+  scanned: ScannedPlugin,
+  projectId: ProjectId,
+  approvedHash: string | undefined,
+): ScannedPlugin => {
+  const hasProblem = scanned.plugin.problem !== undefined;
+  let repoStatus: RepoPluginStatus;
+  if (approvedHash === undefined) {
+    repoStatus = "off";
+  } else if (!hasProblem && approvedHash === scanned.plugin.revision) {
+    repoStatus = "on";
+  } else {
+    repoStatus = "changed";
+  }
+  const enabled = !hasProblem && repoStatus === "on";
+  return {
+    ...scanned,
+    plugin: {
+      ...scanned.plugin,
+      enabled,
+      projectId,
+      repoStatus,
+    },
+  };
+};
+
+const scanRepoPluginsForProject = (
+  projectId: ProjectId,
+  workspaceRoot: string,
+  approvedByPlugin: Readonly<Record<string, string>> | undefined,
+  homeDirectory: string,
+  defaultNetworkRestricted: boolean,
+  cache: Map<string, CachedRepoProjectScan>,
+  nowMs: number,
+): ReadonlyArray<ScannedPlugin> => {
+  const repoPluginsDir = NodePath.join(workspaceRoot, ".t3", "plugins");
+  const fp = fingerprintRepoPluginsDir(repoPluginsDir);
+  if (fp === null) {
+    cache.delete(projectId);
+    return [];
+  }
+
+  // Skip the mtime cache for very recent writes so same-tick same-size edits cannot serve stale data.
+  const canUseCache = nowMs - fp.maxMtimeMs >= RACY_MTIME_WINDOW_MS;
+  const cached = cache.get(projectId);
+  let baseScanned: ReadonlyArray<ScannedPlugin>;
+  if (
+    canUseCache &&
+    cached !== undefined &&
+    cached.workspaceRoot === workspaceRoot &&
+    cached.fingerprint === fp.fingerprint
+  ) {
+    baseScanned = cached.scanned;
+  } else {
+    const entries = readDirEntriesSorted(repoPluginsDir);
+    const scannedList: Array<ScannedPlugin> = [];
+    let examined = 0;
+    for (const folderName of entries) {
+      const scanned = inspectPluginFolder(
+        repoPluginsDir,
+        folderName,
+        undefined,
+        homeDirectory,
+        undefined,
+        defaultNetworkRestricted,
+        true,
+      );
+      if (scanned === null) continue;
+      examined += 1;
+      if (examined > REPO_PLUGIN_MAX_FOLDERS) break;
+      scannedList.push(scanned);
+    }
+    baseScanned = scannedList;
+    if (canUseCache) {
+      cache.set(projectId, { workspaceRoot, fingerprint: fp.fingerprint, scanned: baseScanned });
+    } else {
+      cache.delete(projectId);
+    }
+  }
+
+  return baseScanned.map((scanned) => {
+    const approvedHash =
+      approvedByPlugin !== undefined && Object.hasOwn(approvedByPlugin, scanned.plugin.id)
+        ? approvedByPlugin[scanned.plugin.id]
+        : undefined;
+    return applyRepoPluginApproval(scanned, projectId, approvedHash);
+  });
 };
 
 const scanPlugins = Effect.fnUntraced(function* (
@@ -1009,6 +1830,7 @@ const scanPlugins = Effect.fnUntraced(function* (
 
   const plugins: Array<InstalledPlugin> = [];
   const active: Array<EnvironmentPlugin> = [];
+  const activeUserScanned: Array<ScannedPlugin> = [];
   const panelEntries = new Map<string, ReadonlyMap<string, string>>();
   const workerSpecs: Array<PluginWorkerDesiredSpec> = [];
   let examined = 0;
@@ -1024,6 +1846,7 @@ const scanPlugins = Effect.fnUntraced(function* (
       homeDirectory,
       runtimeStates.get(folderName),
       defaultNetworkRestricted,
+      false,
     );
     if (scanned === null) continue;
 
@@ -1045,21 +1868,10 @@ const scanPlugins = Effect.fnUntraced(function* (
       scanned.plugin.problem === undefined &&
       isPluginId(scanned.plugin.id)
     ) {
-      const activePanels =
-        scanned.panels !== undefined && scanned.panels.length > 0
-          ? scanned.panels.map(({ id, title }) => ({ id, title }))
-          : undefined;
-      if (
-        scanned.css !== undefined ||
-        activePanels !== undefined ||
-        scanned.plugin.worker !== undefined
-      ) {
-        active.push({
-          id: scanned.plugin.id,
-          css: scanned.css ?? "",
-          ...(activePanels !== undefined ? { panels: activePanels } : {}),
-          ...(scanned.plugin.worker !== undefined ? { worker: scanned.plugin.worker } : {}),
-        });
+      activeUserScanned.push(scanned);
+      const envPlugin = buildEnvironmentPlugin(scanned);
+      if (envPlugin !== null) {
+        active.push(envPlugin);
       }
       if (scanned.panels !== undefined && scanned.panels.length > 0) {
         panelEntries.set(
@@ -1070,7 +1882,7 @@ const scanPlugins = Effect.fnUntraced(function* (
     }
   }
 
-  return { plugins, active, panelEntries, workerSpecs };
+  return { plugins, active, panelEntries, workerSpecs, activeUserScanned };
 });
 
 const make = Effect.gen(function* () {
@@ -1078,11 +1890,13 @@ const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const settings = yield* ServerSettings.ServerSettingsService;
   const homeDirectory = yield* HostProcess.HomeDirectory;
+  const projectStore = yield* Effect.serviceOption(ProjectStore.ProjectStoreV2);
   const defaultNetworkRestricted = detectPluginWorkerRuntimeCapabilities().networkRestricted;
 
   const changes = yield* PubSub.sliding<PluginSnapshot>(1);
   const workerSpecChanges = yield* PubSub.unbounded<PluginSnapshot>();
   const runtimeStates = new Map<string, PluginWorkerRuntimeState>();
+  const repoScanCache = new Map<string, CachedRepoProjectScan>();
   const published = yield* Ref.make<PluginSnapshot>({
     seq: 0,
     workerSeq: 0,
@@ -1090,38 +1904,120 @@ const make = Effect.gen(function* () {
     active: [],
     panelEntries: new Map(),
     workerSpecs: [],
+    activeUserScanned: [],
+    activeRepoScannedByProject: new Map(),
   });
   const refreshSemaphore = yield* Semaphore.make(1);
   const mutationSemaphore = yield* Semaphore.make(1);
   const watcherScope = yield* Scope.make("sequential");
   yield* Effect.addFinalizer(() => Scope.close(watcherScope, Exit.void));
 
+  const scanRepoProjects = Effect.fn("PluginRegistry.scanRepoProjects")(function* (
+    repoPluginSettings: Readonly<Record<string, Readonly<Record<string, string>>>>,
+    onlyApprovedProjects: boolean,
+  ) {
+    if (Option.isNone(projectStore)) {
+      return [] as ReadonlyArray<{
+        readonly projectId: ProjectId;
+        readonly scanned: ReadonlyArray<ScannedPlugin>;
+      }>;
+    }
+    const approvedProjectIds = Object.keys(repoPluginSettings) as Array<ProjectId>;
+    if (onlyApprovedProjects && approvedProjectIds.length === 0) {
+      return [];
+    }
+    const projects = yield* projectStore.value
+      .list(onlyApprovedProjects ? { projectIds: approvedProjectIds } : undefined)
+      .pipe(Effect.orElseSucceed((): ReadonlyArray<ProjectStore.ProjectRow> => []));
+    const nowMs = yield* Clock.currentTimeMillis;
+    return projects.map((project) => ({
+      projectId: project.projectId,
+      scanned: scanRepoPluginsForProject(
+        project.projectId,
+        project.workspaceRoot,
+        Object.hasOwn(repoPluginSettings, project.projectId)
+          ? repoPluginSettings[project.projectId]
+          : undefined,
+        homeDirectory,
+        defaultNetworkRestricted,
+        repoScanCache,
+        nowMs,
+      ),
+    }));
+  });
+
+  const hasRepoPluginWithId = Effect.fn("PluginRegistry.hasRepoPluginWithId")(function* (
+    id: string,
+  ) {
+    if (Option.isNone(projectStore)) return false;
+    const projects = yield* projectStore.value
+      .list()
+      .pipe(Effect.orElseSucceed((): ReadonlyArray<ProjectStore.ProjectRow> => []));
+    const nowMs = yield* Clock.currentTimeMillis;
+    return projects.some((project) =>
+      scanRepoPluginsForProject(
+        project.projectId,
+        project.workspaceRoot,
+        undefined,
+        homeDirectory,
+        defaultNetworkRestricted,
+        repoScanCache,
+        nowMs,
+      ).some((entry) => entry.plugin.id === id),
+    );
+  });
+
   const refresh = refreshSemaphore.withPermits(1)(
     Effect.gen(function* () {
-      const pluginSettings = yield* settings.getSettings.pipe(
-        Effect.map((current) => current.plugins),
-        Effect.orElseSucceed((): Readonly<Record<string, PluginSettingEntry>> => ({})),
+      const currentSettings = yield* settings.getSettings.pipe(
+        Effect.map((current) => ({
+          plugins: current.plugins as Readonly<Record<string, PluginSettingEntry>>,
+          repoPlugins: current.repoPlugins as Readonly<
+            Record<string, Readonly<Record<string, string>>>
+          >,
+        })),
+        Effect.orElseSucceed(() => ({
+          plugins: {} as Readonly<Record<string, PluginSettingEntry>>,
+          repoPlugins: {} as Readonly<Record<string, Readonly<Record<string, string>>>>,
+        })),
       );
-      const { plugins, active, panelEntries, workerSpecs } = yield* scanPlugins(
+      const { plugins, active, panelEntries, workerSpecs, activeUserScanned } = yield* scanPlugins(
         pluginsDir,
-        pluginSettings,
+        currentSettings.plugins,
         homeDirectory,
         runtimeStates,
         defaultNetworkRestricted,
       ).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+      const repoProjects = yield* scanRepoProjects(currentSettings.repoPlugins, true);
+      const activeRepoScannedByProject = new Map<ProjectId, Array<ScannedPlugin>>();
+      const combinedActive: Array<EnvironmentPlugin> = [...active];
+      for (const { projectId, scanned } of repoProjects) {
+        for (const item of scanned) {
+          if (!item.plugin.enabled || item.plugin.problem !== undefined) continue;
+          const bucket = activeRepoScannedByProject.get(projectId) ?? [];
+          bucket.push(item);
+          activeRepoScannedByProject.set(projectId, bucket);
+          const envPlugin = buildEnvironmentPlugin(item, projectId);
+          if (envPlugin !== null) {
+            combinedActive.push(envPlugin);
+          }
+        }
+      }
       const [activeChanged, workerSpecsChanged, next] = yield* Ref.modify(
         published,
         (previous): readonly [readonly [boolean, boolean, PluginSnapshot], PluginSnapshot] => {
-          const sameActive = Equal.equals(previous.active, active);
+          const sameActive = Equal.equals(previous.active, combinedActive);
           const samePlugins = Equal.equals(previous.plugins, plugins);
           const sameWorkerSpecs = Equal.equals(previous.workerSpecs, workerSpecs);
           const updated: PluginSnapshot = {
             seq: sameActive ? previous.seq : previous.seq + 1,
             workerSeq: sameWorkerSpecs ? previous.workerSeq : previous.workerSeq + 1,
             plugins,
-            active,
+            active: combinedActive,
             panelEntries,
             workerSpecs,
+            activeUserScanned,
+            activeRepoScannedByProject,
           };
           if (sameActive && samePlugins && sameWorkerSpecs) {
             return [[false, false, updated], updated];
@@ -1171,7 +2067,7 @@ const make = Effect.gen(function* () {
     Effect.asVoid,
   );
   const pluginSettingChanges = settings.streamChanges.pipe(
-    Stream.map((current) => current.plugins),
+    Stream.map((current) => [current.plugins, current.repoPlugins] as const),
     Stream.changesWith(Equal.equals),
   );
   yield* Stream.runForEach(pluginSettingChanges, () =>
@@ -1180,7 +2076,16 @@ const make = Effect.gen(function* () {
 
   const list = Effect.fn("PluginRegistry.list")(function* () {
     const snapshot = yield* refresh;
-    return { pluginsDir, plugins: snapshot.plugins };
+    const repoPluginSettings = yield* settings.getSettings.pipe(
+      Effect.map(
+        (current) =>
+          current.repoPlugins as Readonly<Record<string, Readonly<Record<string, string>>>>,
+      ),
+      Effect.orElseSucceed((): Readonly<Record<string, Readonly<Record<string, string>>>> => ({})),
+    );
+    const repoProjects = yield* scanRepoProjects(repoPluginSettings, false);
+    const repoPlugins = repoProjects.flatMap((entry) => entry.scanned.map((item) => item.plugin));
+    return { pluginsDir, plugins: snapshot.plugins, repoPlugins };
   });
 
   const read: PluginRegistry["Service"]["read"] = Effect.fn("PluginRegistry.read")(function* (id) {
@@ -1268,6 +2173,19 @@ const make = Effect.gen(function* () {
                 },
               }
             : {}),
+          ...(scanned.skills !== undefined && scanned.skills.length > 0
+            ? {
+                skills: scanned.skills.map((skill) => ({
+                  name: skill.name,
+                  ...(skill.description !== undefined ? { description: skill.description } : {}),
+                  ...(skill.argumentHint !== undefined ? { argumentHint: skill.argumentHint } : {}),
+                  userInvocable: skill.userInvocable,
+                  modelInvocable: skill.modelInvocable,
+                  body: skill.body,
+                })),
+              }
+            : {}),
+          ...(scanned.instructions !== undefined ? { instructions: scanned.instructions } : {}),
         };
       }),
     );
@@ -1284,19 +2202,152 @@ const make = Effect.gen(function* () {
               reason: "invalid_id",
             });
           }
-          const hasCss = input.css !== undefined;
-          const hasPanels = input.panels !== undefined && input.panels.length > 0;
-          const hasWorker = input.worker !== undefined;
-          if (!hasCss && !hasPanels && !hasWorker) {
+
+          const resolvedRoot = NodePath.resolve(pluginsDir);
+          const folderPath = NodePath.resolve(pluginsDir, input.id);
+          if (!isInsideDirectory(resolvedRoot, folderPath, false)) {
             return yield* new PluginOperationError({
               pluginId: input.id,
               operation: "write",
-              reason: "invalid_panel",
+              reason: "invalid_id",
+            });
+          }
+          const folderStat = lstatOrNull(folderPath);
+          const created = folderStat === null;
+          const existing = created
+            ? null
+            : inspectPluginFolder(
+                pluginsDir,
+                input.id,
+                undefined,
+                homeDirectory,
+                undefined,
+                defaultNetworkRestricted,
+                false,
+              );
+          const preserveExisting = existing !== null && existing.plugin.problem === undefined;
+
+          const effectiveDisplayName =
+            input.displayName !== undefined
+              ? input.displayName
+              : preserveExisting
+                ? existing.plugin.displayName
+                : undefined;
+          const effectiveDescription =
+            input.description !== undefined
+              ? input.description
+              : preserveExisting
+                ? existing.plugin.description
+                : undefined;
+          const effectiveVersion =
+            input.version !== undefined
+              ? input.version
+              : preserveExisting
+                ? existing.plugin.version
+                : undefined;
+          const effectiveCss =
+            input.css !== undefined ? input.css : preserveExisting ? existing.css : undefined;
+          const effectivePanels =
+            input.panels !== undefined
+              ? input.panels
+              : preserveExisting && existing.panels !== undefined && existing.panels.length > 0
+                ? existing.panels.map(({ id: panelId, title, html }) => ({
+                    id: panelId,
+                    title,
+                    html,
+                  }))
+                : undefined;
+          const effectiveWorker: PluginWorkerContent | undefined =
+            input.worker !== undefined
+              ? input.worker
+              : preserveExisting && existing.worker !== undefined
+                ? {
+                    code: existing.worker.code,
+                    ...(existing.worker.everyMinutes !== undefined
+                      ? { everyMinutes: existing.worker.everyMinutes }
+                      : {}),
+                    ...(existing.worker.folders.length > 0
+                      ? { folders: existing.worker.folders }
+                      : {}),
+                    ...(existing.worker.network ? { network: true } : {}),
+                  }
+                : undefined;
+
+          const effectiveInstructions =
+            input.instructions !== undefined
+              ? input.instructions.trim().length === 0
+                ? undefined
+                : input.instructions
+              : preserveExisting
+                ? existing.instructions
+                : undefined;
+          if (
+            effectiveInstructions !== undefined &&
+            Buffer.byteLength(effectiveInstructions, "utf8") > PLUGIN_INSTRUCTIONS_MAX_BYTES
+          ) {
+            return yield* new PluginOperationError({
+              pluginId: input.id,
+              operation: "write",
+              reason: "invalid_instructions",
+            });
+          }
+
+          let nextSkillFiles: Array<RawPluginTextFile>;
+          if (input.skills !== undefined) {
+            if (input.skills.length > PLUGIN_MAX_SKILLS) {
+              return yield* new PluginOperationError({
+                pluginId: input.id,
+                operation: "write",
+                reason: "invalid_skill",
+              });
+            }
+            const seenNames = new Set<string>();
+            nextSkillFiles = [];
+            for (const skill of input.skills) {
+              if (!isPluginId(skill.name) || seenNames.has(skill.name)) {
+                return yield* new PluginOperationError({
+                  pluginId: input.id,
+                  operation: "write",
+                  reason: "invalid_skill",
+                });
+              }
+              seenNames.add(skill.name);
+              const content = formatPluginSkillMarkdown(skill);
+              if (Buffer.byteLength(content, "utf8") > PLUGIN_SKILL_MAX_BYTES) {
+                return yield* new PluginOperationError({
+                  pluginId: input.id,
+                  operation: "write",
+                  reason: "invalid_skill",
+                });
+              }
+              nextSkillFiles.push({
+                relativePath: `${PLUGIN_SKILLS_DIR}/${skill.name}/${PLUGIN_SKILL_FILE}`,
+                content,
+              });
+            }
+          } else {
+            nextSkillFiles = preserveExisting
+              ? (existing.rawTextFiles ?? []).filter(
+                  (file) => file.relativePath !== PLUGIN_INSTRUCTIONS_FILE,
+                )
+              : [];
+          }
+
+          const hasCss = effectiveCss !== undefined;
+          const hasPanels = effectivePanels !== undefined && effectivePanels.length > 0;
+          const hasWorker = effectiveWorker !== undefined;
+          const hasSkills = nextSkillFiles.length > 0;
+          const hasInstructions = effectiveInstructions !== undefined;
+          if (!hasCss && !hasPanels && !hasWorker && !hasSkills && !hasInstructions) {
+            return yield* new PluginOperationError({
+              pluginId: input.id,
+              operation: "write",
+              reason: input.skills !== undefined ? "invalid_skill" : "invalid_panel",
             });
           }
           if (
-            input.css !== undefined &&
-            (input.css.length > THEME_CSS_MAX_LENGTH || themeCssLoadsRemoteFiles(input.css))
+            effectiveCss !== undefined &&
+            (effectiveCss.length > THEME_CSS_MAX_LENGTH || themeCssLoadsRemoteFiles(effectiveCss))
           ) {
             return yield* new PluginOperationError({
               pluginId: input.id,
@@ -1304,15 +2355,15 @@ const make = Effect.gen(function* () {
               reason: "invalid_css",
             });
           }
-          if (input.panels !== undefined) {
-            if (input.panels.length === 0 || input.panels.length > PLUGIN_MAX_PANELS) {
+          if (effectivePanels !== undefined) {
+            if (effectivePanels.length === 0 || effectivePanels.length > PLUGIN_MAX_PANELS) {
               return yield* new PluginOperationError({
                 pluginId: input.id,
                 operation: "write",
                 reason: "invalid_panel",
               });
             }
-            for (const panel of input.panels) {
+            for (const panel of effectivePanels) {
               if (
                 !isPluginId(panel.id) ||
                 panel.html.length > PLUGIN_PANEL_HTML_MAX_CHARS ||
@@ -1326,12 +2377,12 @@ const make = Effect.gen(function* () {
               }
             }
           }
-          if (input.worker !== undefined) {
+          if (effectiveWorker !== undefined) {
             if (
-              input.worker.code.length > PLUGIN_WORKER_CODE_MAX_CHARS ||
-              Buffer.byteLength(input.worker.code, "utf8") > MAX_PLUGIN_WORKER_BYTES ||
-              (input.worker.folders !== undefined &&
-                input.worker.folders.length > PLUGIN_WORKER_MAX_FOLDERS)
+              effectiveWorker.code.length > PLUGIN_WORKER_CODE_MAX_CHARS ||
+              Buffer.byteLength(effectiveWorker.code, "utf8") > MAX_PLUGIN_WORKER_BYTES ||
+              (effectiveWorker.folders !== undefined &&
+                effectiveWorker.folders.length > PLUGIN_WORKER_MAX_FOLDERS)
             ) {
               return yield* new PluginOperationError({
                 pluginId: input.id,
@@ -1343,31 +2394,31 @@ const make = Effect.gen(function* () {
 
           const manifestDecoded = decodePluginManifestExit({
             name: input.id,
-            ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
-            ...(input.description !== undefined ? { description: input.description } : {}),
-            ...(input.version !== undefined ? { version: input.version } : {}),
-            ...(input.css !== undefined ? { css: `./${PLUGIN_CSS_FILE}` } : {}),
-            ...(input.panels !== undefined
+            ...(effectiveDisplayName !== undefined ? { displayName: effectiveDisplayName } : {}),
+            ...(effectiveDescription !== undefined ? { description: effectiveDescription } : {}),
+            ...(effectiveVersion !== undefined ? { version: effectiveVersion } : {}),
+            ...(effectiveCss !== undefined ? { css: `./${PLUGIN_CSS_FILE}` } : {}),
+            ...(effectivePanels !== undefined
               ? {
-                  panels: input.panels.map((panel) => ({
+                  panels: effectivePanels.map((panel) => ({
                     id: panel.id,
                     title: panel.title,
                     entry: `./${panel.id}.html`,
                   })),
                 }
               : {}),
-            ...(input.worker !== undefined
+            ...(effectiveWorker !== undefined
               ? {
                   worker: {
                     entry: `./${PLUGIN_WORKER_FILE}`,
-                    ...(input.worker.everyMinutes !== undefined
-                      ? { everyMinutes: input.worker.everyMinutes }
+                    ...(effectiveWorker.everyMinutes !== undefined
+                      ? { everyMinutes: effectiveWorker.everyMinutes }
                       : {}),
-                    ...(input.worker.folders !== undefined
-                      ? { folders: input.worker.folders }
+                    ...(effectiveWorker.folders !== undefined
+                      ? { folders: effectiveWorker.folders }
                       : {}),
-                    ...(input.worker.network !== undefined
-                      ? { network: input.worker.network }
+                    ...(effectiveWorker.network !== undefined
+                      ? { network: effectiveWorker.network }
                       : {}),
                   },
                 }
@@ -1378,9 +2429,9 @@ const make = Effect.gen(function* () {
               pluginId: input.id,
               operation: "write",
               reason:
-                input.worker !== undefined
+                effectiveWorker !== undefined
                   ? "invalid_worker"
-                  : input.panels !== undefined
+                  : effectivePanels !== undefined
                     ? "invalid_panel"
                     : "has_problem",
             });
@@ -1396,33 +2447,36 @@ const make = Effect.gen(function* () {
             ),
           )}\n`;
 
-          const resolvedRoot = NodePath.resolve(pluginsDir);
-          const folderPath = NodePath.resolve(pluginsDir, input.id);
-          if (!isInsideDirectory(resolvedRoot, folderPath, false)) {
-            return yield* new PluginOperationError({
-              pluginId: input.id,
-              operation: "write",
-              reason: "invalid_id",
-            });
-          }
-          const folderStat = lstatOrNull(folderPath);
           const manifestDir = NodePath.join(folderPath, PLUGIN_MANIFEST_DIR);
           const manifestPath = NodePath.join(manifestDir, PLUGIN_MANIFEST_FILE);
           const cssPath =
-            input.css !== undefined ? NodePath.join(folderPath, PLUGIN_CSS_FILE) : null;
-          const panelWrites = (input.panels ?? []).map((panel) => ({
+            effectiveCss !== undefined ? NodePath.join(folderPath, PLUGIN_CSS_FILE) : null;
+          const panelWrites = (effectivePanels ?? []).map((panel) => ({
             fileName: `${panel.id}.html`,
             targetPath: NodePath.join(folderPath, `${panel.id}.html`),
             html: panel.html,
           }));
           const workerPath =
-            input.worker !== undefined ? NodePath.join(folderPath, PLUGIN_WORKER_FILE) : null;
+            effectiveWorker !== undefined ? NodePath.join(folderPath, PLUGIN_WORKER_FILE) : null;
+          const nextTextFiles = sortRawTextFiles([
+            ...(effectiveInstructions !== undefined
+              ? [{ relativePath: PLUGIN_INSTRUCTIONS_FILE, content: effectiveInstructions }]
+              : []),
+            ...nextSkillFiles,
+          ]);
+          const textFilesToWrite = sortRawTextFiles([
+            ...(input.instructions !== undefined && effectiveInstructions !== undefined
+              ? [{ relativePath: PLUGIN_INSTRUCTIONS_FILE, content: effectiveInstructions }]
+              : []),
+            ...(input.skills !== undefined ? nextSkillFiles : []),
+          ]);
           if (
             !isExistingTargetSafe(
               folderPath,
               cssPath,
               panelWrites.map((panel) => panel.targetPath),
               workerPath,
+              nextTextFiles.map((file) => file.relativePath),
             )
           ) {
             return yield* new PluginOperationError({
@@ -1432,35 +2486,25 @@ const make = Effect.gen(function* () {
             });
           }
 
-          const created = folderStat === null;
           let before: string | undefined;
-          let previousCssPath: string | null = null;
-          let previousPanelFileNames: ReadonlyArray<string> = [];
-          let previousWorkerPath: string | null = null;
-          if (!created) {
-            const existing = inspectPluginFolder(
-              pluginsDir,
+          const previousCssPath = existing?.cssPath ?? null;
+          const previousPanelFileNames = (existing?.rawPanels ?? []).map((panel) => panel.fileName);
+          const previousWorkerPath = existing?.worker?.path ?? null;
+          const previousTextRelativePaths = (existing?.rawTextFiles ?? []).map(
+            (file) => file.relativePath,
+          );
+          if (!created && existing?.rawManifest !== undefined) {
+            before = yield* saveHistoryRevision(
+              fs,
+              stateDir,
               input.id,
-              undefined,
-              homeDirectory,
-              undefined,
-              defaultNetworkRestricted,
+              existing.rawManifest,
+              existing.rawCss ?? "",
+              existing.rawPanels ?? [],
+              "write",
+              existing.rawWorker,
+              existing.rawTextFiles ?? [],
             );
-            previousCssPath = existing?.cssPath ?? null;
-            previousPanelFileNames = (existing?.rawPanels ?? []).map((panel) => panel.fileName);
-            previousWorkerPath = existing?.worker?.path ?? null;
-            if (existing?.rawManifest !== undefined) {
-              before = yield* saveHistoryRevision(
-                fs,
-                stateDir,
-                input.id,
-                existing.rawManifest,
-                existing.rawCss ?? "",
-                existing.rawPanels ?? [],
-                "write",
-                existing.rawWorker,
-              );
-            }
           }
 
           const mapWriteError = (cause: unknown) =>
@@ -1474,14 +2518,21 @@ const make = Effect.gen(function* () {
             .makeDirectory(manifestDir, { recursive: true })
             .pipe(Effect.mapError(mapWriteError));
           yield* writeFileAtomic(fs, manifestPath, manifestText, mapWriteError);
-          if (cssPath !== null && input.css !== undefined) {
-            yield* writeFileAtomic(fs, cssPath, input.css, mapWriteError);
+          if (cssPath !== null && effectiveCss !== undefined) {
+            yield* writeFileAtomic(fs, cssPath, effectiveCss, mapWriteError);
           }
           for (const panel of panelWrites) {
             yield* writeFileAtomic(fs, panel.targetPath, panel.html, mapWriteError);
           }
-          if (workerPath !== null && input.worker !== undefined) {
-            yield* writeFileAtomic(fs, workerPath, input.worker.code, mapWriteError);
+          if (workerPath !== null && effectiveWorker !== undefined) {
+            yield* writeFileAtomic(fs, workerPath, effectiveWorker.code, mapWriteError);
+          }
+          for (const textFile of textFilesToWrite) {
+            const targetPath = relativePosixToFsPath(folderPath, textFile.relativePath);
+            yield* fs
+              .makeDirectory(NodePath.dirname(targetPath), { recursive: true })
+              .pipe(Effect.mapError(mapWriteError));
+            yield* writeFileAtomic(fs, targetPath, textFile.content, mapWriteError);
           }
           yield* cleanupStalePluginFiles(
             fs,
@@ -1492,6 +2543,8 @@ const make = Effect.gen(function* () {
             cssPath,
             previousWorkerPath,
             workerPath,
+            previousTextRelativePaths,
+            new Set(nextTextFiles.map((file) => file.relativePath)),
           );
 
           const after = yield* saveHistoryRevision(
@@ -1499,12 +2552,13 @@ const make = Effect.gen(function* () {
             stateDir,
             input.id,
             manifestText,
-            input.css ?? "",
+            effectiveCss ?? "",
             panelWrites.map(({ fileName, html }) => ({ fileName, html })),
             "write",
-            input.worker === undefined
+            effectiveWorker === undefined
               ? undefined
-              : { fileName: PLUGIN_WORKER_FILE, code: input.worker.code },
+              : { fileName: PLUGIN_WORKER_FILE, code: effectiveWorker.code },
+            nextTextFiles,
           );
           const updated = yield* refresh;
           const plugin = updated.plugins.find((candidate) => candidate.id === input.id);
@@ -1530,6 +2584,13 @@ const make = Effect.gen(function* () {
     function* (id, revision, enable, options) {
       return yield* mutationSemaphore.withPermits(1)(
         Effect.gen(function* () {
+          if (options?.projectId !== undefined) {
+            return yield* new PluginOperationError({
+              pluginId: id,
+              operation: "restore",
+              reason: "repo_plugin_readonly",
+            });
+          }
           if (!isPluginId(id)) {
             return yield* new PluginOperationError({
               pluginId: id,
@@ -1576,6 +2637,14 @@ const make = Effect.gen(function* () {
           }
           const revStat = lstatOrNull(revisionDir);
           if (revStat === null || !revStat.isDirectory()) {
+            const folderStat = lstatOrNull(NodePath.resolve(pluginsDir, id));
+            if (folderStat === null && (yield* hasRepoPluginWithId(id))) {
+              return yield* new PluginOperationError({
+                pluginId: id,
+                operation: "restore",
+                reason: "repo_plugin_readonly",
+              });
+            }
             return yield* new PluginOperationError({
               pluginId: id,
               operation: "restore",
@@ -1591,6 +2660,14 @@ const make = Effect.gen(function* () {
               reason: "not_found",
             });
           }
+          const historyTextFiles = readHistoryTextFiles(revisionDir);
+          if (!historyTextFiles.ok) {
+            return yield* new PluginOperationError({
+              pluginId: id,
+              operation: "restore",
+              reason: "has_problem",
+            });
+          }
 
           const decoded = decodePluginManifestJsonExit(manifestText);
           if (
@@ -1598,7 +2675,8 @@ const make = Effect.gen(function* () {
             decoded.value.name !== id ||
             (decoded.value.css === undefined &&
               decoded.value.panels === undefined &&
-              decoded.value.worker === undefined)
+              decoded.value.worker === undefined &&
+              historyTextFiles.files.length === 0)
           ) {
             return yield* new PluginOperationError({
               pluginId: id,
@@ -1735,6 +2813,7 @@ const make = Effect.gen(function* () {
               targetCssPath,
               panelRestores.map((panel) => panel.targetPath),
               workerRestore?.targetPath ?? null,
+              historyTextFiles.files.map((file) => file.relativePath),
             )
           ) {
             return yield* new PluginOperationError({
@@ -1746,6 +2825,7 @@ const make = Effect.gen(function* () {
           let previousCssPath: string | null = null;
           let previousPanelFileNames: ReadonlyArray<string> = [];
           let previousWorkerPath: string | null = null;
+          let previousTextRelativePaths: ReadonlyArray<string> = [];
           if (lstatOrNull(folderPath) !== null) {
             const existing = inspectPluginFolder(
               pluginsDir,
@@ -1758,6 +2838,9 @@ const make = Effect.gen(function* () {
             previousCssPath = existing?.cssPath ?? null;
             previousPanelFileNames = (existing?.rawPanels ?? []).map((panel) => panel.fileName);
             previousWorkerPath = existing?.worker?.path ?? null;
+            previousTextRelativePaths = (existing?.rawTextFiles ?? []).map(
+              (file) => file.relativePath,
+            );
             if (existing?.rawManifest !== undefined) {
               yield* saveHistoryRevision(
                 fs,
@@ -1768,6 +2851,7 @@ const make = Effect.gen(function* () {
                 existing.rawPanels ?? [],
                 "restore",
                 existing.rawWorker,
+                existing.rawTextFiles ?? [],
               );
             }
           }
@@ -1795,6 +2879,13 @@ const make = Effect.gen(function* () {
           if (workerRestore !== undefined) {
             yield* writeFileAtomic(fs, workerRestore.targetPath, workerRestore.code, mapWriteError);
           }
+          for (const textFile of historyTextFiles.files) {
+            const targetPath = relativePosixToFsPath(folderPath, textFile.relativePath);
+            yield* fs
+              .makeDirectory(NodePath.dirname(targetPath), { recursive: true })
+              .pipe(Effect.mapError(mapWriteError));
+            yield* writeFileAtomic(fs, targetPath, textFile.content, mapWriteError);
+          }
           yield* cleanupStalePluginFiles(
             fs,
             folderPath,
@@ -1804,6 +2895,8 @@ const make = Effect.gen(function* () {
             targetCssPath,
             previousWorkerPath,
             workerRestore?.targetPath ?? null,
+            previousTextRelativePaths,
+            new Set(historyTextFiles.files.map((file) => file.relativePath)),
           );
 
           if (enable === true) {
@@ -1857,6 +2950,118 @@ const make = Effect.gen(function* () {
             operation: "setEnabled",
             reason: "invalid_id",
           });
+        }
+        if (options?.projectId !== undefined) {
+          const projectId = options.projectId;
+          const projectOption = Option.isSome(projectStore)
+            ? yield* projectStore.value
+                .get(projectId)
+                .pipe(
+                  Effect.orElseSucceed((): Option.Option<ProjectStore.ProjectRow> => Option.none()),
+                )
+            : Option.none();
+          if (Option.isNone(projectOption)) {
+            return yield* new PluginOperationError({
+              pluginId: id,
+              operation: "setEnabled",
+              reason: "not_found",
+            });
+          }
+          repoScanCache.delete(projectId);
+          const currentSettings = yield* settings.getSettings.pipe(
+            Effect.map(
+              (current) =>
+                current.repoPlugins as Readonly<Record<string, Readonly<Record<string, string>>>>,
+            ),
+            Effect.orElseSucceed(
+              (): Readonly<Record<string, Readonly<Record<string, string>>>> => ({}),
+            ),
+          );
+          const nowMs = yield* Clock.currentTimeMillis;
+          const scanned = scanRepoPluginsForProject(
+            projectId,
+            projectOption.value.workspaceRoot,
+            Object.hasOwn(currentSettings, projectId) ? currentSettings[projectId] : undefined,
+            homeDirectory,
+            defaultNetworkRestricted,
+            repoScanCache,
+            nowMs,
+          );
+          const target = scanned.find((candidate) => candidate.plugin.id === id);
+          if (target === undefined) {
+            return yield* new PluginOperationError({
+              pluginId: id,
+              operation: "setEnabled",
+              reason: "not_found",
+            });
+          }
+          if (enabled) {
+            if (target.plugin.problem !== undefined) {
+              return yield* new PluginOperationError({
+                pluginId: id,
+                operation: "setEnabled",
+                reason: "has_problem",
+              });
+            }
+            if (
+              target.plugin.revision === undefined ||
+              options.revision === undefined ||
+              options.revision !== target.plugin.revision
+            ) {
+              return yield* new PluginOperationError({
+                pluginId: id,
+                operation: "setEnabled",
+                reason: "changed",
+              });
+            }
+            yield* settings
+              .updateSettings({
+                repoPlugins: {
+                  [projectId]: {
+                    [id]: target.plugin.revision,
+                  },
+                },
+              })
+              .pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new PluginOperationError({
+                      pluginId: id,
+                      operation: "setEnabled",
+                      reason: "settings_failed",
+                      cause,
+                    }),
+                ),
+              );
+          } else {
+            yield* settings
+              .updateSettings({
+                repoPlugins: {
+                  [projectId]: {
+                    [id]: null,
+                  },
+                },
+              })
+              .pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new PluginOperationError({
+                      pluginId: id,
+                      operation: "setEnabled",
+                      reason: "settings_failed",
+                      cause,
+                    }),
+                ),
+              );
+          }
+          yield* refresh;
+          return {
+            plugin: {
+              ...target.plugin,
+              enabled,
+              repoStatus: enabled ? ("on" as const) : ("off" as const),
+            },
+          };
         }
         const current = yield* refresh;
         const target = current.plugins.find((plugin) => plugin.id === id);
@@ -2057,9 +3262,16 @@ const make = Effect.gen(function* () {
   });
 
   const uninstall: PluginRegistry["Service"]["uninstall"] = Effect.fn("PluginRegistry.uninstall")(
-    function* (id) {
+    function* (id, projectId) {
       return yield* mutationSemaphore.withPermits(1)(
         Effect.gen(function* () {
+          if (projectId !== undefined) {
+            return yield* new PluginOperationError({
+              pluginId: id,
+              operation: "uninstall",
+              reason: "repo_plugin_readonly",
+            });
+          }
           if (!isSafeFolderName(id)) {
             return yield* new PluginOperationError({
               pluginId: id,
@@ -2078,6 +3290,13 @@ const make = Effect.gen(function* () {
           }
           const sourceStat = lstatOrNull(source);
           if (sourceStat === null || (!sourceStat.isDirectory() && !sourceStat.isSymbolicLink())) {
+            if (yield* hasRepoPluginWithId(id)) {
+              return yield* new PluginOperationError({
+                pluginId: id,
+                operation: "uninstall",
+                reason: "repo_plugin_readonly",
+              });
+            }
             return yield* new PluginOperationError({
               pluginId: id,
               operation: "uninstall",
@@ -2175,6 +3394,58 @@ const make = Effect.gen(function* () {
     return entryPath;
   });
 
+  const getTurnContext: PluginRegistry["Service"]["getTurnContext"] = Effect.fn(
+    "PluginRegistry.getTurnContext",
+  )(function* (projectId) {
+    const snapshot = yield* refresh;
+    const activePlugins = [
+      ...snapshot.activeUserScanned,
+      ...(snapshot.activeRepoScannedByProject.get(projectId) ?? []),
+    ];
+    const contextPlugins: Array<ProjectContextPlugin> = [];
+    const commandsByKey = new Map<string, PluginSlashCommandEntry>();
+
+    for (const scanned of activePlugins) {
+      const modelSkills = (scanned.skills ?? []).filter((skill) => skill.modelInvocable);
+      if (scanned.instructions !== undefined || modelSkills.length > 0) {
+        contextPlugins.push({
+          id: scanned.plugin.id,
+          ...(scanned.plugin.displayName !== undefined
+            ? { displayName: scanned.plugin.displayName }
+            : {}),
+          ...(scanned.instructions !== undefined ? { instructions: scanned.instructions } : {}),
+          ...(modelSkills.length > 0
+            ? {
+                skills: modelSkills.map((skill) => ({
+                  name: skill.name,
+                  ...(skill.description !== undefined ? { description: skill.description } : {}),
+                  path: skill.filePath,
+                })),
+              }
+            : {}),
+        });
+      }
+      const pluginRoot = scanned.pluginRootReal;
+      if (pluginRoot !== undefined) {
+        for (const skill of scanned.skills ?? []) {
+          if (!skill.userInvocable) continue;
+          commandsByKey.set(`${scanned.plugin.id}:${skill.name}`, {
+            pluginId: scanned.plugin.id,
+            name: skill.name,
+            body: skill.body,
+            pluginRoot,
+            skillDir: skill.skillDir,
+          });
+        }
+      }
+    }
+
+    return {
+      contextPlugins,
+      commands: [...commandsByKey.values()],
+    };
+  });
+
   return PluginRegistry.of({
     list: list(),
     read,
@@ -2186,6 +3457,7 @@ const make = Effect.gen(function* () {
     uninstall,
     resolvePanelEntry,
     reportWorkerRuntime,
+    getTurnContext,
     get streamChanges() {
       return Stream.unwrap(
         Effect.gen(function* () {

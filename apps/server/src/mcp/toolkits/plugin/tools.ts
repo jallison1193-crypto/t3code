@@ -47,14 +47,24 @@ const PluginWorkerContentSchema = Schema.Struct({
   network: Schema.optionalKey(Schema.Boolean),
 });
 
+const PluginSkillContentSchema = Schema.Struct({
+  name: PluginId,
+  description: Schema.optionalKey(Schema.String),
+  argumentHint: Schema.optionalKey(Schema.String),
+  userInvocable: Schema.optionalKey(Schema.Boolean),
+  modelInvocable: Schema.optionalKey(Schema.Boolean),
+  body: Schema.String,
+});
+
 const PluginReadTool = Tool.make("t3_plugin_read", {
   ...shared,
   description:
-    "List installed plugins, read one plugin's CSS, panels, or worker, and get the guide to build plugins. Call before `t3_plugin_write`.",
+    "List installed plugins, read one plugin's parts (CSS, panels, worker, skills/commands, instructions), and get the plugin guide. Call before `t3_plugin_write`.",
   parameters: Schema.Struct({
     pluginId: Schema.optionalKey(
       PluginId.annotate({
-        description: "Also return this plugin's manifest fields, CSS, panels, and worker.",
+        description:
+          "Also return this plugin's manifest fields, CSS, panels, worker, skills, and instructions.",
       }),
     ),
   }),
@@ -68,6 +78,9 @@ const PluginReadTool = Tool.make("t3_plugin_read", {
         contributes: Schema.Array(PluginContribution),
         panels: Schema.optionalKey(Schema.Array(InstalledPluginPanel)),
         worker: Schema.optionalKey(InstalledPluginWorker),
+        commands: Schema.optionalKey(Schema.Array(PluginId)),
+        skills: Schema.optionalKey(Schema.Array(PluginId)),
+        unsupported: Schema.optionalKey(Schema.Array(Schema.String)),
         revision: Schema.optionalKey(Schema.String),
         problem: Schema.optionalKey(Schema.String),
       }),
@@ -80,6 +93,8 @@ const PluginReadTool = Tool.make("t3_plugin_read", {
         css: Schema.optionalKey(Schema.String),
         panels: Schema.optionalKey(Schema.Array(PluginPanelContentSchema)),
         worker: Schema.optionalKey(PluginWorkerContentSchema),
+        skills: Schema.optionalKey(Schema.Array(PluginSkillContentSchema)),
+        instructions: Schema.optionalKey(Schema.String),
       }),
     ),
     guide: Schema.String,
@@ -91,7 +106,7 @@ const PluginReadTool = Tool.make("t3_plugin_read", {
 const PluginWriteTool = Tool.make(PLUGIN_WRITE_TOOL_NAME, {
   ...shared,
   description:
-    "Create or update a plugin with CSS, right panel tabs, and/or a background worker, only when the user asks; call `t3_plugin_read` first. New plugins start off until Install, edits apply with Undo, and writes need a live full-access/default caller thread.",
+    "Create or update a plugin (CSS, panels, worker, skills/commands, or AGENTS.md instructions) when asked; call `t3_plugin_read` first. Omitted parts stay unchanged. Needs a live full-access/default thread.",
   parameters: Schema.Struct({
     pluginId: PluginId,
     displayName: Schema.optionalKey(Schema.String),
@@ -100,6 +115,8 @@ const PluginWriteTool = Tool.make(PLUGIN_WRITE_TOOL_NAME, {
     css: Schema.optionalKey(Schema.String),
     panels: Schema.optionalKey(Schema.Array(PluginPanelContentSchema)),
     worker: Schema.optionalKey(PluginWorkerContentSchema),
+    skills: Schema.optionalKey(Schema.Array(PluginSkillContentSchema)),
+    instructions: Schema.optionalKey(Schema.String),
   }),
   success: Schema.Struct({
     pluginId: PluginId,
@@ -108,6 +125,9 @@ const PluginWriteTool = Tool.make(PLUGIN_WRITE_TOOL_NAME, {
     applied: Schema.Boolean,
     contributes: Schema.Array(PluginContribution),
     worker: Schema.optionalKey(PluginChangeWorker),
+    commands: Schema.optionalKey(Schema.Array(PluginId)),
+    skills: Schema.optionalKey(Schema.Array(PluginId)),
+    unsupported: Schema.optionalKey(Schema.Array(Schema.String)),
     before: Schema.optionalKey(Schema.String),
     after: Schema.String,
     next: Schema.String,

@@ -12821,5 +12821,80 @@
   "9ed792fb64e9cf0b": "Protokoll wird geladen…",
   "fc6012fd5e61997a": "Noch keine Ausgabe.",
   "33483e00b6a8033c": "Die letzten 32 KB der Worker-Ausgabe werden angezeigt.",
-  "4c6fd1c0c731161f": "Plugin-Code läuft mit den oben genannten Ordner- und Netzwerkgrenzen. Aktiviere nur Plugins, denen du vertraust."
+  "4c6fd1c0c731161f": "Plugin-Code läuft mit den oben genannten Ordner- und Netzwerkgrenzen. Aktiviere nur Plugins, denen du vertraust.",
+  "c1dd62c97eefa3a9": "Hooks",
+  "724baefb1716842b": "MCP-Server",
+  "7761b75ab158452c": "Agenten",
+  "78dcccfaa55bbcdf": "CSS",
+  "e01858542f9f210b": "Panels",
+  "c3cd1fede003458a": "Worker",
+  "2002569015ba4c9c": [
+    "Fügt /",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " hinzu"
+  ],
+  "d4431efa2d091a92": "Fügt Slash-Befehle hinzu",
+  "bc6e7ac6a2f9b825": [
+    "Fügt Skill ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " hinzu"
+  ],
+  "d87efe64059a553e": "Fügt Skills für Agenten hinzu",
+  "ac7f46dcd51a8f72": "Fügt Anweisungen für Agenten hinzu",
+  "8eb505e4edb02c3d": [
+    "Noch nicht unterstützt:",
+    " ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "950a084c44982330": "Repo-Plugins",
+  "d498c94f29d2ab78": [
+    "Befehle:",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "a43d67c19efe4d8a": [
+    "Skills:",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "8d38fbe856f09741": [
+    "In Repo-Plugins nicht unterstützt:",
+    " ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "d5b680b57724f530": "Geändert",
+  "aeea775659127285": "Geändert, seit es aktiviert wurde",
+  "f96b011498a483b2": "Erneut aktivieren"
 }

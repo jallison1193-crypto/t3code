@@ -3,6 +3,7 @@ import * as SchemaTransformation from "effect/SchemaTransformation";
 import { IsoDateTime, ProjectId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 export const PLUGIN_MANIFEST_DIR = ".t3-plugin";
+export const CLAUDE_PLUGIN_MANIFEST_DIR = ".claude-plugin";
 export const PLUGIN_MANIFEST_FILE = "plugin.json";
 export const PLUGIN_MAX_PANELS = 4;
 export const PLUGIN_PANEL_TITLE_MAX_LENGTH = 40;
@@ -14,6 +15,10 @@ const PLUGIN_WORKER_MIN_INTERVAL_MINUTES = 5;
 const PLUGIN_WORKER_MAX_INTERVAL_MINUTES = 1440;
 export const PLUGIN_WORKER_CODE_MAX_CHARS = 200_000;
 export const PLUGIN_WORKER_LOG_MAX_BYTES = 32 * 1024;
+export const PLUGIN_MAX_SKILLS = 32;
+export const PLUGIN_SKILL_MAX_BYTES = 32 * 1024;
+export const PLUGIN_INSTRUCTIONS_MAX_BYTES = 8 * 1024;
+export const REPO_PLUGIN_MAX_FOLDERS = 16;
 
 const SingleLineTrimmedNonEmptyString = TrimmedNonEmptyString.check(
   Schema.isPattern(/^[^\r\n\v\f\u0085\u2028\u2029]+$/u),
@@ -30,10 +35,28 @@ export const PluginId = Schema.String.pipe(
 );
 export type PluginId = typeof PluginId.Type;
 
-const PluginHash = Schema.String.check(Schema.isPattern(/^[a-f0-9]{12}$/));
+export const PluginHash = Schema.String.check(Schema.isPattern(/^[a-f0-9]{12}$/));
+export type PluginHash = typeof PluginHash.Type;
 
-export const PluginContribution = Schema.Literals(["css", "panel", "worker"]);
+export const PluginContribution = Schema.Literals([
+  "css",
+  "panel",
+  "worker",
+  "skill",
+  "command",
+  "instructions",
+]);
 export type PluginContribution = typeof PluginContribution.Type;
+
+export const RepoPluginStatus = Schema.Literals(["off", "on", "changed"]);
+export type RepoPluginStatus = typeof RepoPluginStatus.Type;
+
+export const EnvironmentPluginCommand = Schema.Struct({
+  name: PluginId,
+  description: Schema.optional(TrimmedNonEmptyString),
+  argumentHint: Schema.optional(TrimmedNonEmptyString),
+});
+export type EnvironmentPluginCommand = typeof EnvironmentPluginCommand.Type;
 
 const PluginPanelTitle = SingleLineTrimmedNonEmptyString.check(
   Schema.isMaxLength(PLUGIN_PANEL_TITLE_MAX_LENGTH),
@@ -184,6 +207,11 @@ export const InstalledPlugin = Schema.Struct({
   contributes: Schema.Array(PluginContribution),
   panels: Schema.optional(Schema.Array(InstalledPluginPanel)),
   worker: Schema.optional(InstalledPluginWorker),
+  commands: Schema.optional(Schema.Array(PluginId)),
+  skills: Schema.optional(Schema.Array(PluginId)),
+  projectId: Schema.optional(ProjectId),
+  repoStatus: Schema.optional(RepoPluginStatus),
+  unsupported: Schema.optional(Schema.Array(Schema.String)),
   revision: Schema.optional(TrimmedNonEmptyString),
   problem: Schema.optional(TrimmedNonEmptyString),
 });
@@ -191,9 +219,12 @@ export type InstalledPlugin = typeof InstalledPlugin.Type;
 
 export const EnvironmentPlugin = Schema.Struct({
   id: PluginId,
+  displayName: Schema.optional(TrimmedNonEmptyString),
   css: Schema.String,
   panels: Schema.optional(Schema.Array(InstalledPluginPanel)),
   worker: Schema.optional(InstalledPluginWorker),
+  commands: Schema.optional(Schema.Array(EnvironmentPluginCommand)),
+  projectId: Schema.optional(ProjectId),
 });
 export type EnvironmentPlugin = typeof EnvironmentPlugin.Type;
 
@@ -206,6 +237,7 @@ export type PluginStateScope = typeof PluginStateScope.Type;
 export const ServerListPluginsResult = Schema.Struct({
   pluginsDir: TrimmedNonEmptyString,
   plugins: Schema.Array(InstalledPlugin),
+  repoPlugins: Schema.optional(Schema.Array(InstalledPlugin)),
 });
 export type ServerListPluginsResult = typeof ServerListPluginsResult.Type;
 
@@ -215,6 +247,7 @@ export const ServerSetPluginEnabledInput = Schema.Struct({
   approveWorker: Schema.optional(Schema.Boolean),
   /** The revision the user reviewed; the call fails if the plugin changed since. */
   revision: Schema.optional(TrimmedNonEmptyString),
+  projectId: Schema.optional(ProjectId),
 });
 export type ServerSetPluginEnabledInput = typeof ServerSetPluginEnabledInput.Type;
 
@@ -225,6 +258,7 @@ export type ServerSetPluginEnabledResult = typeof ServerSetPluginEnabledResult.T
 
 export const ServerUninstallPluginInput = Schema.Struct({
   id: TrimmedNonEmptyString,
+  projectId: Schema.optional(ProjectId),
 });
 export type ServerUninstallPluginInput = typeof ServerUninstallPluginInput.Type;
 
@@ -239,6 +273,7 @@ export const ServerRestorePluginRevisionInput = Schema.Struct({
   revision: TrimmedNonEmptyString,
   enable: Schema.optional(Schema.Boolean),
   approveWorker: Schema.optional(Schema.Boolean),
+  projectId: Schema.optional(ProjectId),
 });
 export type ServerRestorePluginRevisionInput = typeof ServerRestorePluginRevisionInput.Type;
 
@@ -350,9 +385,12 @@ export class PluginOperationError extends Schema.TaggedError<PluginOperationErro
       "invalid_css",
       "invalid_panel",
       "invalid_worker",
+      "invalid_skill",
+      "invalid_instructions",
       "invalid_folder",
       "worker_not_running",
       "worker_run_failed",
+      "repo_plugin_readonly",
       "changed",
       "has_problem",
       "settings_failed",
@@ -384,12 +422,18 @@ export class PluginOperationError extends Schema.TaggedError<PluginOperationErro
         return `Panel definition for plugin "${id}" is invalid or exceeds the HTML size limit.`;
       case "invalid_worker":
         return `Worker definition for plugin "${id}" is invalid or exceeds the code size limit.`;
+      case "invalid_skill":
+        return `Skill or command definition for plugin "${id}" is invalid or exceeds the 32 KB limit.`;
+      case "invalid_instructions":
+        return `Instructions (AGENTS.md) for plugin "${id}" exceed the 8 KB limit.`;
       case "invalid_folder":
         return `Folder path for plugin "${id}" must be an existing local directory and cannot be a UNC path.`;
       case "worker_not_running":
         return `Worker for plugin "${id}" is not running.`;
       case "worker_run_failed":
         return `Worker run for plugin "${id}" failed.`;
+      case "repo_plugin_readonly":
+        return `Repo plugin "${id}" belongs to its repository. Turn it off instead.`;
       case "changed":
         return `Plugin "${id}" changed since you reviewed it. Check what it can do now and try again.`;
       case "has_problem":

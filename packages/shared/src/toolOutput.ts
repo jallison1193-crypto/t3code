@@ -69,6 +69,9 @@ export const PluginChange = Schema.Struct({
   after: PluginRevision,
   contributes: Schema.Array(PluginContribution),
   worker: Schema.optional(PluginChangeWorker),
+  commands: Schema.optional(Schema.Array(PluginId)),
+  skills: Schema.optional(Schema.Array(PluginId)),
+  unsupported: Schema.optional(Schema.Array(Schema.String)),
 });
 export type PluginChange = Schema.Schema.Type<typeof PluginChange>;
 
@@ -329,6 +332,16 @@ export function threadSuggestionsFromToolItem(item: {
   return output?.isError ? undefined : output?.suggestions;
 }
 
+const stringArrayEqual = (
+  left: ReadonlyArray<string> | undefined,
+  right: ReadonlyArray<string> | undefined,
+): boolean =>
+  left === right ||
+  (left !== undefined &&
+    right !== undefined &&
+    left.length === right.length &&
+    left.every((item, index) => item === right[index]));
+
 export function pluginChangeEqual(left: PluginChange, right: PluginChange): boolean {
   const leftWorker = left.worker;
   const rightWorker = right.worker;
@@ -350,8 +363,10 @@ export function pluginChangeEqual(left: PluginChange, right: PluginChange): bool
     left.created === right.created &&
     left.before === right.before &&
     left.after === right.after &&
-    left.contributes.length === right.contributes.length &&
-    left.contributes.every((item, index) => item === right.contributes[index]) &&
+    stringArrayEqual(left.contributes, right.contributes) &&
+    stringArrayEqual(left.commands, right.commands) &&
+    stringArrayEqual(left.skills, right.skills) &&
+    stringArrayEqual(left.unsupported, right.unsupported) &&
     sameWorker
   );
 }

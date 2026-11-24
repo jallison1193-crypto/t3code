@@ -5,6 +5,10 @@ import {
   COORDINATOR_INSTRUCTIONS_TRUNCATION_NOTE,
   formatProjectContext,
   formatProjectInstructions,
+  PLUGIN_INSTRUCTIONS_SECTION_MAX_BYTES,
+  PLUGIN_INSTRUCTIONS_TRUNCATION_NOTE,
+  PLUGIN_SKILLS_LIST_MAX_BYTES,
+  PLUGIN_SKILLS_TRUNCATION_NOTE,
   PROJECT_INSTRUCTIONS_LEAD,
   PROJECT_INSTRUCTIONS_MAX_BYTES,
   PROJECT_INSTRUCTIONS_TRUNCATION_NOTE,
@@ -144,9 +148,120 @@ describe("formatProjectContext", () => {
       coordinator: { instructions: "Should not push over 16 KB" },
       memoryHead: "Should not push over 16 KB",
       knowledgeFiles: ["spec.md"],
+      plugins: [
+        {
+          id: "helper",
+          instructions: "Should not push over 16 KB",
+          skills: [
+            {
+              name: "review",
+              description: "Review code",
+              path: "/plugins/helper/skills/review/SKILL.md",
+            },
+          ],
+        },
+      ],
     });
     assert.isDefined(formatted);
     assert.isAtMost(Buffer.byteLength(formatted!, "utf8"), PROJECT_INSTRUCTIONS_MAX_BYTES);
     assert.include(formatted!, bigInstructions.slice(0, 100));
+  });
+
+  it("omits plugin sections when no active plugins contribute instructions or skills", () => {
+    assert.isUndefined(
+      formatProjectContext({
+        plugins: [],
+      }),
+    );
+    assert.isUndefined(
+      formatProjectContext({
+        plugins: [{ id: "empty", instructions: "   \n ", skills: [] }],
+      }),
+    );
+  });
+
+  it("formats plugin instructions and model-invocable skills, namespacing collisions", () => {
+    const formatted = formatProjectContext({
+      instructions: "Keep diffs focused.",
+      plugins: [
+        {
+          id: "daily",
+          displayName: "Daily Workflow",
+          instructions: "Always include test commands.",
+          skills: [
+            {
+              name: "triage",
+              description: "Triage open issues",
+              path: "/plugins/daily/skills/triage/SKILL.md",
+            },
+            {
+              name: "review",
+              description: "Daily review checklist",
+              path: "/plugins/daily/skills/review/SKILL.md",
+            },
+          ],
+        },
+        {
+          id: "security",
+          skills: [
+            {
+              name: "review",
+              description: "Security review checklist",
+              path: "/plugins/security/skills/review/SKILL.md",
+            },
+          ],
+        },
+      ],
+    });
+    assert.isDefined(formatted);
+    assert.include(
+      formatted!,
+      "## Plugin instructions\n\n### Daily Workflow\n\nAlways include test commands.",
+    );
+    assert.include(
+      formatted!,
+      "## Plugin skills\n\n" +
+        "- triage: Triage open issues (read /plugins/daily/skills/triage/SKILL.md when relevant)\n" +
+        "- daily:review: Daily review checklist (read /plugins/daily/skills/review/SKILL.md when relevant)\n" +
+        "- security:review: Security review checklist (read /plugins/security/skills/review/SKILL.md when relevant)",
+    );
+  });
+
+  it("caps plugin instructions at 6 KB and plugin skill list at 2 KB without crowding out project context", () => {
+    const formatted = formatProjectContext({
+      instructions: "Project rule stays intact.",
+      memoryHead: "Project memory stays intact.",
+      plugins: [
+        {
+          id: "verbose",
+          instructions: "p".repeat(10_000),
+          skills: Array.from({ length: 40 }, (_, index) => ({
+            name: `skill-${index}`,
+            description: "Detailed description of what this plugin skill handles",
+            path: `/plugins/verbose/skills/skill-${index}/SKILL.md`,
+          })),
+        },
+      ],
+    });
+    assert.isDefined(formatted);
+    assert.isAtMost(Buffer.byteLength(formatted!, "utf8"), PROJECT_INSTRUCTIONS_MAX_BYTES);
+    assert.include(formatted!, "Project rule stays intact.");
+    assert.include(formatted!, "Project memory stays intact.");
+    assert.include(formatted!, PLUGIN_INSTRUCTIONS_TRUNCATION_NOTE.trim());
+    assert.include(formatted!, PLUGIN_SKILLS_TRUNCATION_NOTE);
+
+    const instructionsStart =
+      formatted!.indexOf("## Plugin instructions\n\n") + "## Plugin instructions\n\n".length;
+    const instructionsEnd = formatted!.indexOf("\n\n## Plugin skills");
+    const instructionsBody = formatted!.slice(instructionsStart, instructionsEnd);
+    assert.isAtMost(
+      Buffer.byteLength(instructionsBody, "utf8"),
+      PLUGIN_INSTRUCTIONS_SECTION_MAX_BYTES,
+    );
+
+    const skillsStart = formatted!.indexOf("## Plugin skills\n\n") + "## Plugin skills\n\n".length;
+    const skillsEnd = formatted!.indexOf("\n</project_instructions>");
+    const skillsBody = formatted!.slice(skillsStart, skillsEnd);
+    assert.isAtMost(Buffer.byteLength(skillsBody, "utf8"), PLUGIN_SKILLS_LIST_MAX_BYTES);
   });
 });

@@ -4,6 +4,8 @@ import type {
   InstalledPluginWorker,
   PluginId,
   PluginWorkerStatus,
+  ProjectId,
+  RepoPluginStatus,
 } from "@t3tools/contracts";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
@@ -17,6 +19,7 @@ import { useState } from "react";
 import { T, useGT, useMessages, Var } from "gt-react";
 
 import { useEnvironmentSettings } from "../../hooks/useSettings";
+import { useProjects } from "../../state/entities";
 import type { EnvironmentPresentation } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
@@ -39,6 +42,103 @@ import { toastManager } from "../ui/toast";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useSearchableSetting } from "./settingsSearch";
+
+const REPO_DISALLOWED_PARTS = new Set(["css", "panels", "worker"]);
+
+function unsupportedPartLabel(part: string, gt: ReturnType<typeof useGT>): string {
+  switch (part) {
+    case "hooks":
+      return gt("hooks");
+    case "mcp":
+      return gt("MCP servers");
+    case "agents":
+      return gt("agents");
+    case "css":
+      return gt("CSS");
+    case "panels":
+      return gt("panels");
+    case "worker":
+      return gt("worker");
+    default:
+      return part;
+  }
+}
+
+function PluginTextPartsDetails({
+  plugin,
+  isRepo,
+}: {
+  readonly plugin: InstalledPlugin;
+  readonly isRepo: boolean;
+}) {
+  const gt = useGT();
+  const hasCommands = plugin.commands !== undefined && plugin.commands.length > 0;
+  const hasSkills = plugin.skills !== undefined && plugin.skills.length > 0;
+  const hasInstructions = plugin.contributes.includes("instructions");
+  const unsupported = plugin.unsupported ?? [];
+  const repoDisallowed = isRepo
+    ? unsupported.filter((part) => REPO_DISALLOWED_PARTS.has(part))
+    : [];
+  const notYetSupported = isRepo
+    ? unsupported.filter((part) => !REPO_DISALLOWED_PARTS.has(part))
+    : unsupported;
+
+  if (
+    !hasCommands &&
+    !hasSkills &&
+    !hasInstructions &&
+    repoDisallowed.length === 0 &&
+    notYetSupported.length === 0
+  ) {
+    return null;
+  }
+
+  return (
+    <div className="mt-1.5 space-y-1 pb-1.5 text-xs text-muted-foreground">
+      {hasCommands ? (
+        <p>
+          <T>
+            Commands:{" "}
+            <span className="font-mono text-foreground">
+              <Var>{plugin.commands!.map((name) => `/${name}`).join(", ")}</Var>
+            </span>
+          </T>
+        </p>
+      ) : null}
+      {hasSkills ? (
+        <p>
+          <T>
+            Skills:{" "}
+            <span className="font-mono text-foreground">
+              <Var>{plugin.skills!.join(", ")}</Var>
+            </span>
+          </T>
+        </p>
+      ) : null}
+      {hasInstructions ? (
+        <p>
+          <T>Adds instructions for agents</T>
+        </p>
+      ) : null}
+      {repoDisallowed.length > 0 ? (
+        <p>
+          <T>
+            Not supported in repo plugins:{" "}
+            <Var>{repoDisallowed.map((part) => unsupportedPartLabel(part, gt)).join(", ")}</Var>
+          </T>
+        </p>
+      ) : null}
+      {notYetSupported.length > 0 ? (
+        <p>
+          <T>
+            Not supported yet:{" "}
+            <Var>{notYetSupported.map((part) => unsupportedPartLabel(part, gt)).join(", ")}</Var>
+          </T>
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 function WorkerStatusBadge({ status }: { readonly status: PluginWorkerStatus }) {
   switch (status) {
@@ -120,6 +220,17 @@ function EnvironmentPluginsSection({
     messages,
   );
   const livePluginSettings = useEnvironmentSettings(environmentId, (settings) => settings.plugins);
+  const liveRepoPluginSettings = useEnvironmentSettings(
+    environmentId,
+    (settings) => settings.repoPlugins,
+  );
+  const allProjects = useProjects();
+  const projectTitles = new Map<ProjectId, string>();
+  for (const project of allProjects) {
+    if (project.environmentId === environmentId) {
+      projectTitles.set(project.id, project.title);
+    }
+  }
   const canSetEnabled = useAtomValue(
     serverEnvironment.setPluginEnabled.permissionAtom(environmentId),
   );
@@ -135,14 +246,33 @@ function EnvironmentPluginsSection({
     reportFailure: false,
   });
 
-  const [busyPluginId, setBusyPluginId] = useState<string | null>(null);
+  const [busyPluginKey, setBusyPluginKey] = useState<string | null>(null);
   const [uninstallTarget, setUninstallTarget] = useState<InstalledPlugin | null>(null);
 
   const plugins = pluginsQuery.data?.plugins ?? [];
+  const repoPlugins = pluginsQuery.data?.repoPlugins ?? [];
   const pluginsDir = pluginsQuery.data?.pluginsDir ?? null;
 
+  const repoGroups = (() => {
+    const byProject = new Map<ProjectId, Array<InstalledPlugin>>();
+    for (const plugin of repoPlugins) {
+      if (plugin.projectId === undefined) continue;
+      const list = byProject.get(plugin.projectId) ?? [];
+      list.push(plugin);
+      byProject.set(plugin.projectId, list);
+    }
+    return [...byProject.entries()]
+      .map(([projectId, entries]) => ({
+        projectId,
+        title: projectTitles.get(projectId) ?? projectId,
+        plugins: entries,
+      }))
+      .sort((left, right) => left.title.localeCompare(right.title));
+  })();
+
   const handleToggle = async (plugin: InstalledPlugin, enabled: boolean) => {
-    setBusyPluginId(plugin.id);
+    const key = `user:${plugin.id}`;
+    setBusyPluginKey(key);
     try {
       const result = await setPluginEnabled({
         environmentId,
@@ -159,13 +289,44 @@ function EnvironmentPluginsSection({
         });
       }
     } finally {
-      setBusyPluginId((current) => (current === plugin.id ? null : current));
+      setBusyPluginKey((current) => (current === key ? null : current));
+    }
+  };
+
+  const handleToggleRepo = async (plugin: InstalledPlugin, enabled: boolean) => {
+    if (plugin.projectId === undefined) return;
+    const key = `repo:${plugin.projectId}:${plugin.id}`;
+    setBusyPluginKey(key);
+    try {
+      const result = await setPluginEnabled({
+        environmentId,
+        input: {
+          id: plugin.id,
+          projectId: plugin.projectId,
+          enabled,
+          ...(enabled && plugin.revision !== undefined ? { revision: plugin.revision } : {}),
+        },
+      });
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        pluginsQuery.refresh();
+        const error = squashAtomCommandFailure(result);
+        toastManager.add({
+          type: "error",
+          title: gt("Plugin not updated"),
+          description:
+            (error instanceof Error ? thrownErrorMessage(error, messages) : null) ??
+            gt("Could not update plugin state."),
+        });
+      }
+    } finally {
+      setBusyPluginKey((current) => (current === key ? null : current));
     }
   };
 
   const handleConfirmUninstall = async (plugin: InstalledPlugin) => {
+    const key = `user:${plugin.id}`;
     setUninstallTarget(null);
-    setBusyPluginId(plugin.id);
+    setBusyPluginKey(key);
     try {
       const result = await uninstallPlugin({
         environmentId,
@@ -182,7 +343,7 @@ function EnvironmentPluginsSection({
         });
       }
     } finally {
-      setBusyPluginId((current) => (current === plugin.id ? null : current));
+      setBusyPluginKey((current) => (current === key ? null : current));
     }
   };
 
@@ -242,7 +403,7 @@ function EnvironmentPluginsSection({
                 (Object.hasOwn(livePluginSettings, plugin.id)
                   ? livePluginSettings[plugin.id]?.enabled === true
                   : plugin.enabled);
-              const busy = busyPluginId === plugin.id;
+              const busy = busyPluginKey === `user:${plugin.id}`;
               return (
                 <SettingsRow
                   key={plugin.id}
@@ -286,6 +447,7 @@ function EnvironmentPluginsSection({
                     </div>
                   }
                 >
+                  <PluginTextPartsDetails plugin={plugin} isRepo={false} />
                   {plugin.worker !== undefined ? (
                     <PluginWorkerDetails
                       environmentId={environmentId}
@@ -312,6 +474,109 @@ function EnvironmentPluginsSection({
           </>
         )}
       </SettingsSection>
+
+      {repoGroups.length > 0 ? (
+        <SettingsSection id="repo-plugins" title={gt("Repo plugins")}>
+          {repoGroups.map((group) => (
+            <div key={group.projectId}>
+              <div className="border-b border-border/60 bg-muted/20 px-4 py-1.5 text-xs font-medium text-muted-foreground">
+                {group.title}
+              </div>
+              {group.plugins.map((plugin) => {
+                const label = plugin.displayName ?? plugin.id;
+                const hasProblem = plugin.problem !== undefined;
+                const projectApprovals = Object.hasOwn(liveRepoPluginSettings, group.projectId)
+                  ? liveRepoPluginSettings[group.projectId]
+                  : undefined;
+                const approvedHash =
+                  projectApprovals !== undefined && Object.hasOwn(projectApprovals, plugin.id)
+                    ? projectApprovals[plugin.id]
+                    : undefined;
+                let repoStatus: RepoPluginStatus;
+                if (approvedHash === undefined) {
+                  repoStatus = "off";
+                } else if (!hasProblem && approvedHash === plugin.revision) {
+                  repoStatus = "on";
+                } else {
+                  repoStatus = "changed";
+                }
+                const enabled = !hasProblem && repoStatus === "on";
+                const busy = busyPluginKey === `repo:${group.projectId}:${plugin.id}`;
+                return (
+                  <SettingsRow
+                    key={`${group.projectId}:${plugin.id}`}
+                    title={
+                      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span className="min-w-0 wrap-anywhere">{label}</span>
+                        {plugin.version ? (
+                          <span className="text-xs font-normal text-muted-foreground">
+                            {plugin.version}
+                          </span>
+                        ) : null}
+                        {repoStatus === "changed" ? (
+                          <Badge size="sm" variant="warning">
+                            <T>Changed</T>
+                          </Badge>
+                        ) : null}
+                      </span>
+                    }
+                    description={plugin.description}
+                    status={
+                      hasProblem ? (
+                        <span className="text-muted-foreground">{plugin.problem}</span>
+                      ) : repoStatus === "changed" ? (
+                        <span className="text-warning-foreground">
+                          <T>Changed since you turned it on</T>
+                        </span>
+                      ) : undefined
+                    }
+                    control={
+                      <div className="flex items-center gap-2">
+                        {repoStatus === "changed" && !hasProblem ? (
+                          <>
+                            <Button
+                              size="xs"
+                              variant="default"
+                              disabled={!canSetEnabled || busy || plugin.revision === undefined}
+                              onClick={() => void handleToggleRepo(plugin, true)}
+                            >
+                              <T>Turn on again</T>
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              disabled={!canSetEnabled || busy}
+                              onClick={() => void handleToggleRepo(plugin, false)}
+                            >
+                              <T>Turn off</T>
+                            </Button>
+                          </>
+                        ) : (
+                          <Switch
+                            checked={enabled}
+                            disabled={
+                              !canSetEnabled ||
+                              hasProblem ||
+                              busy ||
+                              (!enabled && plugin.revision === undefined)
+                            }
+                            onCheckedChange={(checked) =>
+                              void handleToggleRepo(plugin, Boolean(checked))
+                            }
+                            aria-label={gt("Enable {name}", { name: label })}
+                          />
+                        )}
+                      </div>
+                    }
+                  >
+                    <PluginTextPartsDetails plugin={plugin} isRepo />
+                  </SettingsRow>
+                );
+              })}
+            </div>
+          ))}
+        </SettingsSection>
+      ) : null}
 
       <AlertDialog
         open={uninstallTarget !== null}

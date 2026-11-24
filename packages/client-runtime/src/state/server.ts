@@ -1479,7 +1479,11 @@ export function createServerEnvironmentAtoms<R, E>(
   const pluginsRefreshSignalAtom = Atom.family((environmentId: EnvironmentId) =>
     Atom.make((get) => {
       const config = get(configValueAtom(environmentId));
-      return JSON.stringify([config?.settings.plugins ?? null, config?.environmentPlugins ?? null]);
+      return JSON.stringify([
+        config?.settings.plugins ?? null,
+        config?.settings.repoPlugins ?? null,
+        config?.environmentPlugins ?? null,
+      ]);
     }).pipe(Atom.withLabel(`environment-data:server:plugins:refresh-signal:${environmentId}`)),
   );
   const pluginsList = createEnvironmentRpcQueryAtomFamily(runtime, {

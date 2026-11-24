@@ -94,6 +94,7 @@ export function applyPluginCss(plugins: ReadonlyArray<EnvironmentPlugin>): void 
   const nextIds = new Set<string>();
   const nextOrder: Array<string> = [];
   for (const plugin of plugins) {
+    if (plugin.projectId !== undefined) continue;
     if (nextIds.has(plugin.id)) continue;
     nextIds.add(plugin.id);
     nextOrder.push(plugin.id);

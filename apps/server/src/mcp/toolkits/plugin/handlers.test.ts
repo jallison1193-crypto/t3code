@@ -1,7 +1,9 @@
 import { expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
+  PLUGIN_INSTRUCTIONS_MAX_BYTES,
   PLUGIN_PANEL_HTML_MAX_CHARS,
+  PluginId,
   PluginOperationError,
   ProviderInstanceId,
   ThreadId,
@@ -608,6 +610,139 @@ it.effect(
             },
           },
           guide: expect.stringMatching(/Settings > Plugins.*t3\.projects\.readMemory/s),
+        });
+      }).pipe(Effect.provide(layer));
+    }),
+);
+
+it.effect(
+  "writes and reads skills and instructions plugins and documents /standup in the guide",
+  () =>
+    Effect.gen(function* () {
+      const standupSkill = {
+        name: PluginId.make("standup"),
+        description: "Summarize recent commits",
+        argumentHint: "[focus]",
+        userInvocable: true,
+        modelInvocable: false,
+        body: "Summarize git log for $ARGUMENTS.",
+      };
+      const layer = runWithRegistry({
+        list: Effect.succeed({
+          pluginsDir: "/state/plugins",
+          plugins: [
+            {
+              id: "daily-kit",
+              displayName: "Daily Kit",
+              enabled: false,
+              contributes: ["command" as const, "instructions" as const],
+              commands: [PluginId.make("standup")],
+              revision: "444444444444",
+            },
+          ],
+          repoPlugins: [],
+        }),
+        read: (id) =>
+          id === "daily-kit"
+            ? Effect.succeed({
+                displayName: "Daily Kit",
+                skills: [standupSkill],
+                instructions: "Keep standups concise.",
+              })
+            : Effect.fail(
+                new PluginOperationError({
+                  pluginId: id,
+                  operation: "read",
+                  reason: "not_found",
+                }),
+              ),
+        write: (input) =>
+          Effect.succeed({
+            plugin: {
+              id: input.id,
+              displayName: input.displayName,
+              enabled: false,
+              contributes: [
+                ...(input.skills?.some((skill) => skill.userInvocable !== false)
+                  ? (["command"] as const)
+                  : []),
+                ...(input.skills?.some((skill) => skill.modelInvocable !== false)
+                  ? (["skill"] as const)
+                  : []),
+                ...(input.instructions?.trim() ? (["instructions"] as const) : []),
+              ],
+              ...(input.skills?.some((skill) => skill.userInvocable !== false)
+                ? {
+                    commands: input.skills
+                      .filter((skill) => skill.userInvocable !== false)
+                      .map((skill) => skill.name),
+                  }
+                : {}),
+              revision: "444444444444",
+            },
+            created: true,
+            after: "444444444444",
+          }),
+      });
+
+      yield* Effect.gen(function* () {
+        const toolkit = yield* PluginToolkit;
+        const callRead = (params: Parameters<typeof toolkit.handle<"t3_plugin_read">>[1]) =>
+          toolkit.handle("t3_plugin_read", params).pipe(
+            Stream.unwrap,
+            Stream.runCollect,
+            Effect.map((parts) => parts.at(-1)?.result),
+          );
+        const callWrite = (params: Parameters<typeof toolkit.handle<"t3_plugin_write">>[1]) =>
+          toolkit.handle("t3_plugin_write", params).pipe(
+            Stream.unwrap,
+            Stream.runCollect,
+            Effect.map((parts) => parts.at(-1)?.result),
+          );
+
+        expect(
+          yield* callWrite({
+            pluginId: "daily-kit",
+            displayName: "Daily Kit",
+            skills: [standupSkill],
+            instructions: "Keep standups concise.",
+          }),
+        ).toEqual({
+          pluginId: "daily-kit",
+          created: true,
+          enabled: false,
+          applied: false,
+          contributes: ["command", "instructions"],
+          commands: ["standup"],
+          after: "444444444444",
+          next: "The user turns it on with Install on the card in the chat.",
+        });
+
+        const detailed = yield* callRead({ pluginId: "daily-kit" });
+        expect(detailed).toMatchObject({
+          plugins: [
+            {
+              id: "daily-kit",
+              contributes: ["command", "instructions"],
+              commands: ["standup"],
+            },
+          ],
+          plugin: {
+            displayName: "Daily Kit",
+            skills: [standupSkill],
+            instructions: "Keep standups concise.",
+          },
+          guide: expect.stringMatching(/\/standup.*\$ARGUMENTS/s),
+        });
+
+        expect(
+          yield* callWrite({
+            pluginId: "daily-kit",
+            instructions: "x".repeat(PLUGIN_INSTRUCTIONS_MAX_BYTES + 1),
+          }),
+        ).toMatchObject({
+          code: "invalid_request",
+          message: "Instructions (AGENTS.md) exceed the 8 KB limit.",
         });
       }).pipe(Effect.provide(layer));
     }),

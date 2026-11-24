@@ -1220,6 +1220,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     linkedEnvironments,
     gitCwd,
     activeThreadId,
+    activeProjectId,
     pullRequestProjectId,
     pullRequestRepository,
     threadPullRequests,
@@ -2111,6 +2112,21 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         );
         if (applied) setComposerHighlightedItemId(null);
         return;
+      }
+      return;
+    }
+    if (item.type === "plugin-slash-command") {
+      const replacement = `/${item.invocation} `;
+      const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
+        snapshot.value,
+        trigger.rangeEnd,
+        replacement,
+      );
+      const applied = applyPromptReplacement(trigger.rangeStart, replacementRangeEnd, replacement, {
+        expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd),
+      });
+      if (applied) {
+        setComposerHighlightedItemId(null);
       }
       return;
     }

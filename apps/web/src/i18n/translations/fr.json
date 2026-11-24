@@ -12821,5 +12821,78 @@
   "9ed792fb64e9cf0b": "Chargement du journal…",
   "fc6012fd5e61997a": "Aucune sortie pour le moment.",
   "33483e00b6a8033c": "Affichage des 32 derniers Ko de la sortie du worker.",
-  "4c6fd1c0c731161f": "Le code du plugin s'exécute avec les limites de dossiers et de réseau ci-dessus. N'activez que les plugins de confiance."
+  "4c6fd1c0c731161f": "Le code du plugin s'exécute avec les limites de dossiers et de réseau ci-dessus. N'activez que les plugins de confiance.",
+  "c1dd62c97eefa3a9": "hooks",
+  "724baefb1716842b": "serveurs MCP",
+  "7761b75ab158452c": "agents",
+  "78dcccfaa55bbcdf": "CSS",
+  "e01858542f9f210b": "panneaux",
+  "c3cd1fede003458a": "worker",
+  "2002569015ba4c9c": [
+    "Ajoute /",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "d4431efa2d091a92": "Ajoute des commandes slash",
+  "bc6e7ac6a2f9b825": [
+    "Ajoute la compétence ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "d87efe64059a553e": "Ajoute des compétences pour les agents",
+  "ac7f46dcd51a8f72": "Ajoute des instructions pour les agents",
+  "8eb505e4edb02c3d": [
+    "Pas encore pris en charge :",
+    " ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "950a084c44982330": "Plugins de dépôt",
+  "d498c94f29d2ab78": [
+    "Commandes :",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "a43d67c19efe4d8a": [
+    "Compétences :",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "8d38fbe856f09741": [
+    "Non pris en charge dans les plugins de dépôt :",
+    " ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "d5b680b57724f530": "Modifié",
+  "aeea775659127285": "Modifié depuis son activation",
+  "f96b011498a483b2": "Réactiver"
 }

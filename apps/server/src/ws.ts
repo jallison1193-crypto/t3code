@@ -2874,15 +2874,15 @@ export const layerWsRpc = (
           pluginRegistry.setEnabled(input.id, input.enabled, {
             ...(input.approveWorker !== undefined ? { approveWorker: input.approveWorker } : {}),
             ...(input.revision !== undefined ? { revision: input.revision } : {}),
+            ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
           }),
-        [WS_METHODS.serverUninstallPlugin]: (input) => pluginRegistry.uninstall(input.id),
+        [WS_METHODS.serverUninstallPlugin]: (input) =>
+          pluginRegistry.uninstall(input.id, input.projectId),
         [WS_METHODS.serverRestorePluginRevision]: (input) =>
-          pluginRegistry.restore(
-            input.id,
-            input.revision,
-            input.enable,
-            input.approveWorker === undefined ? undefined : { approveWorker: input.approveWorker },
-          ),
+          pluginRegistry.restore(input.id, input.revision, input.enable, {
+            ...(input.approveWorker !== undefined ? { approveWorker: input.approveWorker } : {}),
+            ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
+          }),
         [WS_METHODS.serverApprovePluginWorker]: (input) =>
           pluginRegistry.approveWorker(input.id, input.revision),
         [WS_METHODS.serverSetPluginWorkerFolder]: (input) =>

@@ -1,14 +1,16 @@
 # Plugins
 
-Plugins extend T3 Code from folders in your server's userdata directory. A plugin can add custom CSS that layers on top of your active theme, right panel tabs that render self-contained HTML, a background server worker, or any combination. Web and desktop clients load CSS and panels; workers run on the server. Mobile does not load plugins.
+Plugins extend T3 Code from folders in your server's userdata directory or from a project's repository. A plugin can add custom CSS that layers on top of your active theme, right panel tabs that render self-contained HTML, a background server worker, slash commands, agent skills, agent instructions (`AGENTS.md`), or any combination. Web and desktop clients load CSS, panels, and slash command suggestions; workers, command expansion, skills, and instructions run on the server for every provider. Mobile does not load plugins.
 
 ## Where plugins live
 
-Each plugin is its own folder under `~/.t3/userdata/plugins/<id>/` (or `plugins/<id>/` under your custom state directory). **Settings → Plugins** shows the exact folder path for the selected environment.
+User plugins live in their own folders under `~/.t3/userdata/plugins/<id>/` (or `plugins/<id>/` under your custom state directory). **Settings → Plugins** shows the exact folder path for the selected environment.
+
+Repo plugins live inside a project repository under `<project root>/.t3/plugins/<id>/` (up to 16 folders per project) and apply only to that project's threads, including worktree threads.
 
 ## Manifest format
 
-Inside each plugin folder, create `.t3-plugin/plugin.json`:
+Inside each plugin folder, create `.t3-plugin/plugin.json` (or `.claude-plugin/plugin.json`; if both exist, `.t3-plugin/plugin.json` wins):
 
 ```json
 {
@@ -43,7 +45,29 @@ Fields:
 - `panels` (optional): 1 to 4 right panel tabs, each with `id` (lowercase letters, digits, and hyphens, unique within the plugin), `title` (single line, up to 40 characters), and `entry` (`./<name>.html` at the plugin folder root).
 - `worker` (optional): background Node process with `entry` (`./<name>.mjs` at the plugin folder root), optional `everyMinutes` (integer 5 to 1440), optional `folders` (0 to 4 items `{ id, label, access: "read" | "write" }`), and optional `network` (boolean, default `false`).
 
-A plugin must declare at least one of `css`, `panels`, or `worker`. Unknown fields are ignored, so one folder can also carry manifests for other tools.
+A plugin must provide at least one supported part: `css`, `panels`, `worker`, skills, commands, or `AGENTS.md`. Unknown fields are ignored, so one folder can also carry manifests for other tools.
+
+## Slash commands, skills, and instructions
+
+Plugins can include text parts that T3 delivers to every provider (Codex, Claude, Cursor, OpenCode, Antigravity, and others):
+
+- **Skills (`skills/<name>/SKILL.md`) and legacy commands (`commands/<name>.md`):** Flat layout only (nested folders are ignored), up to 32 entries per plugin and 32 KB per file. If a skill folder name and a legacy command file name collide, the skill wins. Optional YAML frontmatter supports `name`, `description`, `argument-hint`, `disable-model-invocation` (`true` means only the user can run it as a slash command), and `user-invocable` (`false` hides it from the `/` menu). The effective name must match the plugin id pattern (lowercase letters, digits, hyphens).
+- **Running slash commands:** Active user-invocable commands appear in the web and desktop composer `/` menu (short `/name` when unambiguous, or `/<plugin>:<name>` when two plugins share a name or collide with a T3 built-in like `/model`, `/side`, `/btw`, `/clear`, or `/compact`). When you send a matching command, the thread keeps showing what you typed while the provider receives the expanded body with frontmatter stripped and substitutions applied: `$ARGUMENTS`, `$ARGUMENTS[N]`, `$N` (0-based), `${CLAUDE_PLUGIN_ROOT}`, `${T3_PLUGIN_ROOT}`, and `${CLAUDE_SKILL_DIR}`. If the body omits argument placeholders and you passed arguments, T3 appends `ARGUMENTS: <args>`.
+- **Model-invocable skills:** Active skills without `disable-model-invocation: true` are listed in the project context sent to providers (up to a 2 KB sub-budget inside the 16 KB context limit) with their description and file path so the agent can read `SKILL.md` when relevant.
+- **Instructions (`AGENTS.md`):** An optional `AGENTS.md` file at the plugin root (up to 8 KB) is added to the project context sent on every turn (up to a 6 KB sub-budget across active plugins, after project instructions and memory).
+
+## Repo plugins and trust
+
+A repository can ship team commands, skills, and instructions in `<project root>/.t3/plugins/<id>/`:
+
+- **Off by default:** Repo plugins never apply until you turn them on in **Settings → Plugins** under **Repo plugins**.
+- **Re-checked on change:** Turning a repo plugin on approves its exact content revision. If any file in the plugin changes (for example after `git pull` or an edit), T3 stops applying it and shows **Changed since you turned it on** with **Turn on again** in **Settings → Plugins**.
+- **Text parts only:** Repo plugins load only skills, commands, and `AGENTS.md`. Any `css`, `panels`, or `worker` entries in a repo plugin are ignored and noted as not supported in repo plugins.
+- **Managed by the repo:** Repo plugins cannot be uninstalled or restored through T3; turn them off in Settings or edit them in the repository.
+
+## Claude Code plugin folders
+
+Folders with only `.claude-plugin/plugin.json` load as T3 plugins with their `skills/`, `commands/`, and `AGENTS.md` parts. Hooks (`hooks/hooks.json` or manifest `hooks`), MCP servers (`.mcp.json` or manifest `mcpServers`), and agents (`agents/` or manifest `agents`) are not supported yet; T3 leaves them unloaded and lists them in **Settings → Plugins** and on the install card without blocking the rest of the plugin.
 
 ## CSS rules
 
@@ -78,14 +102,14 @@ A plugin with `worker` in `.t3-plugin/plugin.json` runs background ES module cod
 New plugins start **off**. Open **Settings → Plugins** to turn each plugin on or off.
 
 - Enabling or disabling a plugin applies live in every connected web and desktop client of that environment.
-- Edits to a plugin's manifest, CSS, panel HTML, or worker files on disk are picked up automatically.
-- A plugin with a missing or invalid manifest, none of `css`, `panels`, or `worker`, a name that does not match its folder, invalid CSS, or a missing/invalid panel or worker entry still appears in **Settings → Plugins** with a problem message, its switch disabled, and no CSS, panels, or worker loaded.
+- Edits to a user plugin's manifest, CSS, panel HTML, worker, skills, commands, or `AGENTS.md` files on disk are picked up automatically.
+- A plugin with a missing or invalid manifest, no supported parts, a name that does not match its folder, invalid CSS, a missing/invalid panel or worker entry, invalid or oversized skills/commands, or oversized `AGENTS.md` still appears in **Settings → Plugins** with a problem message, its switch disabled, and no parts loaded.
 - **Uninstall** asks for confirmation, removes the plugin's enabled setting, and moves the folder to `<stateDir>/plugins-archive/<id>-<timestamp>/` instead of deleting it. Saved panel and worker state under `<stateDir>/plugins-state/<id>/` is kept. To restore an uninstalled plugin, move the archived folder back to `<stateDir>/plugins/<id>/` by hand and turn it on again in **Settings → Plugins**.
 
 ## Creating and editing plugins with agents
 
-You can ask an agent to create or update a CSS, panel, or worker plugin for you.
+You can ask an agent to create or update a CSS, panel, worker, command, skill, or instructions plugin for you (for example, "add a /standup command").
 
 - A **new** plugin is saved disabled and shows a card in the chat listing what it adds, with **Install** to turn it on and **Cancel** to archive it. After **Install**, the card offers **Turn off**; after **Cancel**, it offers **Install anyway**.
 - An **edit** to an existing plugin saves right away (and applies live if the plugin is enabled), with **Undo** on its card and **Restore** after undoing. If an edit changes worker powers, the worker stops and the card also shows **Approve** next to **Undo**.
-- Each write and restore snapshots the plugin's manifest, CSS, panel HTML, and worker files under `<stateDir>/plugins-history/<id>/`, keeping the newest 20 revisions per plugin.
+- Each write and restore snapshots the plugin's manifest, CSS, panel HTML, worker, `AGENTS.md`, skills, and commands under `<stateDir>/plugins-history/<id>/`, keeping the newest 20 revisions per plugin.

@@ -194,6 +194,24 @@ describe("resolvePluginChangeCardLines", () => {
         { kind: "worker-folder", id: "out", label: "Export folder", access: "write" },
       ],
     },
+    {
+      name: "lists commands, skills, instructions, and unsupported parts in plain lines",
+      change: {
+        pluginId: "daily",
+        created: true,
+        after: REV_AFTER,
+        contributes: ["command", "skill", "instructions"],
+        commands: ["standup"],
+        skills: ["review"],
+        unsupported: ["hooks", "mcp"],
+      },
+      expected: [
+        { kind: "command", name: "standup" },
+        { kind: "skill", name: "review" },
+        { kind: "instructions" },
+        { kind: "unsupported", parts: ["hooks", "mcp"] },
+      ],
+    },
   ])("$name", ({ change, livePlugin, expected }) => {
     expect(resolvePluginChangeCardLines(change, livePlugin)).toEqual(expected);
   });
