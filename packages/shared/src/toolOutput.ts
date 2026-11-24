@@ -1,5 +1,6 @@
 import {
   isProviderSendTurnSupportedImageMimeType,
+  PluginChangeWorker,
   PluginContribution,
   PluginId,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
@@ -67,6 +68,7 @@ export const PluginChange = Schema.Struct({
   before: Schema.optional(PluginRevision),
   after: PluginRevision,
   contributes: Schema.Array(PluginContribution),
+  worker: Schema.optional(PluginChangeWorker),
 });
 export type PluginChange = Schema.Schema.Type<typeof PluginChange>;
 
@@ -328,13 +330,29 @@ export function threadSuggestionsFromToolItem(item: {
 }
 
 export function pluginChangeEqual(left: PluginChange, right: PluginChange): boolean {
+  const leftWorker = left.worker;
+  const rightWorker = right.worker;
+  const sameWorker =
+    leftWorker === rightWorker ||
+    (leftWorker !== undefined &&
+      rightWorker !== undefined &&
+      leftWorker.everyMinutes === rightWorker.everyMinutes &&
+      leftWorker.network === rightWorker.network &&
+      leftWorker.folders.length === rightWorker.folders.length &&
+      leftWorker.folders.every(
+        (folder, index) =>
+          folder.id === rightWorker.folders[index]?.id &&
+          folder.label === rightWorker.folders[index]?.label &&
+          folder.access === rightWorker.folders[index]?.access,
+      ));
   return (
     left.pluginId === right.pluginId &&
     left.created === right.created &&
     left.before === right.before &&
     left.after === right.after &&
     left.contributes.length === right.contributes.length &&
-    left.contributes.every((item, index) => item === right.contributes[index])
+    left.contributes.every((item, index) => item === right.contributes[index]) &&
+    sameWorker
   );
 }
 

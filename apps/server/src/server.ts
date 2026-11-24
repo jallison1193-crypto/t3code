@@ -117,6 +117,7 @@ import * as GitManager from "./git/GitManager.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
 import * as PluginRegistry from "./plugins/PluginRegistry.ts";
 import * as PluginStateStore from "./plugins/PluginStateStore.ts";
+import * as PluginWorkerSupervisor from "./plugins/PluginWorkerSupervisor.ts";
 import * as ProjectMemoryStore from "./projectMemory/ProjectMemoryStore.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
@@ -768,6 +769,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   layerProviderInstallationRefresh,
   ProviderInstallation.layer,
   ReplayMarkers.layer,
+  PluginWorkerSupervisor.layer,
   Layer.effectDiscard(ProjectSettingsOverrideSweep.sweep),
 ).pipe(
   Layer.provideMerge(layerOrchestrationApplication),

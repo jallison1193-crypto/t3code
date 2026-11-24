@@ -1,4 +1,4 @@
-import type { EnvironmentId, PluginContribution } from "@t3tools/contracts";
+import type { EnvironmentId } from "@t3tools/contracts";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   type AtomCommandResult,
@@ -7,7 +7,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import type { PluginChange } from "@t3tools/shared/toolOutput";
 import { useAtomValue } from "@effect/atom-react";
-import { T, useGT, useMessages } from "gt-react";
+import { T, useGT, useMessages, Var } from "gt-react";
 import { useId, useState } from "react";
 
 import { useEnvironmentQuery } from "../../state/query";
@@ -17,8 +17,10 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { toastManager } from "../ui/toast";
 import {
+  resolvePluginChangeCardLines,
   resolvePluginChangeCardState,
   type PluginChangeCardAction,
+  type PluginChangeCardLine,
   type PluginChangeCardStatus,
 } from "./PluginChangeCard.logic";
 
@@ -39,13 +41,39 @@ function StatusLabel({ status }: { readonly status: PluginChangeCardStatus }) {
   }
 }
 
-function ContributionLine({ contribution }: { readonly contribution: PluginContribution }) {
-  switch (contribution) {
+function CardLine({ line }: { readonly line: PluginChangeCardLine }) {
+  switch (line.kind) {
     case "css":
       return <T>Restyles T3 with CSS</T>;
     case "panel":
       return <T>Adds a right panel tab</T>;
+    case "worker-runs":
+      return <T>Runs background code on this computer</T>;
+    case "worker-folder":
+      return line.access === "write" ? (
+        <T>
+          Reads and writes <Var>{line.label}</Var>
+        </T>
+      ) : (
+        <T>
+          Reads <Var>{line.label}</Var>
+        </T>
+      );
+    case "worker-network":
+      return <T>Uses the network</T>;
+    case "worker-schedule":
+      return (
+        <T>
+          Runs every <Var>{line.everyMinutes}</Var> minutes
+        </T>
+      );
+    case "worker-network-unrestricted":
+      return <T>Network access is not blocked on this T3 runtime.</T>;
   }
+}
+
+function cardLineKey(line: PluginChangeCardLine): string {
+  return line.kind === "worker-folder" ? `worker-folder:${line.id}` : line.kind;
 }
 
 export function PluginChangeCard({
@@ -75,6 +103,9 @@ export function PluginChangeCard({
   const canRestore = useAtomValue(
     serverEnvironment.restorePluginRevision.permissionAtom(environmentId),
   );
+  const canApproveWorker = useAtomValue(
+    serverEnvironment.approvePluginWorker.permissionAtom(environmentId),
+  );
 
   const setPluginEnabled = useAtomCommand(serverEnvironment.setPluginEnabled, {
     label: "plugin enabled update",
@@ -88,10 +119,15 @@ export function PluginChangeCard({
     label: "plugin revision restore",
     reportFailure: false,
   });
+  const approvePluginWorker = useAtomCommand(serverEnvironment.approvePluginWorker, {
+    label: "plugin worker approval",
+    reportFailure: false,
+  });
 
   const livePlugin = pluginsQuery.data?.plugins.find((plugin) => plugin.id === change.pluginId);
   const state =
     pluginsQuery.data === null ? null : resolvePluginChangeCardState(change, livePlugin);
+  const lines = resolvePluginChangeCardLines(change, livePlugin);
   const title = livePlugin?.displayName ?? change.pluginId;
 
   const reportError = (
@@ -117,7 +153,7 @@ export function PluginChangeCard({
         case "install": {
           const result = await setPluginEnabled({
             environmentId,
-            input: { id: change.pluginId, enabled: true },
+            input: { id: change.pluginId, enabled: true, approveWorker: true },
           });
           reportError(result, gt("Plugin not updated"), gt("Could not update plugin state."));
           break;
@@ -141,9 +177,22 @@ export function PluginChangeCard({
         case "install-anyway": {
           const result = await restorePluginRevision({
             environmentId,
-            input: { id: change.pluginId, revision: change.after, enable: true },
+            input: {
+              id: change.pluginId,
+              revision: change.after,
+              enable: true,
+              approveWorker: true,
+            },
           });
           reportError(result, gt("Plugin not restored"), gt("Could not restore plugin revision."));
+          break;
+        }
+        case "approve": {
+          const result = await approvePluginWorker({
+            environmentId,
+            input: { id: change.pluginId },
+          });
+          reportError(result, gt("Worker not approved"), gt("Could not approve plugin worker."));
           break;
         }
         case "undo": {
@@ -189,9 +238,9 @@ export function PluginChangeCard({
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5">
         <ul className="min-w-0 flex-1 space-y-0.5 text-xs text-muted-foreground">
-          {change.contributes.map((contribution) => (
-            <li key={contribution}>
-              <ContributionLine contribution={contribution} />
+          {lines.map((line) => (
+            <li key={cardLineKey(line)}>
+              <CardLine line={line} />
             </li>
           ))}
         </ul>
@@ -245,6 +294,18 @@ export function PluginChangeCard({
                       onClick={() => void runAction(action)}
                     >
                       <T>Install anyway</T>
+                    </Button>
+                  );
+                case "approve":
+                  return (
+                    <Button
+                      key={action}
+                      size="xs"
+                      variant="default"
+                      disabled={busy || !canApproveWorker}
+                      onClick={() => void runAction(action)}
+                    >
+                      <T>Approve</T>
                     </Button>
                   );
                 case "undo":

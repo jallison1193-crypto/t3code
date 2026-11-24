@@ -90,16 +90,24 @@ import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
 import {
   PluginOperationError,
   PluginStateError,
+  ServerApprovePluginWorkerInput,
+  ServerApprovePluginWorkerResult,
   ServerGetPluginStateInput,
   ServerGetPluginStateResult,
+  ServerGetPluginWorkerLogInput,
+  ServerGetPluginWorkerLogResult,
   ServerListPluginsResult,
   ServerPluginStateSnapshot,
   ServerRestorePluginRevisionInput,
   ServerRestorePluginRevisionResult,
+  ServerRunPluginWorkerInput,
+  ServerRunPluginWorkerResult,
   ServerSetPluginEnabledInput,
   ServerSetPluginEnabledResult,
   ServerSetPluginStateInput,
   ServerSetPluginStateResult,
+  ServerSetPluginWorkerFolderInput,
+  ServerSetPluginWorkerFolderResult,
   ServerSubscribePluginStateInput,
   ServerUninstallPluginInput,
   ServerUninstallPluginResult,
@@ -640,6 +648,10 @@ export const WS_METHODS = {
   serverSetPluginEnabled: "server.setPluginEnabled",
   serverUninstallPlugin: "server.uninstallPlugin",
   serverRestorePluginRevision: "server.restorePluginRevision",
+  serverApprovePluginWorker: "server.approvePluginWorker",
+  serverSetPluginWorkerFolder: "server.setPluginWorkerFolder",
+  serverRunPluginWorker: "server.runPluginWorker",
+  serverGetPluginWorkerLog: "server.getPluginWorkerLog",
   serverGetPluginState: "server.getPluginState",
   serverSetPluginState: "server.setPluginState",
   serverSubscribePluginState: "server.subscribePluginState",
@@ -1087,6 +1099,30 @@ const WsServerUninstallPluginRpc = Rpc.make(WS_METHODS.serverUninstallPlugin, {
 const WsServerRestorePluginRevisionRpc = Rpc.make(WS_METHODS.serverRestorePluginRevision, {
   payload: ServerRestorePluginRevisionInput,
   success: ServerRestorePluginRevisionResult,
+  error: Schema.Union([PluginOperationError, EnvironmentAuthorizationError]),
+});
+
+const WsServerApprovePluginWorkerRpc = Rpc.make(WS_METHODS.serverApprovePluginWorker, {
+  payload: ServerApprovePluginWorkerInput,
+  success: ServerApprovePluginWorkerResult,
+  error: Schema.Union([PluginOperationError, EnvironmentAuthorizationError]),
+});
+
+const WsServerSetPluginWorkerFolderRpc = Rpc.make(WS_METHODS.serverSetPluginWorkerFolder, {
+  payload: ServerSetPluginWorkerFolderInput,
+  success: ServerSetPluginWorkerFolderResult,
+  error: Schema.Union([PluginOperationError, EnvironmentAuthorizationError]),
+});
+
+const WsServerRunPluginWorkerRpc = Rpc.make(WS_METHODS.serverRunPluginWorker, {
+  payload: ServerRunPluginWorkerInput,
+  success: ServerRunPluginWorkerResult,
+  error: Schema.Union([PluginOperationError, EnvironmentAuthorizationError]),
+});
+
+const WsServerGetPluginWorkerLogRpc = Rpc.make(WS_METHODS.serverGetPluginWorkerLog, {
+  payload: ServerGetPluginWorkerLogInput,
+  success: ServerGetPluginWorkerLogResult,
   error: Schema.Union([PluginOperationError, EnvironmentAuthorizationError]),
 });
 
@@ -2589,6 +2625,10 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerSetPluginEnabledRpc,
   WsServerUninstallPluginRpc,
   WsServerRestorePluginRevisionRpc,
+  WsServerApprovePluginWorkerRpc,
+  WsServerSetPluginWorkerFolderRpc,
+  WsServerRunPluginWorkerRpc,
+  WsServerGetPluginWorkerLogRpc,
   WsServerGetPluginStateRpc,
   WsServerSetPluginStateRpc,
   WsServerSubscribePluginStateRpc,

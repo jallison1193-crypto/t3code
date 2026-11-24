@@ -1,9 +1,14 @@
 import {
   InstalledPluginPanel,
+  InstalledPluginWorker,
   OrchestratorMcpFailure,
-  PluginContribution,
   PLUGIN_PANEL_TITLE_MAX_LENGTH,
+  PLUGIN_WORKER_CODE_MAX_CHARS,
+  PluginChangeWorker,
+  PluginContribution,
   PluginId,
+  PluginManifestWorkerFolder,
+  PluginWorkerEveryMinutes,
 } from "@t3tools/contracts";
 import { PLUGIN_WRITE_TOOL_NAME } from "@t3tools/shared/toolOutput";
 import * as Schema from "effect/Schema";
@@ -33,14 +38,23 @@ const PluginPanelContentSchema = Schema.Struct({
   html: Schema.String,
 });
 
+const PluginWorkerContentSchema = Schema.Struct({
+  code: Schema.String.annotate({
+    description: `Worker ESM source (default export receives t3), up to ${PLUGIN_WORKER_CODE_MAX_CHARS} characters.`,
+  }),
+  everyMinutes: Schema.optionalKey(PluginWorkerEveryMinutes),
+  folders: Schema.optionalKey(Schema.Array(PluginManifestWorkerFolder)),
+  network: Schema.optionalKey(Schema.Boolean),
+});
+
 const PluginReadTool = Tool.make("t3_plugin_read", {
   ...shared,
   description:
-    "List installed plugins, read one plugin's CSS or panels, and get the guide to restyle T3 Code or add right panel tabs. Call before `t3_plugin_write`.",
+    "List installed plugins, read one plugin's CSS, panels, or worker, and get the guide to build plugins. Call before `t3_plugin_write`.",
   parameters: Schema.Struct({
     pluginId: Schema.optionalKey(
       PluginId.annotate({
-        description: "Also return this plugin's manifest fields, CSS, and panels.",
+        description: "Also return this plugin's manifest fields, CSS, panels, and worker.",
       }),
     ),
   }),
@@ -53,6 +67,7 @@ const PluginReadTool = Tool.make("t3_plugin_read", {
         enabled: Schema.Boolean,
         contributes: Schema.Array(PluginContribution),
         panels: Schema.optionalKey(Schema.Array(InstalledPluginPanel)),
+        worker: Schema.optionalKey(InstalledPluginWorker),
         revision: Schema.optionalKey(Schema.String),
         problem: Schema.optionalKey(Schema.String),
       }),
@@ -64,6 +79,7 @@ const PluginReadTool = Tool.make("t3_plugin_read", {
         version: Schema.optionalKey(Schema.String),
         css: Schema.optionalKey(Schema.String),
         panels: Schema.optionalKey(Schema.Array(PluginPanelContentSchema)),
+        worker: Schema.optionalKey(PluginWorkerContentSchema),
       }),
     ),
     guide: Schema.String,
@@ -75,7 +91,7 @@ const PluginReadTool = Tool.make("t3_plugin_read", {
 const PluginWriteTool = Tool.make(PLUGIN_WRITE_TOOL_NAME, {
   ...shared,
   description:
-    "Create or update a plugin with CSS and/or right panel tabs, only when the user asks; call `t3_plugin_read` first. New plugins start off until the user installs them from the card in the chat, edits apply with Undo, and writes need a live full-access/default caller thread.",
+    "Create or update a plugin with CSS, right panel tabs, and/or a background worker, only when the user asks; call `t3_plugin_read` first. New plugins start off until Install, edits apply with Undo, and writes need a live full-access/default caller thread.",
   parameters: Schema.Struct({
     pluginId: PluginId,
     displayName: Schema.optionalKey(Schema.String),
@@ -83,6 +99,7 @@ const PluginWriteTool = Tool.make(PLUGIN_WRITE_TOOL_NAME, {
     version: Schema.optionalKey(Schema.String),
     css: Schema.optionalKey(Schema.String),
     panels: Schema.optionalKey(Schema.Array(PluginPanelContentSchema)),
+    worker: Schema.optionalKey(PluginWorkerContentSchema),
   }),
   success: Schema.Struct({
     pluginId: PluginId,
@@ -90,6 +107,7 @@ const PluginWriteTool = Tool.make(PLUGIN_WRITE_TOOL_NAME, {
     enabled: Schema.Boolean,
     applied: Schema.Boolean,
     contributes: Schema.Array(PluginContribution),
+    worker: Schema.optionalKey(PluginChangeWorker),
     before: Schema.optionalKey(Schema.String),
     after: Schema.String,
     next: Schema.String,

@@ -759,4 +759,115 @@ describe("PluginRegistry", () => {
         }),
       ),
   );
+
+  it.effect(
+    "tracks worker powers hash: code-only edits keep approval while folder, network, or schedule changes drop it",
+    () =>
+      withPluginRegistry(
+        {},
+        Effect.gen(function* () {
+          const registry = yield* PluginRegistry.PluginRegistry;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const vaultDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-plugin-vault-" });
+          const vaultReal = yield* fs.realPath(vaultDir);
+
+          const created = yield* registry.write({
+            id: "vault-sync",
+            displayName: "Vault Sync",
+            worker: {
+              code: "export default function (t3) { t3.log('v1'); }\n",
+              everyMinutes: 15,
+              folders: [{ id: "vault", label: "Obsidian vault", access: "read" }],
+              network: false,
+            },
+          });
+          assert.deepEqual(created.plugin.contributes, ["worker"]);
+          assert.strictEqual(created.plugin.worker?.status, "stopped");
+
+          // Install enables and approves powers; missing folder keeps status needs-folder.
+          const installed = yield* registry.setEnabled("vault-sync", true, { approveWorker: true });
+          assert.strictEqual(installed.plugin.worker?.status, "needs-folder");
+
+          // UNC paths and nonexistent paths are rejected; valid dir is canonicalized.
+          const uncFailed = yield* registry
+            .setWorkerFolder("vault-sync", "vault", "\\\\server\\share")
+            .pipe(Effect.flip);
+          assert.strictEqual(uncFailed.reason, "invalid_folder");
+          const missingFailed = yield* registry
+            .setWorkerFolder("vault-sync", "vault", path.join(vaultDir, "does-not-exist"))
+            .pipe(Effect.flip);
+          assert.strictEqual(missingFailed.reason, "invalid_folder");
+
+          const withFolder = yield* registry.setWorkerFolder("vault-sync", "vault", vaultDir);
+          assert.strictEqual(withFolder.plugin.worker?.folders[0]?.path, vaultReal);
+          assert.strictEqual(withFolder.plugin.worker?.status, "stopped");
+
+          // Code-only edit keeps approval (not needs-approval).
+          const codeEdit = yield* registry.write({
+            id: "vault-sync",
+            displayName: "Vault Sync",
+            worker: {
+              code: "export default function (t3) { t3.log('v2'); }\n",
+              everyMinutes: 15,
+              folders: [{ id: "vault", label: "Obsidian vault", access: "read" }],
+              network: false,
+            },
+          });
+          assert.notStrictEqual(codeEdit.after, created.after);
+          assert.notStrictEqual(codeEdit.plugin.worker?.status, "needs-approval");
+
+          // Widening folder access drops approval.
+          const folderEdit = yield* registry.write({
+            id: "vault-sync",
+            displayName: "Vault Sync",
+            worker: {
+              code: "export default function (t3) { t3.log('v2'); }\n",
+              everyMinutes: 15,
+              folders: [{ id: "vault", label: "Obsidian vault", access: "write" }],
+              network: false,
+            },
+          });
+          assert.strictEqual(folderEdit.plugin.worker?.status, "needs-approval");
+          const approvedAfterFolder = yield* registry.approveWorker("vault-sync");
+          assert.notStrictEqual(approvedAfterFolder.plugin.worker?.status, "needs-approval");
+
+          // Enabling network drops approval.
+          const networkEdit = yield* registry.write({
+            id: "vault-sync",
+            displayName: "Vault Sync",
+            worker: {
+              code: "export default function (t3) { t3.log('v2'); }\n",
+              everyMinutes: 15,
+              folders: [{ id: "vault", label: "Obsidian vault", access: "write" }],
+              network: true,
+            },
+          });
+          assert.strictEqual(networkEdit.plugin.worker?.status, "needs-approval");
+          yield* registry.approveWorker("vault-sync");
+
+          // Changing schedule drops approval, and Undo restores previous approved powers.
+          const scheduleEdit = yield* registry.write({
+            id: "vault-sync",
+            displayName: "Vault Sync",
+            worker: {
+              code: "export default function (t3) { t3.log('v3'); }\n",
+              everyMinutes: 30,
+              folders: [{ id: "vault", label: "Obsidian vault", access: "write" }],
+              network: true,
+            },
+          });
+          assert.strictEqual(scheduleEdit.plugin.worker?.status, "needs-approval");
+
+          const undone = yield* registry.restore("vault-sync", scheduleEdit.before!);
+          assert.notStrictEqual(undone.plugin.worker?.status, "needs-approval");
+          const readBack = yield* registry.read("vault-sync");
+          assert.strictEqual(readBack.worker?.everyMinutes, 15);
+          assert.strictEqual(
+            readBack.worker?.code,
+            "export default function (t3) { t3.log('v2'); }\n",
+          );
+        }),
+      ),
+  );
 });

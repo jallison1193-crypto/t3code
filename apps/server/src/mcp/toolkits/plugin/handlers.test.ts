@@ -477,3 +477,138 @@ it.effect("writes and reads panel plugins and rejects empty or oversized panel w
     }).pipe(Effect.provide(layer));
   }),
 );
+
+it.effect(
+  "writes and reads worker plugins, tells the agent when folders must be picked, and documents workers in the guide",
+  () =>
+    Effect.gen(function* () {
+      const workerCode = "export default (t3) => t3.onRun(async () => { t3.log('sync'); });\n";
+      const layer = runWithRegistry({
+        list: Effect.succeed({
+          pluginsDir: "/state/plugins",
+          plugins: [
+            {
+              id: "vault-sync",
+              displayName: "Vault Sync",
+              enabled: false,
+              contributes: ["worker" as const],
+              worker: {
+                everyMinutes: 15,
+                folders: [
+                  {
+                    id: "vault",
+                    label: "Obsidian vault folder",
+                    access: "write" as const,
+                    path: null,
+                  },
+                ],
+                network: false,
+                status: "stopped" as const,
+                networkRestricted: false,
+              },
+              revision: "333333333333",
+            },
+          ],
+        }),
+        read: (id) =>
+          id === "vault-sync"
+            ? Effect.succeed({
+                displayName: "Vault Sync",
+                worker: {
+                  code: workerCode,
+                  everyMinutes: 15,
+                  folders: [
+                    { id: "vault", label: "Obsidian vault folder", access: "write" as const },
+                  ],
+                  network: false,
+                },
+              })
+            : Effect.fail(
+                new PluginOperationError({
+                  pluginId: id,
+                  operation: "read",
+                  reason: "not_found",
+                }),
+              ),
+        write: (input) =>
+          Effect.succeed({
+            plugin: {
+              id: input.id,
+              displayName: input.displayName,
+              enabled: false,
+              contributes: ["worker" as const],
+              worker: {
+                ...(input.worker?.everyMinutes === undefined
+                  ? {}
+                  : { everyMinutes: input.worker.everyMinutes }),
+                folders: (input.worker?.folders ?? []).map((folder) => ({
+                  ...folder,
+                  path: null,
+                })),
+                network: input.worker?.network === true,
+                status: "stopped" as const,
+                networkRestricted: false,
+              },
+              revision: "333333333333",
+            },
+            created: true,
+            after: "333333333333",
+          }),
+      });
+
+      yield* Effect.gen(function* () {
+        const toolkit = yield* PluginToolkit;
+        const callRead = (params: Parameters<typeof toolkit.handle<"t3_plugin_read">>[1]) =>
+          toolkit.handle("t3_plugin_read", params).pipe(
+            Stream.unwrap,
+            Stream.runCollect,
+            Effect.map((parts) => parts.at(-1)?.result),
+          );
+        const callWrite = (params: Parameters<typeof toolkit.handle<"t3_plugin_write">>[1]) =>
+          toolkit.handle("t3_plugin_write", params).pipe(
+            Stream.unwrap,
+            Stream.runCollect,
+            Effect.map((parts) => parts.at(-1)?.result),
+          );
+
+        const written = yield* callWrite({
+          pluginId: "vault-sync",
+          displayName: "Vault Sync",
+          worker: {
+            code: workerCode,
+            everyMinutes: 15,
+            folders: [{ id: "vault", label: "Obsidian vault folder", access: "write" }],
+            network: false,
+          },
+        });
+        expect(written).toEqual({
+          pluginId: "vault-sync",
+          created: true,
+          enabled: false,
+          applied: false,
+          contributes: ["worker"],
+          worker: {
+            everyMinutes: 15,
+            folders: [{ id: "vault", label: "Obsidian vault folder", access: "write" }],
+            network: false,
+          },
+          after: "333333333333",
+          next: "The user turns it on with Install on the card in the chat, then picks its folder path(s) in Settings > Plugins before the worker can run.",
+        });
+
+        const detailed = yield* callRead({ pluginId: "vault-sync" });
+        expect(detailed).toMatchObject({
+          plugin: {
+            displayName: "Vault Sync",
+            worker: {
+              code: workerCode,
+              everyMinutes: 15,
+              folders: [{ id: "vault", label: "Obsidian vault folder", access: "write" }],
+              network: false,
+            },
+          },
+          guide: expect.stringMatching(/Settings > Plugins.*t3\.projects\.readMemory/s),
+        });
+      }).pipe(Effect.provide(layer));
+    }),
+);

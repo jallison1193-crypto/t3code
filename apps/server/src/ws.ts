@@ -205,6 +205,7 @@ import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretReso
 import * as ServerSettings from "./serverSettings.ts";
 import * as PluginRegistry from "./plugins/PluginRegistry.ts";
 import * as PluginStateStore from "./plugins/PluginStateStore.ts";
+import * as PluginWorkerSupervisor from "./plugins/PluginWorkerSupervisor.ts";
 import { invalidateSettingsSecrets } from "./sourceControl/sourceControlHostSecrets.ts";
 import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
@@ -1618,6 +1619,7 @@ export const layerWsRpc = (
       const environmentTheme = yield* EnvironmentTheme.EnvironmentThemeService;
       const pluginRegistry = yield* PluginRegistry.PluginRegistry;
       const pluginStateStore = yield* PluginStateStore.PluginStateStore;
+      const pluginWorkerSupervisor = yield* PluginWorkerSupervisor.PluginWorkerSupervisor;
       const projectMemoryStore = yield* ProjectMemoryStore.ProjectMemoryStore;
       const externalLauncher = yield* ExternalLauncher.ExternalLauncher;
       const remoteOpenTargets = yield* RemoteOpenTargets.RemoteOpenTargets;
@@ -2869,10 +2871,24 @@ export const layerWsRpc = (
           ),
         [WS_METHODS.serverListPlugins]: (_input) => pluginRegistry.list,
         [WS_METHODS.serverSetPluginEnabled]: (input) =>
-          pluginRegistry.setEnabled(input.id, input.enabled),
+          pluginRegistry.setEnabled(
+            input.id,
+            input.enabled,
+            input.approveWorker === undefined ? undefined : { approveWorker: input.approveWorker },
+          ),
         [WS_METHODS.serverUninstallPlugin]: (input) => pluginRegistry.uninstall(input.id),
         [WS_METHODS.serverRestorePluginRevision]: (input) =>
-          pluginRegistry.restore(input.id, input.revision, input.enable),
+          pluginRegistry.restore(
+            input.id,
+            input.revision,
+            input.enable,
+            input.approveWorker === undefined ? undefined : { approveWorker: input.approveWorker },
+          ),
+        [WS_METHODS.serverApprovePluginWorker]: (input) => pluginRegistry.approveWorker(input.id),
+        [WS_METHODS.serverSetPluginWorkerFolder]: (input) =>
+          pluginRegistry.setWorkerFolder(input.id, input.folderId, input.path),
+        [WS_METHODS.serverRunPluginWorker]: (input) => pluginWorkerSupervisor.runNow(input.id),
+        [WS_METHODS.serverGetPluginWorkerLog]: (input) => pluginWorkerSupervisor.getLog(input.id),
         [WS_METHODS.serverGetPluginState]: (input) =>
           pluginStateStore
             .get(input.pluginId, input.scope)

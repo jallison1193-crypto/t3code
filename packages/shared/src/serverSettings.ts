@@ -15,6 +15,8 @@ import {
   textGeneratorForSelection,
   isProviderTextGenerationCapable,
   type ModelSelection,
+  type PluginSettingEntry,
+  type PluginSettingEntryPatch,
   type ProjectId,
   type ProjectScopedServerSettingKey,
   ProjectSettingsOverrides,
@@ -250,6 +252,45 @@ function mergeSettingsEntries<Value>(
     } else {
       next.set(id, merge(next.get(id), config));
     }
+  }
+  return Object.fromEntries(next);
+}
+
+function mergePluginSettingsPatch(
+  current: Readonly<Record<string, PluginSettingEntry>>,
+  patch: Readonly<Record<string, PluginSettingEntryPatch | null>>,
+): Record<string, PluginSettingEntry> {
+  const next = new Map(Object.entries(current));
+  for (const [id, incoming] of Object.entries(patch)) {
+    if (incoming === null) {
+      next.delete(id);
+      continue;
+    }
+    const stored = next.get(id);
+    const enabled = incoming.enabled ?? stored?.enabled ?? false;
+    const workerApproval =
+      incoming.workerApproval === null
+        ? undefined
+        : (incoming.workerApproval ?? stored?.workerApproval);
+    let folders: Record<string, string> | undefined = stored?.folders
+      ? { ...stored.folders }
+      : undefined;
+    if (incoming.folders !== undefined) {
+      const mergedFolders = { ...folders };
+      for (const [folderId, folderPath] of Object.entries(incoming.folders)) {
+        if (folderPath === null) {
+          delete mergedFolders[folderId];
+        } else {
+          mergedFolders[folderId] = folderPath;
+        }
+      }
+      folders = Object.keys(mergedFolders).length > 0 ? mergedFolders : undefined;
+    }
+    next.set(id, {
+      enabled,
+      ...(workerApproval !== undefined ? { workerApproval } : {}),
+      ...(folders !== undefined ? { folders } : {}),
+    });
   }
   return Object.fromEntries(next);
 }
@@ -651,7 +692,7 @@ export function applyServerSettingsPatch(
       : {}),
     ...(pluginsPatch !== undefined
       ? {
-          plugins: mergeSettingsEntries(current.plugins, pluginsPatch),
+          plugins: mergePluginSettingsPatch(current.plugins, pluginsPatch),
         }
       : {}),
     ...(usageLimitSourcesPatch !== undefined

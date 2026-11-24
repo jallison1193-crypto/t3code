@@ -1,7 +1,13 @@
+import type { InstalledPlugin } from "@t3tools/contracts";
 import type { PluginChange } from "@t3tools/shared/toolOutput";
 import { describe, expect, it } from "vite-plus/test";
 
-import { resolvePluginChangeCardState, type PluginChangeCardState } from "./PluginChangeCard.logic";
+import {
+  resolvePluginChangeCardLines,
+  resolvePluginChangeCardState,
+  type PluginChangeCardLine,
+  type PluginChangeCardState,
+} from "./PluginChangeCard.logic";
 
 const REV_BEFORE = "0123456789ab";
 const REV_AFTER = "fedcba987654";
@@ -22,11 +28,27 @@ const EDIT_CHANGE: PluginChange = {
   contributes: ["css"],
 };
 
+const WORKER_EDIT_CHANGE: PluginChange = {
+  pluginId: "vault-sync",
+  created: false,
+  before: REV_BEFORE,
+  after: REV_AFTER,
+  contributes: ["worker"],
+  worker: {
+    everyMinutes: 15,
+    folders: [
+      { id: "notes", label: "Reference notes", access: "read" },
+      { id: "vault", label: "Obsidian vault", access: "write" },
+    ],
+    network: true,
+  },
+};
+
 describe("resolvePluginChangeCardState", () => {
   it.each<{
     readonly name: string;
     readonly change: PluginChange;
-    readonly livePlugin: { readonly enabled: boolean; readonly revision?: string } | undefined;
+    readonly livePlugin: Pick<InstalledPlugin, "enabled" | "revision" | "worker"> | undefined;
     readonly expected: PluginChangeCardState;
   }>([
     {
@@ -51,6 +73,38 @@ describe("resolvePluginChangeCardState", () => {
       name: "edit, at after -> Updated with Undo",
       change: EDIT_CHANGE,
       livePlugin: { enabled: true, revision: REV_AFTER },
+      expected: { status: "updated", muted: false, actions: ["undo"] },
+    },
+    {
+      name: "edit that widened worker powers, at after -> Updated with Approve and Undo",
+      change: WORKER_EDIT_CHANGE,
+      livePlugin: {
+        enabled: true,
+        revision: REV_AFTER,
+        worker: {
+          everyMinutes: 15,
+          folders: [{ id: "vault", label: "Obsidian vault", access: "write", path: null }],
+          network: true,
+          status: "needs-approval",
+          networkRestricted: true,
+        },
+      },
+      expected: { status: "updated", muted: false, actions: ["approve", "undo"] },
+    },
+    {
+      name: "edit after powers approved, at after -> Updated with Undo only",
+      change: WORKER_EDIT_CHANGE,
+      livePlugin: {
+        enabled: true,
+        revision: REV_AFTER,
+        worker: {
+          everyMinutes: 15,
+          folders: [{ id: "vault", label: "Obsidian vault", access: "write", path: "/vault" }],
+          network: true,
+          status: "running",
+          networkRestricted: true,
+        },
+      },
       expected: { status: "updated", muted: false, actions: ["undo"] },
     },
     {
@@ -79,5 +133,68 @@ describe("resolvePluginChangeCardState", () => {
     },
   ])("$name", ({ change, livePlugin, expected }) => {
     expect(resolvePluginChangeCardState(change, livePlugin)).toEqual(expected);
+  });
+});
+
+describe("resolvePluginChangeCardLines", () => {
+  it.each<{
+    readonly name: string;
+    readonly change: PluginChange;
+    readonly livePlugin?: Pick<InstalledPlugin, "enabled" | "revision" | "worker">;
+    readonly expected: ReadonlyArray<PluginChangeCardLine>;
+  }>([
+    {
+      name: "lists worker background code, folders, network, schedule, and unrestricted runtime warning",
+      change: WORKER_EDIT_CHANGE,
+      livePlugin: {
+        enabled: false,
+        revision: REV_AFTER,
+        worker: {
+          everyMinutes: 15,
+          folders: [],
+          network: true,
+          status: "stopped",
+          networkRestricted: false,
+        },
+      },
+      expected: [
+        { kind: "worker-runs" },
+        { kind: "worker-folder", id: "notes", label: "Reference notes", access: "read" },
+        { kind: "worker-folder", id: "vault", label: "Obsidian vault", access: "write" },
+        { kind: "worker-network" },
+        { kind: "worker-schedule", everyMinutes: 15 },
+        { kind: "worker-network-unrestricted" },
+      ],
+    },
+    {
+      name: "omits network and schedule lines when not declared and omits warning when network is restricted",
+      change: {
+        pluginId: "simple-worker",
+        created: true,
+        after: REV_AFTER,
+        contributes: ["css", "worker"],
+        worker: {
+          folders: [{ id: "out", label: "Export folder", access: "write" }],
+          network: false,
+        },
+      },
+      livePlugin: {
+        enabled: false,
+        revision: REV_AFTER,
+        worker: {
+          folders: [{ id: "out", label: "Export folder", access: "write", path: null }],
+          network: false,
+          status: "stopped",
+          networkRestricted: true,
+        },
+      },
+      expected: [
+        { kind: "css" },
+        { kind: "worker-runs" },
+        { kind: "worker-folder", id: "out", label: "Export folder", access: "write" },
+      ],
+    },
+  ])("$name", ({ change, livePlugin, expected }) => {
+    expect(resolvePluginChangeCardLines(change, livePlugin)).toEqual(expected);
   });
 });

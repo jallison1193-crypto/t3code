@@ -103,6 +103,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.serverGetDatabaseStorage]: AuthOrchestrationReadScope,
   [WS_METHODS.serverGetSettings]: AuthOrchestrationReadScope,
   [WS_METHODS.serverListPlugins]: AuthOrchestrationReadScope,
+  [WS_METHODS.serverGetPluginWorkerLog]: AuthOrchestrationReadScope,
   [WS_METHODS.serverGetPluginState]: AuthOrchestrationReadScope,
   [WS_METHODS.serverSubscribePluginState]: AuthOrchestrationReadScope,
   [WS_METHODS.peerLinksList]: AuthAccessReadScope,

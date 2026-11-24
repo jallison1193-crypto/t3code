@@ -12761,5 +12761,65 @@
   "ac10cafdeea93121": "{count, plural, one {Plugin écrit {count} fois} other {Plugin écrit {count} fois}}",
   "52b987ceaa1e9498": "{count, plural, one {Tentative d'écrire un plugin {count} fois} other {Tentative d'écrire un plugin {count} fois}}",
   "2450a6722d95b646": "{status, select, inProgress {Lecture des plugins} completed {Plugins lus} failed {Impossible de lire les plugins} declined {Refus de lire les plugins} stopped {Arrêt de la lecture des plugins} other {Lecture des plugins}}",
-  "3c08c0c95a3b07e2": "{status, select, inProgress {Écriture d'un plugin} completed {Plugin écrit} failed {Impossible d'écrire le plugin} declined {Refus d'écrire le plugin} stopped {Arrêt de l'écriture du plugin} other {Écriture d'un plugin}}"
+  "3c08c0c95a3b07e2": "{status, select, inProgress {Écriture d'un plugin} completed {Plugin écrit} failed {Impossible d'écrire le plugin} declined {Refus d'écrire le plugin} stopped {Arrêt de l'écriture du plugin} other {Écriture d'un plugin}}",
+  "a5674b575d6d99df": "Worker non approuvé",
+  "82f3d9cc4cea06f0": "Impossible d'approuver le worker du plugin.",
+  "6c16b4c17ecab0a9": "Exécute du code en arrière-plan sur cet ordinateur",
+  "cdf18d4e4d0c8881": [
+    "Lit et écrit ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "00b6273413aabfaa": [
+    "Lit ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "78c2f44e9cfef6ac": "Utilise le réseau",
+  "b0706ba59c01e9db": [
+    "S'exécute toutes les ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " minutes"
+  ],
+  "45699bdf9626f085": "L'accès au réseau n'est pas bloqué sur cet environnement d'exécution T3.",
+  "f1e5c1be1ac92361": "Approuver",
+  "b8f5061ac22fe1c5": "Impossible de charger le journal du worker",
+  "df145ba72d106163": "Impossible de lire la sortie du worker.",
+  "187b5b8c526d01ef": "Le worker est déjà en cours d'exécution",
+  "9b235fef931d3126": "Attendez la fin de l'exécution en cours avant d'en lancer une autre.",
+  "cf6ab17c77b64f62": "Échec de l'exécution du worker",
+  "4973e5d94efffc97": "Impossible d'exécuter le worker du plugin.",
+  "e496d3a463663574": "Dossier non enregistré",
+  "5b4676e5cf89030a": "Impossible d'enregistrer le chemin du dossier du worker.",
+  "244eb1e6fff0620c": "Chemin du dossier sur le serveur",
+  "622a159ad0eabdcb": "En cours",
+  "c92657bb7f2293ff": "Approbation requise",
+  "235ebe93ce52d03f": "Dossier requis",
+  "cb9b588441a36855": "Planté",
+  "7cda14a9e8aaefb0": "Arrêté",
+  "5298bbd2d64b83a6": [
+    "Dernière exécution : ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "138e6abcbea0678c": "Lecture et écriture",
+  "44875bc1115247fa": "Lecture seule",
+  "1f8a6c7c0b4a3567": "Journal",
+  "9ed792fb64e9cf0b": "Chargement du journal…",
+  "fc6012fd5e61997a": "Aucune sortie pour le moment.",
+  "33483e00b6a8033c": "Affichage des 32 derniers Ko de la sortie du worker.",
+  "4c6fd1c0c731161f": "Le code du plugin s'exécute avec les limites de dossiers et de réseau ci-dessus. N'activez que les plugins de confiance."
 }

@@ -12761,5 +12761,65 @@
   "ac10cafdeea93121": "{count, plural, one {Plugin {count}-mal geschrieben} other {Plugin {count}-mal geschrieben}}",
   "52b987ceaa1e9498": "{count, plural, one {Versucht, ein Plugin {count}-mal zu schreiben} other {Versucht, ein Plugin {count}-mal zu schreiben}}",
   "2450a6722d95b646": "{status, select, inProgress {Plugins werden gelesen} completed {Plugins gelesen} failed {Plugins konnten nicht gelesen werden} declined {Lesen der Plugins abgelehnt} stopped {Lesen der Plugins abgebrochen} other {Plugins werden gelesen}}",
-  "3c08c0c95a3b07e2": "{status, select, inProgress {Plugin wird geschrieben} completed {Plugin geschrieben} failed {Plugin konnte nicht geschrieben werden} declined {Schreiben des Plugins abgelehnt} stopped {Schreiben des Plugins abgebrochen} other {Plugin wird geschrieben}}"
+  "3c08c0c95a3b07e2": "{status, select, inProgress {Plugin wird geschrieben} completed {Plugin geschrieben} failed {Plugin konnte nicht geschrieben werden} declined {Schreiben des Plugins abgelehnt} stopped {Schreiben des Plugins abgebrochen} other {Plugin wird geschrieben}}",
+  "a5674b575d6d99df": "Worker nicht genehmigt",
+  "82f3d9cc4cea06f0": "Plugin-Worker konnte nicht genehmigt werden.",
+  "6c16b4c17ecab0a9": "Führt Hintergrundcode auf diesem Computer aus",
+  "cdf18d4e4d0c8881": [
+    "Liest und schreibt ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "00b6273413aabfaa": [
+    "Liest ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "78c2f44e9cfef6ac": "Nutzt das Netzwerk",
+  "b0706ba59c01e9db": [
+    "Läuft alle ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " Minuten"
+  ],
+  "45699bdf9626f085": "Der Netzwerkzugriff ist in dieser T3-Laufzeit nicht blockiert.",
+  "f1e5c1be1ac92361": "Genehmigen",
+  "b8f5061ac22fe1c5": "Worker-Protokoll konnte nicht geladen werden",
+  "df145ba72d106163": "Worker-Ausgabe konnte nicht gelesen werden.",
+  "187b5b8c526d01ef": "Worker läuft bereits",
+  "9b235fef931d3126": "Warte, bis der aktuelle Lauf abgeschlossen ist, bevor du einen weiteren startest.",
+  "cf6ab17c77b64f62": "Worker-Lauf fehlgeschlagen",
+  "4973e5d94efffc97": "Plugin-Worker konnte nicht ausgeführt werden.",
+  "e496d3a463663574": "Ordner nicht gespeichert",
+  "5b4676e5cf89030a": "Worker-Ordnerpfad konnte nicht gespeichert werden.",
+  "244eb1e6fff0620c": "Server-Ordnerpfad",
+  "622a159ad0eabdcb": "Läuft",
+  "c92657bb7f2293ff": "Genehmigung erforderlich",
+  "235ebe93ce52d03f": "Ordner erforderlich",
+  "cb9b588441a36855": "Abgestürzt",
+  "7cda14a9e8aaefb0": "Gestoppt",
+  "5298bbd2d64b83a6": [
+    "Letzter Lauf: ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "138e6abcbea0678c": "Liest und schreibt",
+  "44875bc1115247fa": "Liest",
+  "1f8a6c7c0b4a3567": "Protokoll",
+  "9ed792fb64e9cf0b": "Protokoll wird geladen…",
+  "fc6012fd5e61997a": "Noch keine Ausgabe.",
+  "33483e00b6a8033c": "Die letzten 32 KB der Worker-Ausgabe werden angezeigt.",
+  "4c6fd1c0c731161f": "Plugin-Code läuft mit den oben genannten Ordner- und Netzwerkgrenzen. Aktiviere nur Plugins, denen du vertraust."
 }
