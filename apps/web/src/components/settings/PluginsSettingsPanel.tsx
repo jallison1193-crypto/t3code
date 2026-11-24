@@ -168,13 +168,14 @@ function McpServerStatusBadge({
   readonly status: PluginMcpServerStatus;
   readonly toolCount: number | undefined;
 }) {
+  const gt = useGT();
   switch (status) {
     case "running":
       return (
         <Badge size="sm" variant="success">
-          <T>
-            Running (<Var>{toolCount ?? 0}</Var> tools)
-          </T>
+          {gt("{count, plural, one {Running ({count} tool)} other {Running ({count} tools)}}", {
+            count: toolCount ?? 0,
+          })}
         </Badge>
       );
     case "starting":

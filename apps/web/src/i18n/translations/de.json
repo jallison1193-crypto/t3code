@@ -12955,15 +12955,7 @@
       }
     }
   ],
-  "ad8e1ff5b96cb6fb": [
-    "Läuft (",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " Tools)"
-  ],
+  "2f94afad8b2c1fa7": "{count, plural, one {Läuft ({count} Tool)} other {Läuft ({count} Tools)}}",
   "5fa281c639117f55": "Startet",
   "1168d0b54232a485": "Fehlgeschlagen",
   "c0dcd3089414a393": "Nicht ausführbar",

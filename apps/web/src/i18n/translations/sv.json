@@ -12960,15 +12960,7 @@
       }
     }
   ],
-  "ad8e1ff5b96cb6fb": [
-    "Körs (",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " verktyg)"
-  ],
+  "2f94afad8b2c1fa7": "{count, plural, one {Körs ({count} verktyg)} other {Körs ({count} verktyg)}}",
   "5fa281c639117f55": "Startar",
   "1168d0b54232a485": "Misslyckades",
   "c0dcd3089414a393": "Kan inte köras",

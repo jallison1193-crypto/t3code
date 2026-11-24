@@ -12953,15 +12953,7 @@
       }
     }
   ],
-  "ad8e1ff5b96cb6fb": [
-    "En cours (",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " outils)"
-  ],
+  "2f94afad8b2c1fa7": "{count, plural, one {En cours ({count} outil)} other {En cours ({count} outils)}}",
   "5fa281c639117f55": "Démarrage",
   "1168d0b54232a485": "Échec",
   "c0dcd3089414a393": "Non exécutable",

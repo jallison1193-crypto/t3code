@@ -12964,15 +12964,7 @@
       }
     }
   ],
-  "ad8e1ff5b96cb6fb": [
-    "Running (",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " tools)"
-  ],
+  "2f94afad8b2c1fa7": "{count, plural, one {Running ({count} tool)} other {Running ({count} tools)}}",
   "5fa281c639117f55": "Starting",
   "1168d0b54232a485": "Failed",
   "c0dcd3089414a393": "Not runnable",

@@ -12953,15 +12953,7 @@
       }
     }
   ],
-  "ad8e1ff5b96cb6fb": [
-    "Em execução (",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " ferramentas)"
-  ],
+  "2f94afad8b2c1fa7": "{count, plural, one {Em execução ({count} ferramenta)} other {Em execução ({count} ferramentas)}}",
   "5fa281c639117f55": "Iniciando",
   "1168d0b54232a485": "Falhou",
   "c0dcd3089414a393": "Não executável",
