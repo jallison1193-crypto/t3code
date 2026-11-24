@@ -118,7 +118,7 @@ export class Declaration<out Handler> {
   }
 }
 
-const refuseReadOnlyClient = McpInvocationContext.McpInvocationContext.pipe(
+export const refuseReadOnlyClient = McpInvocationContext.McpInvocationContext.pipe(
   Effect.flatMap((scope) =>
     scope.client?.access === "read-only"
       ? Effect.fail(

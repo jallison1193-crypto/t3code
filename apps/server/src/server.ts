@@ -115,6 +115,7 @@ import * as PreviewBrowser from "./preview/PreviewBrowser.ts";
 import * as ProcessRunner from "./processRunner.ts";
 import * as GitManager from "./git/GitManager.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
+import * as PluginMcpProxy from "./plugins/PluginMcpProxy.ts";
 import * as PluginRegistry from "./plugins/PluginRegistry.ts";
 import * as PluginStateStore from "./plugins/PluginStateStore.ts";
 import * as PluginWorkerSupervisor from "./plugins/PluginWorkerSupervisor.ts";
@@ -770,6 +771,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   ProviderInstallation.layer,
   ReplayMarkers.layer,
   PluginWorkerSupervisor.layer,
+  PluginMcpProxy.layer,
   Layer.effectDiscard(ProjectSettingsOverrideSweep.sweep),
 ).pipe(
   Layer.provideMerge(layerOrchestrationApplication),

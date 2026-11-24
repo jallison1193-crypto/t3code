@@ -85,6 +85,32 @@ function CardLine({ line }: { readonly line: PluginChangeCardLine }) {
       return <T>Adds skills for agents</T>;
     case "instructions":
       return <T>Adds instructions for agents</T>;
+    case "mcp-server":
+      return (
+        <T>
+          Runs MCP server <Var>{line.name}</Var>: <Var>{line.target}</Var>
+        </T>
+      );
+    case "mcp-generic":
+      return <T>Runs MCP servers</T>;
+    case "hook":
+      return (
+        <T>
+          Runs hooks in Claude threads: <Var>{line.event}</Var> <Var>{line.target}</Var>
+        </T>
+      );
+    case "hook-generic":
+      return <T>Runs hooks in Claude threads</T>;
+    case "agent":
+      return (
+        <T>
+          Adds agent <Var>{line.name}</Var> (Claude threads)
+        </T>
+      );
+    case "agent-generic":
+      return <T>Adds agents (Claude threads)</T>;
+    case "external-outside-sandbox":
+      return <T>MCP servers and hooks run outside the sandbox.</T>;
     case "unsupported":
       return (
         <T>
@@ -117,7 +143,7 @@ function CardLine({ line }: { readonly line: PluginChangeCardLine }) {
   }
 }
 
-function cardLineKey(line: PluginChangeCardLine): string {
+function cardLineKey(line: PluginChangeCardLine, index: number): string {
   switch (line.kind) {
     case "worker-folder":
       return `worker-folder:${line.id}`;
@@ -125,6 +151,12 @@ function cardLineKey(line: PluginChangeCardLine): string {
       return `command:${line.name}`;
     case "skill":
       return `skill:${line.name}`;
+    case "mcp-server":
+      return `mcp-server:${line.name}`;
+    case "hook":
+      return `hook:${line.event}:${index}`;
+    case "agent":
+      return `agent:${line.name}`;
     case "unsupported":
       return `unsupported:${line.parts.join(",")}`;
     default:
@@ -181,6 +213,8 @@ export function PluginChangeCard({
   });
 
   const livePlugin = pluginsQuery.data?.plugins.find((plugin) => plugin.id === change.pluginId);
+  const needsWorkerApproval = livePlugin?.worker?.status === "needs-approval";
+  const needsExternalApproval = livePlugin?.externalStatus === "needs-approval";
   const state =
     pluginsQuery.data === null ? null : resolvePluginChangeCardState(change, livePlugin);
   const lines = resolvePluginChangeCardLines(change, livePlugin);
@@ -213,6 +247,7 @@ export function PluginChangeCard({
               id: change.pluginId,
               enabled: true,
               approveWorker: true,
+              approveExternal: true,
               revision: change.after,
             },
           });
@@ -243,17 +278,36 @@ export function PluginChangeCard({
               revision: change.after,
               enable: true,
               approveWorker: true,
+              approveExternal: true,
             },
           });
           reportError(result, gt("Plugin not restored"), gt("Could not restore plugin revision."));
           break;
         }
         case "approve": {
-          const result = await approvePluginWorker({
-            environmentId,
-            input: { id: change.pluginId, revision: change.after },
-          });
-          reportError(result, gt("Worker not approved"), gt("Could not approve plugin worker."));
+          if (needsWorkerApproval) {
+            const result = await approvePluginWorker({
+              environmentId,
+              input: { id: change.pluginId, revision: change.after },
+            });
+            reportError(result, gt("Worker not approved"), gt("Could not approve plugin worker."));
+          }
+          if (needsExternalApproval) {
+            const result = await setPluginEnabled({
+              environmentId,
+              input: {
+                id: change.pluginId,
+                enabled: true,
+                approveExternal: true,
+                revision: change.after,
+              },
+            });
+            reportError(
+              result,
+              gt("Plugin not approved"),
+              gt("Could not approve plugin MCP servers and hooks."),
+            );
+          }
           break;
         }
         case "undo": {
@@ -299,8 +353,8 @@ export function PluginChangeCard({
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5">
         <ul className="min-w-0 flex-1 space-y-0.5 text-xs text-muted-foreground">
-          {lines.map((line) => (
-            <li key={cardLineKey(line)}>
+          {lines.map((line, index) => (
+            <li key={cardLineKey(line, index)}>
               <CardLine line={line} />
             </li>
           ))}
@@ -363,7 +417,11 @@ export function PluginChangeCard({
                       key={action}
                       size="xs"
                       variant="default"
-                      disabled={busy || !canApproveWorker}
+                      disabled={
+                        busy ||
+                        (needsWorkerApproval && !canApproveWorker) ||
+                        (needsExternalApproval && !canSetEnabled)
+                      }
                       onClick={() => void runAction(action)}
                     >
                       <T>Approve</T>

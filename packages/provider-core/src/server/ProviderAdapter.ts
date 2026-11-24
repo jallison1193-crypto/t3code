@@ -1,4 +1,8 @@
-import type { OrchestrationV2HistoricalMessage } from "@t3tools/contracts";
+import type {
+  OrchestrationV2HistoricalMessage,
+  PluginAgentEffortLevel,
+  PluginHookMatcherGroup,
+} from "@t3tools/contracts";
 import {
   type AgentFeedbackMode,
   ChatAttachment,
@@ -582,6 +586,23 @@ export interface ProviderAdapterV2EnsureThreadInput {
   readonly forceNewNativeThread?: boolean;
 }
 
+export interface ProviderAdapterV2PluginAgent {
+  readonly pluginId: string;
+  readonly name: string;
+  readonly description: string;
+  readonly prompt: string;
+  readonly tools?: ReadonlyArray<string>;
+  readonly disallowedTools?: ReadonlyArray<string>;
+  readonly model?: string;
+  readonly effort?: PluginAgentEffortLevel | number;
+  readonly maxTurns?: number;
+}
+
+export interface ProviderAdapterV2PluginExtensions {
+  readonly hooks?: Readonly<Record<string, ReadonlyArray<PluginHookMatcherGroup>>>;
+  readonly agents?: ReadonlyArray<ProviderAdapterV2PluginAgent>;
+}
+
 export interface ProviderAdapterV2TurnInput {
   readonly agentFeedback?: AgentFeedbackMode;
   readonly appThread: OrchestrationV2AppThread;
@@ -602,6 +623,7 @@ export interface ProviderAdapterV2TurnInput {
   readonly runtimePolicy: ProviderAdapterV2RuntimePolicy;
   readonly appContext?: ReadonlyArray<{ readonly key: string; readonly text: string }>;
   readonly projectInstructions?: string;
+  readonly pluginExtensions?: ProviderAdapterV2PluginExtensions;
 }
 
 export type ProviderAdapterV2ResumeTurnInput = Omit<

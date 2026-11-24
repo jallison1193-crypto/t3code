@@ -12901,5 +12901,80 @@
   ],
   "d5b680b57724f530": "Ändrad",
   "aeea775659127285": "Ändrad sedan du aktiverade den",
-  "f96b011498a483b2": "Aktivera igen"
+  "f96b011498a483b2": "Aktivera igen",
+  "7a4e06d0b3b2beed": "Tillägget godkändes inte",
+  "0c31642763088630": "Kunde inte godkänna tilläggets MCP-servrar och hooks.",
+  "dce331a763ff9756": [
+    "Kör MCP-servern ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ": ",
+    {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    }
+  ],
+  "68a43146735830a7": "Kör MCP-servrar",
+  "497ff8b0c967e651": [
+    "Kör hooks i Claude-trådar: ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " ",
+    {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    }
+  ],
+  "d1d5d45adb0d7912": "Kör hooks i Claude-trådar",
+  "928b4f1cf406ce80": [
+    "Lägger till agenten ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " (Claude-trådar)"
+  ],
+  "3bacdba0906fa41c": "Lägger till agenter (Claude-trådar)",
+  "3966fac273f3ec2f": "MCP-servrar och hooks körs utanför sandlådan.",
+  "ead199761ab918fb": "Godkännandet togs inte bort",
+  "f05f476b2e0bf21a": "Kunde inte ta bort tilläggets externa godkännande.",
+  "f19ca2f26e431d8c": [
+    "Agenter (endast Claude-trådar):",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "ad8e1ff5b96cb6fb": [
+    "Körs (",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " verktyg)"
+  ],
+  "5fa281c639117f55": "Startar",
+  "1168d0b54232a485": "Misslyckades",
+  "c0dcd3089414a393": "Kan inte köras",
+  "e8bea9a04544caf1": "MCP-servrar och hooks",
+  "9df67bcc43a70f4a": "Ta bort godkännande",
+  "c85b10dde0506e4a": "Verktygslistan nådde gränsen; endast de första verktygen exponeras.",
+  "19f418961c74cfa4": "Hooks (endast Claude-trådar)",
+  "ae00a86c28b0a06a": "MCP-servrar och hooks körs utanför sandlådan. Hooks och agenter fungerar i Claude-trådar. Godkänn bara tillägg du litar på."
 }

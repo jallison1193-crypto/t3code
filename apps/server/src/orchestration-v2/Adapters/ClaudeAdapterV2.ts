@@ -1,5 +1,10 @@
 import * as DocumentText from "../../provider/DocumentText.ts";
 import {
+  mapClaudePluginAgents,
+  mergeClaudePluginHooks,
+} from "../../plugins/pluginClaudeMapping.ts";
+import type { ProviderAdapterV2PluginExtensions } from "@t3tools/provider-core/server/ProviderAdapter";
+import {
   compactDynamicToolOutput,
   mcpToolResultOutput,
   toolOutputImages,
@@ -2337,6 +2342,7 @@ export function makeClaudeQueryOptions(input: {
   readonly allowDangerouslySkipPermissions?: boolean;
   readonly appendSystemPromptFileText?: string;
   readonly projectInstructions?: string;
+  readonly pluginExtensions?: ProviderAdapterV2PluginExtensions;
   // Flag settings, because a user's settings.json env beats the process env in Claude Code.
   readonly toolSearchOverride?: "true";
 }): ClaudeAgentSdkQueryOptions {
@@ -2428,6 +2434,21 @@ export function makeClaudeQueryOptions(input: {
               : { ENABLE_TOOL_SEARCH: input.toolSearchOverride }),
           },
         } as ClaudeSdkSettings);
+  const mergedPluginHooks =
+    typeof effectiveQuerySettings === "string" || input.pluginExtensions?.hooks === undefined
+      ? undefined
+      : mergeClaudePluginHooks(effectiveQuerySettings?.hooks, input.pluginExtensions.hooks);
+  const querySettingsWithPlugins =
+    typeof effectiveQuerySettings === "string" || mergedPluginHooks === undefined
+      ? effectiveQuerySettings
+      : ({
+          ...effectiveQuerySettings,
+          hooks: mergedPluginHooks,
+        } as ClaudeSdkSettings);
+  const pluginAgents =
+    input.pluginExtensions?.agents === undefined
+      ? undefined
+      : mapClaudePluginAgents(input.pluginExtensions.agents);
   const deviceInstructions = input.mcpServers !== undefined && input.deviceToolsAvailable === true;
   const agentFeedback = input.mcpServers === undefined ? "off" : (input.agentFeedback ?? "off");
   const options: ClaudeAgentSdkQueryOptions = {
@@ -2459,16 +2480,17 @@ export function makeClaudeQueryOptions(input: {
       ? {
           thinking: { type: "adaptive" as const, display: "summarized" as const },
           settings:
-            typeof effectiveQuerySettings === "string"
-              ? effectiveQuerySettings
+            typeof querySettingsWithPlugins === "string"
+              ? querySettingsWithPlugins
               : {
-                  ...effectiveQuerySettings,
+                  ...querySettingsWithPlugins,
                   showThinkingSummaries: true,
                 },
         }
-      : effectiveQuerySettings === undefined
+      : querySettingsWithPlugins === undefined
         ? {}
-        : { settings: effectiveQuerySettings }),
+        : { settings: querySettingsWithPlugins }),
+    ...(pluginAgents === undefined ? {} : { agents: pluginAgents }),
     ...(input.onUserDialog === undefined ? {} : { onUserDialog: input.onUserDialog }),
     ...(input.onElicitation === undefined ? {} : { onElicitation: input.onElicitation }),
     ...(input.supportedDialogKinds === undefined
@@ -13362,6 +13384,9 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             ...(turnInput.projectInstructions === undefined
               ? {}
               : { projectInstructions: turnInput.projectInstructions }),
+            ...(turnInput.pluginExtensions === undefined
+              ? {}
+              : { pluginExtensions: turnInput.pluginExtensions }),
             ...(appendSystemPromptFileText === undefined ? {} : { appendSystemPromptFileText }),
             ...(toolSearchOverride === undefined ? {} : { toolSearchOverride }),
           });

@@ -48,7 +48,9 @@ describe("resolvePluginChangeCardState", () => {
   it.each<{
     readonly name: string;
     readonly change: PluginChange;
-    readonly livePlugin: Pick<InstalledPlugin, "enabled" | "revision" | "worker"> | undefined;
+    readonly livePlugin:
+      | Pick<InstalledPlugin, "enabled" | "revision" | "worker" | "externalStatus">
+      | undefined;
     readonly expected: PluginChangeCardState;
   }>([
     {
@@ -124,6 +126,22 @@ describe("resolvePluginChangeCardState", () => {
       change: EDIT_CHANGE,
       livePlugin: { enabled: true, revision: REV_OTHER },
       expected: { status: "changed-since", muted: true, actions: [] },
+    },
+    {
+      name: "edit that changed MCP/hook config, at after -> Updated with Approve and Undo",
+      change: {
+        pluginId: "tools-pack",
+        created: false,
+        before: REV_BEFORE,
+        after: REV_AFTER,
+        contributes: ["mcp", "hook"],
+      },
+      livePlugin: {
+        enabled: true,
+        revision: REV_AFTER,
+        externalStatus: "needs-approval",
+      },
+      expected: { status: "updated", muted: false, actions: ["approve", "undo"] },
     },
     {
       name: "edit, uninstalled later -> Changed since (muted) with no action",
@@ -210,6 +228,24 @@ describe("resolvePluginChangeCardLines", () => {
         { kind: "skill", name: "review" },
         { kind: "instructions" },
         { kind: "unsupported", parts: ["hooks", "mcp"] },
+      ],
+    },
+    {
+      name: "lists MCP servers, hooks, agents, and outside-sandbox notice",
+      change: {
+        pluginId: "tools-pack",
+        created: true,
+        after: REV_AFTER,
+        contributes: ["mcp", "hook", "agent"],
+        mcpServers: [{ name: "docs", target: "npx docs-mcp" }],
+        hooks: [{ event: "PreToolUse", target: "${CLAUDE_PLUGIN_ROOT}/guard.sh" }],
+        agents: ["reviewer"],
+      },
+      expected: [
+        { kind: "mcp-server", name: "docs", target: "npx docs-mcp" },
+        { kind: "hook", event: "PreToolUse", target: "${CLAUDE_PLUGIN_ROOT}/guard.sh" },
+        { kind: "agent", name: "reviewer" },
+        { kind: "external-outside-sandbox" },
       ],
     },
   ])("$name", ({ change, livePlugin, expected }) => {

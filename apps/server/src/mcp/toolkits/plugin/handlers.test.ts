@@ -747,3 +747,175 @@ it.effect(
       }).pipe(Effect.provide(layer));
     }),
 );
+
+it.effect(
+  "writes and reads MCP servers, hooks, and agents, and asks for approval when external config changes",
+  () =>
+    Effect.gen(function* () {
+      const mcpServers = {
+        docs: { command: "npx", args: ["-y", "@example/docs-mcp"] },
+      };
+      const hooks = {
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [{ type: "command" as const, command: "${CLAUDE_PLUGIN_ROOT}/guard.sh" }],
+          },
+        ],
+      };
+      const agents = [
+        {
+          name: PluginId.make("reviewer"),
+          description: "Review diffs carefully",
+          tools: ["Read", "Grep"],
+          model: "sonnet",
+          body: "Check edge cases.",
+        },
+      ];
+      const layer = runWithRegistry({
+        list: Effect.succeed({
+          pluginsDir: "/state/plugins",
+          plugins: [
+            {
+              id: "ext-kit",
+              displayName: "Ext Kit",
+              enabled: true,
+              contributes: ["mcp" as const, "hook" as const, "agent" as const],
+              mcpServers: [
+                {
+                  name: "docs",
+                  transport: "stdio" as const,
+                  target: "npx -y @example/docs-mcp",
+                  status: "needs-approval" as const,
+                },
+              ],
+              hooks: [
+                {
+                  event: "PreToolUse",
+                  matcher: "Bash",
+                  type: "command" as const,
+                  target: "${CLAUDE_PLUGIN_ROOT}/guard.sh",
+                },
+              ],
+              agents: [{ name: PluginId.make("reviewer"), description: "Review diffs carefully" }],
+              externalStatus: "needs-approval" as const,
+              revision: "555555555555",
+            },
+          ],
+          repoPlugins: [],
+        }),
+        read: (id) =>
+          id === "ext-kit"
+            ? Effect.succeed({
+                displayName: "Ext Kit",
+                mcpServers,
+                hooks,
+                agents,
+              })
+            : Effect.fail(
+                new PluginOperationError({
+                  pluginId: id,
+                  operation: "read",
+                  reason: "not_found",
+                }),
+              ),
+        write: (input) =>
+          Effect.succeed({
+            plugin: {
+              id: input.id,
+              displayName: input.displayName,
+              enabled: true,
+              contributes: ["mcp" as const, "hook" as const, "agent" as const],
+              mcpServers: [
+                {
+                  name: "docs",
+                  transport: "stdio" as const,
+                  target: "npx -y @example/docs-mcp",
+                  status: "needs-approval" as const,
+                },
+              ],
+              hooks: [
+                {
+                  event: "PreToolUse",
+                  matcher: "Bash",
+                  type: "command" as const,
+                  target: "${CLAUDE_PLUGIN_ROOT}/guard.sh",
+                },
+              ],
+              agents: [{ name: PluginId.make("reviewer"), description: "Review diffs carefully" }],
+              externalStatus: "needs-approval" as const,
+              revision: "555555555555",
+            },
+            created: false,
+            before: "444444444444",
+            after: "555555555555",
+          }),
+      });
+
+      yield* Effect.gen(function* () {
+        const toolkit = yield* PluginToolkit;
+        const callRead = (params: Parameters<typeof toolkit.handle<"t3_plugin_read">>[1]) =>
+          toolkit.handle("t3_plugin_read", params).pipe(
+            Stream.unwrap,
+            Stream.runCollect,
+            Effect.map((parts) => parts.at(-1)?.result),
+          );
+        const callWrite = (params: Parameters<typeof toolkit.handle<"t3_plugin_write">>[1]) =>
+          toolkit.handle("t3_plugin_write", params).pipe(
+            Stream.unwrap,
+            Stream.runCollect,
+            Effect.map((parts) => parts.at(-1)?.result),
+          );
+
+        expect(
+          yield* callWrite({
+            pluginId: "ext-kit",
+            displayName: "Ext Kit",
+            mcpServers,
+            hooks,
+            agents,
+          }),
+        ).toEqual({
+          pluginId: "ext-kit",
+          created: false,
+          enabled: true,
+          applied: true,
+          contributes: ["mcp", "hook", "agent"],
+          mcpServers: [{ name: "docs", target: "npx -y @example/docs-mcp" }],
+          hooks: [{ event: "PreToolUse", target: "${CLAUDE_PLUGIN_ROOT}/guard.sh" }],
+          agents: ["reviewer"],
+          before: "444444444444",
+          after: "555555555555",
+          next: "Saved; MCP server or hook config changed, so the user must click Approve on the card or in Settings > Plugins before it runs.",
+        });
+
+        const detailed = yield* callRead({ pluginId: "ext-kit" });
+        expect(detailed).toMatchObject({
+          plugins: [
+            {
+              id: "ext-kit",
+              externalStatus: "needs-approval",
+              mcpServers: [{ name: "docs", status: "needs-approval" }],
+              hooks: [{ event: "PreToolUse", matcher: "Bash" }],
+              agents: [{ name: "reviewer" }],
+            },
+          ],
+          plugin: {
+            mcpServers,
+            hooks,
+            agents,
+          },
+        });
+
+        expect(
+          yield* callWrite({
+            pluginId: "ext-kit",
+            mcpServers: { bad: { url: "https://example.test/mcp" } },
+          }),
+        ).toMatchObject({
+          code: "invalid_request",
+          message: expect.stringMatching(/Invalid mcpServers/i),
+        });
+      }).pipe(Effect.provide(layer));
+    }),
+);

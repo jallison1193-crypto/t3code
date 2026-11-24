@@ -12905,5 +12905,80 @@
   ],
   "d5b680b57724f530": "Changed",
   "aeea775659127285": "Changed since you turned it on",
-  "f96b011498a483b2": "Turn on again"
+  "f96b011498a483b2": "Turn on again",
+  "7a4e06d0b3b2beed": "Plugin not approved",
+  "0c31642763088630": "Could not approve plugin MCP servers and hooks.",
+  "dce331a763ff9756": [
+    "Runs MCP server ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ": ",
+    {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    }
+  ],
+  "68a43146735830a7": "Runs MCP servers",
+  "497ff8b0c967e651": [
+    "Runs hooks in Claude threads: ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " ",
+    {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    }
+  ],
+  "d1d5d45adb0d7912": "Runs hooks in Claude threads",
+  "928b4f1cf406ce80": [
+    "Adds agent ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " (Claude threads)"
+  ],
+  "3bacdba0906fa41c": "Adds agents (Claude threads)",
+  "3966fac273f3ec2f": "MCP servers and hooks run outside the sandbox.",
+  "ead199761ab918fb": "Approval not removed",
+  "f05f476b2e0bf21a": "Could not remove plugin external approval.",
+  "f19ca2f26e431d8c": [
+    "Agents (Claude threads only):",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "ad8e1ff5b96cb6fb": [
+    "Running (",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " tools)"
+  ],
+  "5fa281c639117f55": "Starting",
+  "1168d0b54232a485": "Failed",
+  "c0dcd3089414a393": "Not runnable",
+  "e8bea9a04544caf1": "MCP servers and hooks",
+  "9df67bcc43a70f4a": "Remove approval",
+  "c85b10dde0506e4a": "Tool list reached the limit; only the first tools are exposed.",
+  "19f418961c74cfa4": "Hooks (Claude threads only)",
+  "ae00a86c28b0a06a": "MCP servers and hooks run outside the sandbox. Hooks and agents work in Claude threads. Only approve plugins you trust."
 }

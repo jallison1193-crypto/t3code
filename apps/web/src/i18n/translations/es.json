@@ -12889,5 +12889,80 @@
   ],
   "d5b680b57724f530": "Modificado",
   "aeea775659127285": "Modificado desde que lo activaste",
-  "f96b011498a483b2": "Volver a activar"
+  "f96b011498a483b2": "Volver a activar",
+  "7a4e06d0b3b2beed": "Plugin no aprobado",
+  "0c31642763088630": "No se pudieron aprobar los servidores MCP y los hooks del plugin.",
+  "dce331a763ff9756": [
+    "Ejecuta el servidor MCP ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ": ",
+    {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    }
+  ],
+  "68a43146735830a7": "Ejecuta servidores MCP",
+  "497ff8b0c967e651": [
+    "Ejecuta hooks en hilos de Claude: ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " ",
+    {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    }
+  ],
+  "d1d5d45adb0d7912": "Ejecuta hooks en hilos de Claude",
+  "928b4f1cf406ce80": [
+    "Añade el agente ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " (hilos de Claude)"
+  ],
+  "3bacdba0906fa41c": "Añade agentes (hilos de Claude)",
+  "3966fac273f3ec2f": "Los servidores MCP y los hooks se ejecutan fuera del entorno aislado.",
+  "ead199761ab918fb": "No se eliminó la aprobación",
+  "f05f476b2e0bf21a": "No se pudo eliminar la aprobación externa del plugin.",
+  "f19ca2f26e431d8c": [
+    "Agentes (solo hilos de Claude):",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "ad8e1ff5b96cb6fb": [
+    "En ejecución (",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " herramientas)"
+  ],
+  "5fa281c639117f55": "Iniciando",
+  "1168d0b54232a485": "Con error",
+  "c0dcd3089414a393": "No ejecutable",
+  "e8bea9a04544caf1": "Servidores MCP y hooks",
+  "9df67bcc43a70f4a": "Quitar aprobación",
+  "c85b10dde0506e4a": "La lista de herramientas alcanzó el límite; solo se exponen las primeras.",
+  "19f418961c74cfa4": "Hooks (solo hilos de Claude)",
+  "ae00a86c28b0a06a": "Los servidores MCP y los hooks se ejecutan fuera del entorno aislado. Los hooks y agentes funcionan en hilos de Claude. Aprueba solo los plugins en los que confíes."
 }

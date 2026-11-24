@@ -2325,11 +2325,22 @@ export const layer: Layer.Layer<
                   Cause.hasInterruptsOnly(cause)
                     ? Effect.interrupt
                     : Effect.logWarning("Failed to read plugin turn context.", { cause }).pipe(
-                        Effect.as({ contextPlugins: [], commands: [] }),
+                        Effect.as({ contextPlugins: [], commands: [], hooks: {}, agents: [] }),
                       ),
                 ),
               )
           : undefined;
+        const pluginHooks = pluginContext?.hooks;
+        const pluginAgents = pluginContext?.agents;
+        const hasPluginHooks = pluginHooks !== undefined && Object.keys(pluginHooks).length > 0;
+        const hasPluginAgents = pluginAgents !== undefined && pluginAgents.length > 0;
+        const pluginExtensions =
+          hasPluginHooks || hasPluginAgents
+            ? {
+                ...(hasPluginHooks ? { hooks: pluginHooks } : {}),
+                ...(hasPluginAgents ? { agents: pluginAgents } : {}),
+              }
+            : undefined;
         const projectInstructions = formatProjectContext({
           instructions: instructionSettings.instructions,
           coordinator: instructionSettings.coordinator,
@@ -2375,6 +2386,7 @@ export const layer: Layer.Layer<
           runtimePolicy: input.runtimePolicy,
           ...(appContext.length === 0 ? {} : { appContext }),
           ...(projectInstructions === undefined ? {} : { projectInstructions }),
+          ...(pluginExtensions === undefined ? {} : { pluginExtensions }),
         };
         // Check after the context read: ingestion can settle the run while
         // it awaits. A failed ownership read fails the start below.

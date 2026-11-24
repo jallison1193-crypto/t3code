@@ -1,10 +1,23 @@
-import { PluginManifest, PluginSettingEntry } from "@t3tools/contracts";
+import {
+  PluginContribution,
+  PluginHooksConfig,
+  PluginManifest,
+  PluginMcpServerName,
+  PluginMcpServersConfig,
+  PluginSettingEntry,
+  PluginSettingEntryPatch,
+} from "@t3tools/contracts";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 
 const decodeManifest = Schema.decodeUnknownExit(PluginManifest);
 const decodeSettingEntry = Schema.decodeUnknownExit(PluginSettingEntry);
+const decodeSettingEntryPatch = Schema.decodeUnknownExit(PluginSettingEntryPatch);
+const decodeMcpServerName = Schema.decodeUnknownExit(PluginMcpServerName);
+const decodeMcpServers = Schema.decodeUnknownExit(PluginMcpServersConfig);
+const decodeHooks = Schema.decodeUnknownExit(PluginHooksConfig);
+const decodeContribution = Schema.decodeUnknownExit(PluginContribution);
 
 describe("PluginManifest worker decoding", () => {
   it("accepts a valid worker manifest with schedule, folders, and network", () => {
@@ -125,10 +138,11 @@ describe("PluginManifest worker decoding", () => {
     expect(Exit.isFailure(decodeManifest({ name: "demo", worker }))).toBe(true);
   });
 
-  it("decodes PluginSettingEntry with workerApproval and folders", () => {
+  it("decodes PluginSettingEntry with workerApproval, externalApproval, and folders", () => {
     const decoded = decodeSettingEntry({
       enabled: true,
       workerApproval: "0123456789ab",
+      externalApproval: "fedcba987654",
       folders: { vault: "/Users/josh/Vault" },
     });
     expect(Exit.isSuccess(decoded)).toBe(true);
@@ -140,5 +154,48 @@ describe("PluginManifest worker decoding", () => {
         }),
       ),
     ).toBe(true);
+    expect(
+      Exit.isFailure(
+        decodeSettingEntry({
+          enabled: true,
+          externalApproval: "not-a-hash",
+        }),
+      ),
+    ).toBe(true);
+    expect(Exit.isSuccess(decodeSettingEntryPatch({ externalApproval: null }))).toBe(true);
+  });
+
+  it("decodes MCP server configs, hooks configs, server names, and new contribution kinds", () => {
+    expect(Exit.isSuccess(decodeMcpServerName("my_Server-1"))).toBe(true);
+    expect(Exit.isFailure(decodeMcpServerName("bad.name"))).toBe(true);
+    expect(Exit.isFailure(decodeMcpServerName("a".repeat(41)))).toBe(true);
+
+    expect(
+      Exit.isSuccess(
+        decodeMcpServers({
+          local: { command: "node", args: ["server.mjs"], env: { FOO: "bar" }, timeout: 5000 },
+          remote: { type: "http", url: "https://example.test/mcp", headers: { Auth: "tok" } },
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      Exit.isFailure(
+        decodeMcpServers({
+          bad: { url: "https://example.test/mcp" },
+        }),
+      ),
+    ).toBe(true);
+
+    expect(
+      Exit.isSuccess(
+        decodeHooks({
+          PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo hi" }] }],
+        }),
+      ),
+    ).toBe(true);
+
+    for (const part of ["mcp", "hook", "agent"]) {
+      expect(Exit.isSuccess(decodeContribution(part))).toBe(true);
+    }
   });
 });

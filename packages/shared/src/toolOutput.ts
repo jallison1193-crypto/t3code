@@ -62,6 +62,18 @@ export const PLUGIN_WRITE_TOOL_NAME = "t3_plugin_write";
 
 const PluginRevision = Schema.String.check(Schema.isPattern(/^[a-f0-9]{12}$/));
 
+export const PluginChangeMcpServer = Schema.Struct({
+  name: TrimmedNonEmptyString,
+  target: TrimmedNonEmptyString,
+});
+export type PluginChangeMcpServer = Schema.Schema.Type<typeof PluginChangeMcpServer>;
+
+export const PluginChangeHook = Schema.Struct({
+  event: TrimmedNonEmptyString,
+  target: TrimmedNonEmptyString,
+});
+export type PluginChangeHook = Schema.Schema.Type<typeof PluginChangeHook>;
+
 export const PluginChange = Schema.Struct({
   pluginId: PluginId,
   created: Schema.Boolean,
@@ -71,6 +83,9 @@ export const PluginChange = Schema.Struct({
   worker: Schema.optional(PluginChangeWorker),
   commands: Schema.optional(Schema.Array(PluginId)),
   skills: Schema.optional(Schema.Array(PluginId)),
+  mcpServers: Schema.optional(Schema.Array(PluginChangeMcpServer)),
+  hooks: Schema.optional(Schema.Array(PluginChangeHook)),
+  agents: Schema.optional(Schema.Array(PluginId)),
   unsupported: Schema.optional(Schema.Array(Schema.String)),
 });
 export type PluginChange = Schema.Schema.Type<typeof PluginChange>;
