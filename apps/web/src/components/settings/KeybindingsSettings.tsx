@@ -27,9 +27,12 @@ import { T, useGT, useMessages } from "gt-react";
 import {
   AuthOrchestrationOperateScope,
   AuthSettingsWriteScope,
+  type EnvironmentId,
+  type EnvironmentPlugin,
   type KeybindingCommand,
   type KeybindingShortcut,
   type KeybindingWhenNode,
+  type ProjectId,
   type ServerRemoveKeybindingInput,
   type ServerUpsertKeybindingInput,
 } from "@t3tools/contracts";
@@ -101,6 +104,9 @@ import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsL
 import { keybindingSearchAnchorId, useSearchableSetting } from "./settingsSearch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { applicableEnvironmentPlugins } from "../chat/pluginSlashCommands.logic";
+
+const EMPTY_ENVIRONMENT_PLUGINS: ReadonlyArray<EnvironmentPlugin> = [];
 
 function KeybindingPill({ shortcut }: { shortcut: KeybindingShortcut }) {
   const isMac = navigator.platform.toLowerCase().includes("mac");
@@ -755,10 +761,12 @@ function rowKeybindingTarget(row: KeybindingRow): ServerRemoveKeybindingInput {
 function useKeybindingRowEditor({
   row,
   allRows,
+  plugins,
   onSave,
 }: {
   row: KeybindingRow;
   allRows: ReadonlyArray<KeybindingRow>;
+  plugins: ReadonlyArray<EnvironmentPlugin>;
   onSave: (input: ServerUpsertKeybindingInput) => void;
 }) {
   const m = useMessages();
@@ -776,6 +784,7 @@ function useKeybindingRowEditor({
     },
     navigator.platform,
     m,
+    plugins,
   );
 
   // Giving an unassigned row a shortcut brings back its default condition.
@@ -845,6 +854,7 @@ type KeybindingRowEditor = ReturnType<typeof useKeybindingRowEditor>;
 
 interface KeybindingRowActions {
   allRows: ReadonlyArray<KeybindingRow>;
+  plugins: ReadonlyArray<EnvironmentPlugin>;
   variables: ReadonlyArray<WhenVariableOption>;
   onSave: (input: ServerUpsertKeybindingInput) => void;
   onReset: (row: KeybindingRow) => void;
@@ -860,11 +870,13 @@ type KeybindingRowProps = KeybindingRowActions & {
 
 function KeybindingKeyControl({
   row,
+  plugins,
   editor,
   isSaving,
   pillClassName,
 }: {
   row: KeybindingRow;
+  plugins: ReadonlyArray<EnvironmentPlugin>;
   editor: KeybindingRowEditor;
   isSaving: boolean;
   pillClassName?: string | undefined;
@@ -901,7 +913,7 @@ function KeybindingKeyControl({
           type="button"
           onClick={() => setDraft({ isRecording: true })}
           aria-label={gt("Edit shortcut for {command}: {shortcut}", {
-            command: commandLabel(row.command, m),
+            command: commandLabel(row.command, m, plugins),
             shortcut: row.isUnassigned
               ? gt("Unassigned", { $context: "keyboard shortcut with no key assigned" })
               : formatShortcutLabel(row.binding.shortcut),
@@ -923,7 +935,9 @@ function KeybindingKeyControl({
         <Input
           data-keybinding-capture=""
           autoFocus={isRecording}
-          aria-label={gt("Keybinding for {command}", { command: commandLabel(row.command, m) })}
+          aria-label={gt("Keybinding for {command}", {
+            command: commandLabel(row.command, m, plugins),
+          })}
           value={isRecording ? "" : keyDraft}
           placeholder={isRecording ? gt("Press shortcut") : gt("Unassigned")}
           size="sm"
@@ -989,12 +1003,14 @@ function WhenClauseControl({
 
 function KeybindingRowMenu({
   row,
+  plugins,
   isSaving,
   onReset,
   onUnassign,
   onRemove,
 }: {
   row: KeybindingRow;
+  plugins: ReadonlyArray<EnvironmentPlugin>;
   isSaving: boolean;
   onReset: (row: KeybindingRow) => void;
   onUnassign: (row: KeybindingRow) => void;
@@ -1016,7 +1032,9 @@ function KeybindingRowMenu({
             variant="ghost-muted"
             size="icon-sm"
             disabled={isSaving}
-            aria-label={gt("Actions for {command}", { command: commandLabel(row.command, m) })}
+            aria-label={gt("Actions for {command}", {
+              command: commandLabel(row.command, m, plugins),
+            })}
           />
         }
       >
@@ -1055,12 +1073,18 @@ function KeybindingSourceBadge({ source }: { source: KeybindingRow["source"] }) 
   );
 }
 
-function KeybindingRowTitle({ row }: { row: KeybindingRow }) {
+function KeybindingRowTitle({
+  row,
+  plugins,
+}: {
+  row: KeybindingRow;
+  plugins: ReadonlyArray<EnvironmentPlugin>;
+}) {
   const m = useMessages();
   return (
     <Tooltip>
       <TooltipTrigger render={<span className="flex items-center gap-2" />}>
-        {commandLabel(row.command, m)}
+        {commandLabel(row.command, m, plugins)}
         <KeybindingSourceBadge source={row.source} />
       </TooltipTrigger>
       <TooltipPopup side="top">{row.command}</TooltipPopup>
@@ -1070,10 +1094,12 @@ function KeybindingRowTitle({ row }: { row: KeybindingRow }) {
 
 function KeybindingRowWhen({
   row,
+  plugins,
   editor,
   variables,
 }: {
   row: KeybindingRow;
+  plugins: ReadonlyArray<EnvironmentPlugin>;
   editor: KeybindingRowEditor;
   variables: ReadonlyArray<WhenVariableOption>;
 }) {
@@ -1085,7 +1111,9 @@ function KeybindingRowWhen({
         {gt("When", { $context: "heading for keybinding conditions" })}
       </span>
       <WhenClauseControl
-        editLabel={gt("Edit when clause for {command}", { command: commandLabel(row.command, m) })}
+        editLabel={gt("Edit when clause for {command}", {
+          command: commandLabel(row.command, m, plugins),
+        })}
         expression={editor.whenDraftExpression}
         value={editor.whenDraft}
         variables={variables}
@@ -1098,6 +1126,7 @@ function KeybindingRowWhen({
 
 function KeybindingHoverRowMenu(props: {
   row: KeybindingRow;
+  plugins: ReadonlyArray<EnvironmentPlugin>;
   isSaving: boolean;
   onReset: (row: KeybindingRow) => void;
   onUnassign: (row: KeybindingRow) => void;
@@ -1111,20 +1140,30 @@ function KeybindingHoverRowMenu(props: {
 }
 
 function KeybindingSettingsRow(props: KeybindingRowProps) {
-  const { row, isSaving, anchorId, allRows, variables, onSave, onReset, onUnassign, onRemove } =
-    props;
-  const editor = useKeybindingRowEditor({ row, allRows, onSave });
+  const {
+    row,
+    isSaving,
+    anchorId,
+    allRows,
+    plugins,
+    variables,
+    onSave,
+    onReset,
+    onUnassign,
+    onRemove,
+  } = props;
+  const editor = useKeybindingRowEditor({ row, allRows, plugins, onSave });
 
   return (
     <SettingsRow
       id={anchorId}
       className="group/row rounded-none"
-      title={<KeybindingRowTitle row={row} />}
+      title={<KeybindingRowTitle row={row} plugins={plugins} />}
       description={
         row.isUnassigned && !editor.isDirty ? (
           <T>No keyboard shortcut assigned. Click Unassigned to set one.</T>
         ) : (
-          <KeybindingRowWhen row={row} editor={editor} variables={variables} />
+          <KeybindingRowWhen row={row} plugins={plugins} editor={editor} variables={variables} />
         )
       }
       control={
@@ -1132,6 +1171,7 @@ function KeybindingSettingsRow(props: KeybindingRowProps) {
           <KeybindingConflictWarning labels={editor.conflictLabels} />
           <KeybindingHoverRowMenu
             row={row}
+            plugins={plugins}
             isSaving={isSaving}
             onReset={onReset}
             onUnassign={onUnassign}
@@ -1139,6 +1179,7 @@ function KeybindingSettingsRow(props: KeybindingRowProps) {
           />
           <KeybindingKeyControl
             row={row}
+            plugins={plugins}
             editor={editor}
             isSaving={isSaving}
             pillClassName="-mr-1.5"
@@ -1151,9 +1192,11 @@ function KeybindingSettingsRow(props: KeybindingRowProps) {
 
 function useNewKeybindingDraft({
   allRows,
+  plugins,
   onSave,
 }: {
   allRows: ReadonlyArray<KeybindingRow>;
+  plugins: ReadonlyArray<EnvironmentPlugin>;
   onSave: (input: ServerUpsertKeybindingInput) => void;
 }) {
   const m = useMessages();
@@ -1175,8 +1218,9 @@ function useNewKeybindingDraft({
     },
     navigator.platform,
     m,
+    plugins,
   );
-  const commandLabelText = commandDraft ? commandLabel(commandDraft, m) : null;
+  const commandLabelText = commandDraft ? commandLabel(commandDraft, m, plugins) : null;
   const canSave = Boolean(commandDraft) && keyDraft.trim().length > 0 && isWhenDraftValid;
 
   const save = () => {
@@ -1226,6 +1270,7 @@ type NewKeybindingDraft = ReturnType<typeof useNewKeybindingDraft>;
 interface NewKeybindingProps {
   commandOptions: ReadonlyArray<KeybindingCommandOption>;
   allRows: ReadonlyArray<KeybindingRow>;
+  plugins: ReadonlyArray<EnvironmentPlugin>;
   variables: ReadonlyArray<WhenVariableOption>;
   isSaving: boolean;
   onSave: (input: ServerUpsertKeybindingInput) => void;
@@ -1236,11 +1281,13 @@ function NewKeybindingCommandSelect({
   draft,
   commandOptions,
   allRows,
+  plugins,
   className,
 }: {
   draft: NewKeybindingDraft;
   commandOptions: ReadonlyArray<KeybindingCommandOption>;
   allRows: ReadonlyArray<KeybindingRow>;
+  plugins: ReadonlyArray<EnvironmentPlugin>;
   className?: string | undefined;
 }) {
   const gt = useGT();
@@ -1260,9 +1307,11 @@ function NewKeybindingCommandSelect({
     <Combobox
       items={commandOptions}
       defaultOpen
-      itemToStringLabel={(command) => commandLabel(command, m)}
+      itemToStringLabel={(command) => commandLabel(command, m, plugins)}
       filter={(command, query) =>
-        `${command} ${commandLabel(command, m)}`.toLowerCase().includes(query.trim().toLowerCase())
+        `${command} ${commandLabel(command, m, plugins)}`
+          .toLowerCase()
+          .includes(query.trim().toLowerCase())
       }
       autoHighlight
       value={draft.commandDraft || null}
@@ -1273,7 +1322,7 @@ function NewKeybindingCommandSelect({
         render={<SelectButton size="sm" />}
         className={className}
       >
-        {draft.commandDraft ? commandLabel(draft.commandDraft, m) : gt("Command")}
+        {draft.commandDraft ? commandLabel(draft.commandDraft, m, plugins) : gt("Command")}
       </ComboboxTrigger>
       <ComboboxPopup aria-label={gt("Command")} className="w-96">
         <ComboboxSearchInput
@@ -1288,7 +1337,7 @@ function NewKeybindingCommandSelect({
             return (
               <ComboboxItem key={command} value={command}>
                 <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
-                  <span>{commandLabel(command, m)}</span>
+                  <span>{commandLabel(command, m, plugins)}</span>
                   {shortcuts && (
                     <span className="flex shrink-0 flex-col items-end gap-1">
                       {shortcuts.map((shortcut) => (
@@ -1396,8 +1445,8 @@ function NewKeybindingCancelIcon({
 }
 
 function NewKeybindingSettingsRow(props: NewKeybindingProps) {
-  const { commandOptions, allRows, variables, isSaving, onSave, onCancel } = props;
-  const draft = useNewKeybindingDraft({ allRows, onSave });
+  const { commandOptions, allRows, plugins, variables, isSaving, onSave, onCancel } = props;
+  const draft = useNewKeybindingDraft({ allRows, plugins, onSave });
   const gt = useGT();
 
   return (
@@ -1418,6 +1467,7 @@ function NewKeybindingSettingsRow(props: NewKeybindingProps) {
             draft={draft}
             commandOptions={commandOptions}
             allRows={allRows}
+            plugins={plugins}
             className="w-56"
           />
           <KeybindingConflictWarning labels={draft.conflictLabels} />
@@ -1489,15 +1539,40 @@ function keybindingAnchorIds(rows: ReturnType<typeof buildKeybindingRows>) {
   return ids;
 }
 
+function settingsScopePluginProjectIds(
+  scope: ReturnType<typeof useSettingsScope>["scope"],
+  environmentId: EnvironmentId | undefined,
+): ReadonlySet<ProjectId> | null {
+  if (environmentId === undefined) return null;
+  if (scope.kind === "checkout") {
+    return scope.checkout.environmentId === environmentId ? new Set([scope.checkout.id]) : null;
+  }
+  if (scope.kind === "project") {
+    const ids = scope.members
+      .filter((member) => member.environmentId === environmentId)
+      .map((member) => member.id);
+    return ids.length > 0 ? new Set(ids) : null;
+  }
+  return null;
+}
+
 // Cache rows in a separate hook so the compiler does not rebuild them per search keystroke.
 function useKeybindingCatalog() {
   const sendShortcut = useClientSettings((settings) => settings.sendShortcut);
-  const serverKeybindings = useSettingsScope().environment?.serverConfig?.keybindings;
+  const { scope, environment } = useSettingsScope();
+  const serverKeybindings = environment?.serverConfig?.keybindings;
+  const environmentPlugins =
+    environment?.serverConfig?.environmentPlugins ?? EMPTY_ENVIRONMENT_PLUGINS;
+  const plugins = applicableEnvironmentPlugins(
+    environmentPlugins,
+    settingsScopePluginProjectIds(scope, environment?.environmentId),
+  );
   const merged = mergeWithDefaultKeybindings(serverKeybindings ?? []);
   const m = useMessages();
   return {
-    commandOptions: buildKeybindingCommandOptions(merged, m),
-    allRows: buildKeybindingRows(merged, navigator.platform, sendShortcut, m),
+    plugins,
+    commandOptions: buildKeybindingCommandOptions(merged, m, plugins),
+    allRows: buildKeybindingRows(merged, navigator.platform, sendShortcut, m, plugins),
   };
 }
 
@@ -1538,8 +1613,8 @@ export function KeybindingsSettingsPanel() {
     if (searchTargetId.startsWith("keybinding-")) setQuery("");
   }
   const whenVariables = buildWhenVariableOptions();
-  const { commandOptions, allRows } = useKeybindingCatalog();
-  const rows = filterKeybindingRows(allRows, query, m);
+  const { plugins, commandOptions, allRows } = useKeybindingCatalog();
+  const rows = filterKeybindingRows(allRows, query, m, plugins);
   const groups = groupKeybindingRows(rows);
   const anchorIds = keybindingAnchorIds(rows);
 
@@ -1670,6 +1745,7 @@ export function KeybindingsSettingsPanel() {
 
   const rowActions: KeybindingRowActions = {
     allRows,
+    plugins,
     variables: whenVariables,
     onSave: saveKeybinding,
     onReset: resetKeybinding,
@@ -1729,6 +1805,7 @@ export function KeybindingsSettingsPanel() {
             <NewKeybindingSettingsRow
               commandOptions={commandOptions}
               allRows={allRows}
+              plugins={plugins}
               variables={whenVariables}
               isSaving={savingCommand !== null}
               onSave={saveKeybinding}

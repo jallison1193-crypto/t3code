@@ -1,4 +1,7 @@
 import {
+  KeybindingCommand,
+  PLUGIN_COMMAND_PATTERN,
+  PLUGIN_PANEL_COMMAND_PATTERN,
   PluginContribution,
   PluginHooksConfig,
   PluginManifest,
@@ -197,5 +200,64 @@ describe("PluginManifest worker decoding", () => {
     for (const part of ["mcp", "hook", "agent"]) {
       expect(Exit.isSuccess(decodeContribution(part))).toBe(true);
     }
+  });
+});
+
+describe("plugin keybinding command patterns", () => {
+  const decodeKeybindingCommand = Schema.decodeUnknownExit(KeybindingCommand);
+  const decodePluginCommand = Schema.decodeUnknownExit(PLUGIN_COMMAND_PATTERN);
+  const decodePluginPanel = Schema.decodeUnknownExit(PLUGIN_PANEL_COMMAND_PATTERN);
+
+  it.each([
+    "plugin.a.command.b",
+    "plugin.daily-tools.command.standup-notes",
+    `plugin.${"a".repeat(64)}.command.${"b".repeat(64)}`,
+  ])("decodes valid plugin command %s", (command) => {
+    expect(Exit.isSuccess(decodePluginCommand(command))).toBe(true);
+    expect(Exit.isSuccess(decodeKeybindingCommand(command))).toBe(true);
+    expect(Exit.isFailure(decodePluginPanel(command))).toBe(true);
+  });
+
+  it.each([
+    "plugin.a.panel.b",
+    "plugin.pomodoro-1.panel.focus-timer",
+    `plugin.${"a".repeat(64)}.panel.${"b".repeat(64)}`,
+  ])("decodes valid plugin panel %s", (command) => {
+    expect(Exit.isSuccess(decodePluginPanel(command))).toBe(true);
+    expect(Exit.isSuccess(decodeKeybindingCommand(command))).toBe(true);
+    expect(Exit.isFailure(decodePluginCommand(command))).toBe(true);
+  });
+
+  it.each([
+    "plugin.a.b.command.c",
+    "plugin.a.command.b.c",
+    "plugin.a.command.b.command.c",
+    "plugin.Foo.command.bar",
+    "plugin.foo.command.Bar",
+    "plugin..command.bar",
+    "plugin.foo.command.",
+    "plugin..command.",
+    "plugin.-foo.command.bar",
+    "plugin.foo-.command.bar",
+    "plugin.foo--bar.command.baz",
+    `plugin.${"a".repeat(65)}.command.bar`,
+    `plugin.foo.command.${"b".repeat(65)}`,
+    "plugin.a.b.panel.c",
+    "plugin.a.panel.b.c",
+    "plugin.a.panel.b.panel.c",
+    "plugin.Foo.panel.bar",
+    "plugin.foo.panel.Bar",
+    "plugin..panel.bar",
+    "plugin.foo.panel.",
+    "plugin.-foo.panel.bar",
+    "plugin.foo-.panel.bar",
+    "plugin.foo--bar.panel.baz",
+    `plugin.${"a".repeat(65)}.panel.bar`,
+    `plugin.foo.panel.${"b".repeat(65)}`,
+    "plugin.foo.other.bar",
+  ])("rejects invalid plugin keybinding %s", (command) => {
+    expect(Exit.isFailure(decodePluginCommand(command))).toBe(true);
+    expect(Exit.isFailure(decodePluginPanel(command))).toBe(true);
+    expect(Exit.isFailure(decodeKeybindingCommand(command))).toBe(true);
   });
 });

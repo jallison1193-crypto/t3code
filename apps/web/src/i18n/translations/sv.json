@@ -12968,5 +12968,7 @@
   "9df67bcc43a70f4a": "Ta bort godkännande",
   "c85b10dde0506e4a": "Verktygslistan nådde gränsen; endast de första verktygen exponeras.",
   "19f418961c74cfa4": "Hooks (endast Claude-trådar)",
-  "ae00a86c28b0a06a": "MCP-servrar och hooks körs utanför sandlådan. Hooks och agenter fungerar i Claude-trådar. Godkänn bara tillägg du litar på."
+  "ae00a86c28b0a06a": "MCP-servrar och hooks körs utanför sandlådan. Hooks och agenter fungerar i Claude-trådar. Godkänn bara tillägg du litar på.",
+  "fa0c7bb06b656de9": "Tillägg: {plugin}: /{invocation}",
+  "f3b5eb7020154056": "Tillägg: {plugin}: Öppna {panel}"
 }

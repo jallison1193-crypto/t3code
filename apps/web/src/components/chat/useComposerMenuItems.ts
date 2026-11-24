@@ -12,7 +12,6 @@ import { useState } from "react";
 import type {
   EnvironmentId,
   EnvironmentPlugin,
-  PluginId,
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
@@ -27,10 +26,13 @@ import {
   withLinkedComposerPullRequestsFirst,
 } from "@t3tools/shared/composerPullRequestMatches";
 import { formatProviderSkillDisplayName } from "@t3tools/shared/inlineSkills";
+import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
 
 import type { ComposerTrigger } from "../../composer-logic";
 import type { DraftId } from "../../composerDraftStore";
+import { shortcutLabelForCommand } from "../../keybindings";
 import { basenameOfPath } from "../../pierre-icons";
+import { commandForPluginCommand } from "../../pluginKeybindings";
 import {
   getProviderSkillsForSlashMenu,
   getProviderSlashCommandsForSlashMenu,
@@ -59,13 +61,13 @@ import {
   searchSlashCommandItems,
   slashCommandItemsForPromptPosition,
 } from "./composerSlashCommandSearch";
+import { resolvePluginSlashCommands } from "./pluginSlashCommands.logic";
 
 const COMPOSER_PULL_REQUEST_LIST_LIMIT = 99;
 const COMPOSER_PULL_REQUEST_RESULT_LIMIT = 12;
 const EMPTY_PULL_REQUEST_LIST_TARGETS: ReadonlyArray<EnvironmentQueryTarget<PullRequestListInput>> =
   [];
 const EMPTY_ENVIRONMENT_PLUGINS: ReadonlyArray<EnvironmentPlugin> = [];
-const BUILT_IN_SLASH_COMMAND_NAMES = new Set(["model", "side", "btw", "clear", "compact"]);
 
 /** Builds the @, /, $ and # suggestion lists, running the searches each trigger needs. */
 export function useComposerMenuItems({
@@ -144,9 +146,9 @@ export function useComposerMenuItems({
   const environmentIdentities = useEnvironmentIdentities();
   const environmentMachines = useEnvironmentMachines();
   const offersMachines = useAtomValue(offersLinkedEnvironmentsAtom(environmentId));
-  const environmentPlugins =
-    useAtomValue(serverEnvironment.configValueAtom(environmentId))?.environmentPlugins ??
-    EMPTY_ENVIRONMENT_PLUGINS;
+  const environmentConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
+  const environmentPlugins = environmentConfig?.environmentPlugins ?? EMPTY_ENVIRONMENT_PLUGINS;
+  const environmentKeybindings = environmentConfig?.keybindings ?? DEFAULT_RESOLVED_KEYBINDINGS;
   const mentionableEnvironments = environmentIdentities.map((identity) => ({
     ...identity,
     machine: environmentMachines.get(identity.environmentId) ?? ("server" as const),
@@ -335,51 +337,31 @@ export function useComposerMenuItems({
           (item.command.name !== "compact" || compactSlashCommandAvailable) &&
           (item.command.name !== "clear" || !freshSessionAvailable),
       );
-      const pluginCommandsByKey = new Map<
-        string,
-        {
-          readonly pluginId: PluginId;
-          readonly pluginName: string;
-          readonly commandName: PluginId;
-          readonly description?: string | undefined;
-          readonly argumentHint?: string | undefined;
-        }
-      >();
-      const applicablePlugins = [
-        ...environmentPlugins.filter((plugin) => plugin.projectId === undefined),
-        ...(activeProjectId === null
-          ? []
-          : environmentPlugins.filter((plugin) => plugin.projectId === activeProjectId)),
-      ];
-      for (const plugin of applicablePlugins) {
-        for (const command of plugin.commands ?? []) {
-          pluginCommandsByKey.set(`${plugin.id}:${command.name}`, {
-            pluginId: plugin.id,
-            pluginName: plugin.displayName ?? plugin.id,
-            commandName: command.name,
-            description: command.description,
-            argumentHint: command.argumentHint,
-          });
-        }
-      }
-      const pluginNameCounts = new Map<string, number>();
-      for (const entry of pluginCommandsByKey.values()) {
-        pluginNameCounts.set(entry.commandName, (pluginNameCounts.get(entry.commandName) ?? 0) + 1);
-      }
-      const pluginSlashCommandItems = [...pluginCommandsByKey.values()].map((entry) => {
-        const useShort =
-          (pluginNameCounts.get(entry.commandName) ?? 0) === 1 &&
-          !BUILT_IN_SLASH_COMMAND_NAMES.has(entry.commandName);
-        const invocation = useShort ? entry.commandName : `${entry.pluginId}:${entry.commandName}`;
+      const pluginSlashCommandItems = resolvePluginSlashCommands(
+        environmentPlugins,
+        activeProjectId,
+      ).map((entry) => {
+        const shortcutLabel = shortcutLabelForCommand(
+          environmentKeybindings,
+          commandForPluginCommand(entry.pluginId, entry.commandName),
+          {
+            context: {
+              composerFocus: true,
+              editableFocus: true,
+              terminalFocus: false,
+            },
+          },
+        );
         return {
           id: `plugin-slash-command:${entry.pluginId}:${entry.commandName}`,
           type: "plugin-slash-command" as const,
           pluginId: entry.pluginId,
           pluginName: entry.pluginName,
           commandName: entry.commandName,
-          invocation,
+          invocation: entry.invocation,
           ...(entry.argumentHint !== undefined ? { argumentHint: entry.argumentHint } : {}),
-          label: `/${invocation}`,
+          ...(shortcutLabel !== null ? { shortcutLabel } : {}),
+          label: `/${entry.invocation}`,
           description: entry.description ?? "",
         };
       });

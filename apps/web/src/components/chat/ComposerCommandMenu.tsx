@@ -32,6 +32,7 @@ import { type ComposerSlashCommand, type ComposerTriggerKind } from "../../compo
 import { cn } from "~/lib/utils";
 import { Badge } from "../ui/badge";
 import { Command, CommandGroup, CommandItem, CommandList } from "../ui/command";
+import { Kbd } from "../ui/kbd";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 import { PierreEntryIcon } from "./PierreEntryIcon";
@@ -72,6 +73,7 @@ export type ComposerCommandItem =
       commandName: PluginId;
       invocation: string;
       argumentHint?: string | undefined;
+      shortcutLabel?: string | undefined;
       label: string;
       description: string;
     }
@@ -311,8 +313,9 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
           <TooltipPopup>{props.item.description}</TooltipPopup>
         </Tooltip>
         {props.item.type === "plugin-slash-command" ? (
-          <span className="ms-auto shrink-0 text-xs text-secondary-label">
-            {props.item.pluginName}
+          <span className="ms-auto flex shrink-0 items-center gap-2">
+            <span className="text-xs text-secondary-label">{props.item.pluginName}</span>
+            {props.item.shortcutLabel ? <Kbd>{props.item.shortcutLabel}</Kbd> : null}
           </span>
         ) : null}
         {skillSourceKind ? (

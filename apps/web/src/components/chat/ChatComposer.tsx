@@ -303,6 +303,7 @@ import { ComposerControlsBar } from "./ComposerControlsBar";
 import { composerCommandKeyHandler } from "./composerCommandKey";
 import { promptSuggestionToAccept, usePromptSuggestion } from "./usePromptSuggestion";
 import { useFreshSessionArmed } from "./freshSessionArms";
+import { applyPluginCommandShortcut } from "./pluginSlashCommands.logic";
 
 function consumePasteAsTextShortcut(deadline: { current: number }): boolean {
   const armed = Date.now() <= deadline.current;
@@ -320,6 +321,7 @@ export interface ChatComposerHandle {
     text: string,
     options?: { ensureLeadingBoundary?: boolean; clipboardData?: DataTransfer },
   ) => boolean;
+  applyPluginCommand: (invocation: string) => boolean;
   pasteTextAtEnd: (text: string, options?: { bypassAutoAttachment?: boolean }) => boolean;
   citeAssistantText: (
     citation: AssistantCitation,
@@ -2951,6 +2953,26 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   };
   const insertComposerTextAtEndStable = useStableCallback(insertComposerTextAtEnd);
 
+  const applyPluginCommand: ChatComposerHandle["applyPluginCommand"] = (invocation) => {
+    if (pendingUserInputs.length > 0 || projectSelectionRequired || speechInput.freezesEditor) {
+      return false;
+    }
+    const current = promptRef.current;
+    const next = applyPluginCommandShortcut(current, invocation);
+    const applied = applyPromptReplacement(0, current.length, next.value, {
+      expectedText: current,
+      expandedCursorAfterReplace: next.cursor,
+    });
+    if (applied) {
+      setComposerHighlightedItemId(null);
+      if (isComposerCollapsedMobile) {
+        expandMobileComposer();
+      }
+    }
+    return applied;
+  };
+  const applyPluginCommandStable = useStableCallback(applyPluginCommand);
+
   const insertComposerFolders = async (
     folders: File[],
     target: FolderDropTarget,
@@ -3327,6 +3349,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         countPreparingComposerImages(attachmentTargetKey) > 0 ||
         pendingDraftWork.has(attachmentTargetKey),
       insertTextAtEnd: insertComposerTextAtEndStable,
+      applyPluginCommand: applyPluginCommandStable,
       pasteTextAtEnd: (text: string, options) => {
         if (speechInput.freezesEditor) return false;
         const shortcutArmed = consumePasteAsTextShortcut(pasteAsTextShortcutUntilRef);
@@ -3550,6 +3573,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       setComposerDraftReplyTo,
       insertComposerTextStable,
       insertComposerTextAtEndStable,
+      applyPluginCommandStable,
       promptRef,
       composerImagesRef,
       composerFilesRef,

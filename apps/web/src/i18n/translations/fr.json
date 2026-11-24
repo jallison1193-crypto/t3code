@@ -12961,5 +12961,7 @@
   "9df67bcc43a70f4a": "Retirer l'approbation",
   "c85b10dde0506e4a": "La liste d'outils a atteint la limite ; seuls les premiers outils sont exposés.",
   "19f418961c74cfa4": "Hooks (fils Claude uniquement)",
-  "ae00a86c28b0a06a": "Les serveurs MCP et les hooks s'exécutent hors du bac à sable. Les hooks et les agents fonctionnent dans les fils Claude. N'approuvez que les plugins de confiance."
+  "ae00a86c28b0a06a": "Les serveurs MCP et les hooks s'exécutent hors du bac à sable. Les hooks et les agents fonctionnent dans les fils Claude. N'approuvez que les plugins de confiance.",
+  "fa0c7bb06b656de9": "Plugin : {plugin} : /{invocation}",
+  "f3b5eb7020154056": "Plugin : {plugin} : Ouvrir {panel}"
 }

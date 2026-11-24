@@ -1,6 +1,7 @@
 import {
   STATIC_KEYBINDING_COMMANDS,
   type ClientSettings,
+  type EnvironmentPlugin,
   type KeybindingCommand,
   type KeybindingShortcut,
   type KeybindingWhenNode,
@@ -23,6 +24,13 @@ import {
   shortcutKeyFromEvent,
 } from "../../keybindings";
 import { isMacPlatform } from "../../lib/utils";
+import {
+  commandForPluginCommand,
+  commandForPluginPanel,
+  pluginCommandFromKeybinding,
+  pluginPanelFromKeybinding,
+} from "../../pluginKeybindings";
+import { resolveSlashCommandsFromApplicablePlugins } from "../chat/pluginSlashCommands.logic";
 import { METRIC_OPTIONS, WINDOW_OPTIONS } from "../usage/usageShortcuts";
 
 // Rank every usage command; mixing rank and alphabetical comparisons makes order input-dependent.
@@ -213,6 +221,7 @@ export function keybindingConflictLabels(
   input: { readonly rowId: string; readonly key: string; readonly when: string },
   platform = navigator.platform,
   resolve: MessageResolver = m,
+  plugins?: ReadonlyArray<EnvironmentPlugin>,
 ): ReadonlyArray<string> {
   if (input.key.trim().length === 0) return [];
   const shortcut = parseKeybindingShortcut(input.key);
@@ -226,7 +235,7 @@ export function keybindingConflictLabels(
       shortcutConflictKey(candidate.binding.shortcut, platform) === conflictKey &&
       conflictsWithWhen(candidate.when, input.when)
     ) {
-      conflicts.push(commandLabel(candidate.command, resolve));
+      conflicts.push(commandLabel(candidate.command, resolve, plugins));
     }
   }
   return [...new Set(conflicts)].toSorted();
@@ -254,6 +263,7 @@ const KEYBINDING_GROUPS = [
     prefixes: ["theme", "appearance", "themeEditor"],
   },
   { id: "scripts", title: msg("Project scripts"), prefixes: ["script"] },
+  { id: "plugins", title: msg("Plugins"), prefixes: ["plugin"] },
 ] as const;
 const OTHER_KEYBINDING_GROUP = {
   id: "other",
@@ -289,6 +299,7 @@ export function buildKeybindingRows(
   platform = navigator.platform,
   sendShortcut: ClientSettings["sendShortcut"] = "enter",
   resolve: MessageResolver = m,
+  plugins?: ReadonlyArray<EnvironmentPlugin>,
 ): ReadonlyArray<KeybindingRow> {
   // Multiline sending can use either shortcut; settings have no active composer prompt.
   const modifierModes =
@@ -345,6 +356,7 @@ export function buildKeybindingRows(
       },
       platform,
       resolve,
+      plugins,
     );
     return conflicts.length > 0
       ? Object.assign({}, row, { conflicts: [...new Set(conflicts)].toSorted() })
@@ -364,13 +376,14 @@ export function filterKeybindingRows(
   rows: ReadonlyArray<KeybindingRow>,
   query: string,
   resolve: MessageResolver = m,
+  plugins?: ReadonlyArray<EnvironmentPlugin>,
 ): ReadonlyArray<KeybindingRow> {
   const normalizedQuery = query.trim().toLowerCase();
   if (normalizedQuery.length === 0) return rows;
   return rows.filter((row) => {
     return (
       row.command.toLowerCase().includes(normalizedQuery) ||
-      commandLabel(row.command, resolve).toLowerCase().includes(normalizedQuery) ||
+      commandLabel(row.command, resolve, plugins).toLowerCase().includes(normalizedQuery) ||
       row.key.toLowerCase().includes(normalizedQuery) ||
       row.when.toLowerCase().includes(normalizedQuery) ||
       row.source.toLowerCase().includes(normalizedQuery)
@@ -427,13 +440,24 @@ export function buildWhenVariableOptions(): ReadonlyArray<WhenVariableOption> {
 export function buildKeybindingCommandOptions(
   keybindings: ResolvedKeybindingsConfig,
   resolve: MessageResolver = m,
+  plugins?: ReadonlyArray<EnvironmentPlugin>,
 ): ReadonlyArray<KeybindingCommandOption> {
   const commands = new Set<KeybindingCommand>(STATIC_KEYBINDING_COMMANDS);
   for (const binding of keybindings) {
     commands.add(binding.command);
   }
+  for (const plugin of plugins ?? []) {
+    for (const command of plugin.commands ?? []) {
+      const keybindingCommand = commandForPluginCommand(plugin.id, command.name);
+      if (keybindingCommand) commands.add(keybindingCommand);
+    }
+    for (const panel of plugin.panels ?? []) {
+      const keybindingCommand = commandForPluginPanel(plugin.id, panel.id);
+      if (keybindingCommand) commands.add(keybindingCommand);
+    }
+  }
   return [...commands].toSorted((left, right) =>
-    compareCommands(left, right, (command) => commandLabel(command, resolve)),
+    compareCommands(left, right, (command) => commandLabel(command, resolve, plugins)),
   );
 }
 
@@ -521,7 +545,23 @@ const LATE_COMMAND_LABELS: Partial<Record<KeybindingCommand, string>> = {
   "preview.find": msg("Preview: Find on Page"),
 };
 
-export function commandLabel(command: KeybindingCommand, resolve: MessageResolver = m): string {
+function findPluginById(
+  plugins: ReadonlyArray<EnvironmentPlugin> | undefined,
+  pluginId: string,
+): EnvironmentPlugin | undefined {
+  if (!plugins) return undefined;
+  for (let index = plugins.length - 1; index >= 0; index -= 1) {
+    const candidate = plugins[index];
+    if (candidate?.id === pluginId) return candidate;
+  }
+  return undefined;
+}
+
+export function commandLabel(
+  command: KeybindingCommand,
+  resolve: MessageResolver = m,
+  plugins?: ReadonlyArray<EnvironmentPlugin>,
+): string {
   const label = COMMAND_LABELS[command];
   if (label) return resolve(label);
   const usageLabel = USAGE_COMMAND_LABELS[command as keyof typeof USAGE_COMMAND_LABELS];
@@ -539,6 +579,42 @@ export function commandLabel(command: KeybindingCommand, resolve: MessageResolve
     return resolve(
       msg("Run Script: {name}", {
         name: titleCaseCommandSegment(raw.slice("script.".length, -".run".length)),
+      }),
+    );
+  }
+  const pluginCommand = pluginCommandFromKeybinding(raw);
+  if (pluginCommand) {
+    const matchedPlugin = findPluginById(plugins, pluginCommand.pluginId);
+    const matchedCommand = plugins
+      ? resolveSlashCommandsFromApplicablePlugins(plugins).find(
+          (entry) =>
+            entry.pluginId === pluginCommand.pluginId &&
+            entry.commandName === pluginCommand.commandName,
+        )
+      : undefined;
+    const pluginName = matchedPlugin
+      ? (matchedPlugin.displayName ?? matchedPlugin.id)
+      : titleCaseCommandSegment(pluginCommand.pluginId);
+    const invocation = matchedCommand?.invocation ?? pluginCommand.commandName;
+    return resolve(
+      msg("Plugin: {plugin}: /{invocation}", {
+        plugin: pluginName,
+        invocation,
+      }),
+    );
+  }
+  const pluginPanel = pluginPanelFromKeybinding(raw);
+  if (pluginPanel) {
+    const matchedPlugin = findPluginById(plugins, pluginPanel.pluginId);
+    const matchedPanel = matchedPlugin?.panels?.find((panel) => panel.id === pluginPanel.panelId);
+    const pluginName = matchedPlugin
+      ? (matchedPlugin.displayName ?? matchedPlugin.id)
+      : titleCaseCommandSegment(pluginPanel.pluginId);
+    const panelName = matchedPanel?.title ?? titleCaseCommandSegment(pluginPanel.panelId);
+    return resolve(
+      msg("Plugin: {plugin}: Open {panel}", {
+        plugin: pluginName,
+        panel: panelName,
       }),
     );
   }

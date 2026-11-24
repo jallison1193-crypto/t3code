@@ -12956,5 +12956,7 @@
   "9df67bcc43a70f4a": "Quitar aprobación",
   "c85b10dde0506e4a": "La lista de herramientas alcanzó el límite; solo se exponen las primeras.",
   "19f418961c74cfa4": "Hooks (solo hilos de Claude)",
-  "ae00a86c28b0a06a": "Los servidores MCP y los hooks se ejecutan fuera del entorno aislado. Los hooks y agentes funcionan en hilos de Claude. Aprueba solo los plugins en los que confíes."
+  "ae00a86c28b0a06a": "Los servidores MCP y los hooks se ejecutan fuera del entorno aislado. Los hooks y agentes funcionan en hilos de Claude. Aprueba solo los plugins en los que confíes.",
+  "fa0c7bb06b656de9": "Plugin: {plugin}: /{invocation}",
+  "f3b5eb7020154056": "Plugin: {plugin}: Abrir {panel}"
 }
