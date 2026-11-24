@@ -1889,8 +1889,9 @@ const buildEnvironmentPlugin = (
   }
   return {
     id: scanned.plugin.id,
-    // Omit displayName when there are no commands so CSS/panel/worker snapshots stay compact.
-    ...(activeCommands !== undefined && scanned.plugin.displayName !== undefined
+    // Only commands and panels show the name (menus, keybinding labels); CSS-only snapshots stay compact.
+    ...((activeCommands !== undefined || activePanels !== undefined) &&
+    scanned.plugin.displayName !== undefined
       ? { displayName: scanned.plugin.displayName }
       : {}),
     css: scanned.css ?? "",

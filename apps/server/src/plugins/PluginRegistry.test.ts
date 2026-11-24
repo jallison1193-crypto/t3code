@@ -661,6 +661,15 @@ describe("PluginRegistry", () => {
           assert.strictEqual(refusedOff.reason, "not_found");
 
           yield* registry.setEnabled("pomodoro", true);
+          const active = yield* registry.streamChanges.pipe(Stream.take(1), Stream.runCollect);
+          assert.deepEqual(Array.from(active)[0], [
+            {
+              id: "pomodoro",
+              displayName: "Pomodoro",
+              css: "",
+              panels: [{ id: "timer", title: "Pomodoro Timer" }],
+            },
+          ]);
           const resolved = yield* registry.resolvePanelEntry("pomodoro", "timer");
           assert.strictEqual(
             resolved,
@@ -806,7 +815,12 @@ describe("PluginRegistry", () => {
             Queue.offer(seen, active),
           ).pipe(Effect.forkScoped);
           assert.deepEqual(yield* Queue.take(seen), [
-            { id: "notes-panel", css: "", panels: [{ id: "notes", title: "Notes" }] },
+            {
+              id: "notes-panel",
+              displayName: "Notes",
+              css: "",
+              panels: [{ id: "notes", title: "Notes" }],
+            },
           ]);
 
           const second = yield* registry.write({
@@ -821,7 +835,12 @@ describe("PluginRegistry", () => {
           assert.isTrue(yield* fs.exists(path.join(pluginsDir, "notes-panel", "board.html")));
           assert.isTrue(yield* fs.exists(unlistedPath));
           assert.deepEqual(yield* Queue.take(seen), [
-            { id: "notes-panel", css: "", panels: [{ id: "board", title: "Board" }] },
+            {
+              id: "notes-panel",
+              displayName: "Notes",
+              css: "",
+              panels: [{ id: "board", title: "Board" }],
+            },
           ]);
 
           const restored = yield* registry.restore("notes-panel", second.before!);
@@ -834,7 +853,12 @@ describe("PluginRegistry", () => {
             { id: "notes", title: "Notes", html: "<html><body>v1</body></html>" },
           ]);
           assert.deepEqual(yield* Queue.take(seen), [
-            { id: "notes-panel", css: "", panels: [{ id: "notes", title: "Notes" }] },
+            {
+              id: "notes-panel",
+              displayName: "Notes",
+              css: "",
+              panels: [{ id: "notes", title: "Notes" }],
+            },
           ]);
         }),
       ),
