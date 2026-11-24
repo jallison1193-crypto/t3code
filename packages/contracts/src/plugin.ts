@@ -213,6 +213,8 @@ export const ServerSetPluginEnabledInput = Schema.Struct({
   id: TrimmedNonEmptyString,
   enabled: Schema.Boolean,
   approveWorker: Schema.optional(Schema.Boolean),
+  /** The revision the user reviewed; the call fails if the plugin changed since. */
+  revision: Schema.optional(TrimmedNonEmptyString),
 });
 export type ServerSetPluginEnabledInput = typeof ServerSetPluginEnabledInput.Type;
 
@@ -247,6 +249,8 @@ export type ServerRestorePluginRevisionResult = typeof ServerRestorePluginRevisi
 
 export const ServerApprovePluginWorkerInput = Schema.Struct({
   id: TrimmedNonEmptyString,
+  /** The revision the user reviewed; the call fails if the plugin changed since. */
+  revision: Schema.optional(TrimmedNonEmptyString),
 });
 export type ServerApprovePluginWorkerInput = typeof ServerApprovePluginWorkerInput.Type;
 
@@ -349,6 +353,7 @@ export class PluginOperationError extends Schema.TaggedError<PluginOperationErro
       "invalid_folder",
       "worker_not_running",
       "worker_run_failed",
+      "changed",
       "has_problem",
       "settings_failed",
       "archive_failed",
@@ -385,6 +390,8 @@ export class PluginOperationError extends Schema.TaggedError<PluginOperationErro
         return `Worker for plugin "${id}" is not running.`;
       case "worker_run_failed":
         return `Worker run for plugin "${id}" failed.`;
+      case "changed":
+        return `Plugin "${id}" changed since you reviewed it. Check what it can do now and try again.`;
       case "has_problem":
         return this.operation === "setEnabled"
           ? `Plugin "${id}" has a problem and cannot be enabled.`

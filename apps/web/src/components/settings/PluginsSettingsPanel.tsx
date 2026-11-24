@@ -290,6 +290,7 @@ function EnvironmentPluginsSection({
                     <PluginWorkerDetails
                       environmentId={environmentId}
                       pluginId={plugin.id}
+                      revision={plugin.revision}
                       worker={plugin.worker}
                       hasProblem={hasProblem}
                       rowBusy={busy}
@@ -355,12 +356,14 @@ function EnvironmentPluginsSection({
 function PluginWorkerDetails({
   environmentId,
   pluginId,
+  revision,
   worker,
   hasProblem,
   rowBusy,
 }: {
   readonly environmentId: EnvironmentId;
   readonly pluginId: string;
+  readonly revision: string | undefined;
   readonly worker: InstalledPluginWorker;
   readonly hasProblem: boolean;
   readonly rowBusy: boolean;
@@ -440,7 +443,7 @@ function PluginWorkerDetails({
     try {
       const result = await approveWorker({
         environmentId,
-        input: { id: pluginId },
+        input: { id: pluginId, ...(revision !== undefined ? { revision } : {}) },
       });
       reportError(result, gt("Worker not approved"), gt("Could not approve plugin worker."));
     } finally {

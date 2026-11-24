@@ -225,10 +225,11 @@ export class PluginRegistry extends Context.Service<
     readonly setEnabled: (
       id: string,
       enabled: boolean,
-      options?: { readonly approveWorker?: boolean },
+      options?: { readonly approveWorker?: boolean; readonly revision?: string },
     ) => Effect.Effect<ServerSetPluginEnabledResult, PluginOperationError>;
     readonly approveWorker: (
       id: string,
+      revision?: string,
     ) => Effect.Effect<ServerApprovePluginWorkerResult, PluginOperationError>;
     readonly setWorkerFolder: (
       id: string,
@@ -1873,6 +1874,13 @@ const make = Effect.gen(function* () {
             reason: "has_problem",
           });
         }
+        if (options?.revision !== undefined && options.revision !== target.revision) {
+          return yield* new PluginOperationError({
+            pluginId: id,
+            operation: "setEnabled",
+            reason: "changed",
+          });
+        }
         const targetSpec = current.workerSpecs.find((spec) => spec.pluginId === id);
         yield* settings
           .updateSettings({
@@ -1908,7 +1916,7 @@ const make = Effect.gen(function* () {
 
   const approveWorker: PluginRegistry["Service"]["approveWorker"] = Effect.fn(
     "PluginRegistry.approveWorker",
-  )(function* (id) {
+  )(function* (id, revision) {
     return yield* mutationSemaphore.withPermits(1)(
       Effect.gen(function* () {
         if (!isPluginId(id)) {
@@ -1932,6 +1940,13 @@ const make = Effect.gen(function* () {
             pluginId: id,
             operation: "approveWorker",
             reason: "has_problem",
+          });
+        }
+        if (revision !== undefined && revision !== target.revision) {
+          return yield* new PluginOperationError({
+            pluginId: id,
+            operation: "approveWorker",
+            reason: "changed",
           });
         }
         const targetSpec = current.workerSpecs.find((spec) => spec.pluginId === id);

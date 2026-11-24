@@ -829,7 +829,21 @@ describe("PluginRegistry", () => {
             },
           });
           assert.strictEqual(folderEdit.plugin.worker?.status, "needs-approval");
-          const approvedAfterFolder = yield* registry.approveWorker("vault-sync");
+          // Approving the revision the user reviewed fails once the plugin has moved past it.
+          const staleApprove = yield* registry
+            .approveWorker("vault-sync", codeEdit.after)
+            .pipe(Effect.flip);
+          assert.strictEqual(staleApprove.reason, "changed");
+          const staleInstall = yield* registry
+            .setEnabled("vault-sync", true, { approveWorker: true, revision: codeEdit.after })
+            .pipe(Effect.flip);
+          assert.strictEqual(staleInstall.reason, "changed");
+          assert.strictEqual(
+            (yield* registry.list).plugins.find((plugin) => plugin.id === "vault-sync")?.worker
+              ?.status,
+            "needs-approval",
+          );
+          const approvedAfterFolder = yield* registry.approveWorker("vault-sync", folderEdit.after);
           assert.notStrictEqual(approvedAfterFolder.plugin.worker?.status, "needs-approval");
 
           // Enabling network drops approval.

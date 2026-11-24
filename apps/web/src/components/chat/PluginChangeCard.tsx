@@ -153,7 +153,12 @@ export function PluginChangeCard({
         case "install": {
           const result = await setPluginEnabled({
             environmentId,
-            input: { id: change.pluginId, enabled: true, approveWorker: true },
+            input: {
+              id: change.pluginId,
+              enabled: true,
+              approveWorker: true,
+              revision: change.after,
+            },
           });
           reportError(result, gt("Plugin not updated"), gt("Could not update plugin state."));
           break;
@@ -190,7 +195,7 @@ export function PluginChangeCard({
         case "approve": {
           const result = await approvePluginWorker({
             environmentId,
-            input: { id: change.pluginId },
+            input: { id: change.pluginId, revision: change.after },
           });
           reportError(result, gt("Worker not approved"), gt("Could not approve plugin worker."));
           break;

@@ -70,6 +70,7 @@ A plugin with `worker` in `.t3-plugin/plugin.json` runs background ES module cod
 
 - **Approval and folders:** Install enables the plugin and approves its declared powers (`folders`, `network`, and `everyMinutes`). If an edit changes those powers, the worker stops until you click **Approve** on the chat card or in **Settings → Plugins**. Set each declared folder path on the server machine in **Settings → Plugins**; UNC paths are refused and symlinks are resolved before granting access.
 - **Seat belt:** Node's permission model keeps trusted plugin code out of other folders, and blocks network access when the server runtime supports `--allow-net`. On runtimes that cannot block network access, Settings and the install card note that network access is not blocked. Only turn on plugins you trust.
+- **Worker code:** `worker.mjs` default-exports a function that receives `t3`: `t3.onRun(fn)` registers the run handler (called with `{ reason }`: `start`, `schedule`, or `manual`), `t3.folders` maps folder ids to granted paths, `t3.state.get()`/`set()` saves up to 64 KB, `t3.projects.list()` and `t3.projects.readMemory(id)` read projects and their memory, and `t3.log()` and `console` write to the log. A run times out after 5 minutes, and runs never overlap.
 - **Controls and logs:** **Settings → Plugins** shows worker status, **Run now**, and a **Log** disclosure with the last 32 KB of output. A worker restarts with backoff up to 3 times on crash; turning the plugin off and on resets the crash count.
 
 ## Enabling, editing, and uninstalling
@@ -86,5 +87,5 @@ New plugins start **off**. Open **Settings → Plugins** to turn each plugin on 
 You can ask an agent to create or update a CSS, panel, or worker plugin for you.
 
 - A **new** plugin is saved disabled and shows a card in the chat listing what it adds, with **Install** to turn it on and **Cancel** to archive it. After **Install**, the card offers **Turn off**; after **Cancel**, it offers **Install anyway**.
-- An **edit** to an existing plugin saves right away (and applies live if the plugin is enabled), with **Undo** on its card and **Restore** after undoing. If an edit widens worker powers, the card also shows **Approve** next to **Undo**.
+- An **edit** to an existing plugin saves right away (and applies live if the plugin is enabled), with **Undo** on its card and **Restore** after undoing. If an edit changes worker powers, the worker stops and the card also shows **Approve** next to **Undo**.
 - Each write and restore snapshots the plugin's manifest, CSS, panel HTML, and worker files under `<stateDir>/plugins-history/<id>/`, keeping the newest 20 revisions per plugin.
