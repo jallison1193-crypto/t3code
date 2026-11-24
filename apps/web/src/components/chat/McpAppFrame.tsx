@@ -2,17 +2,13 @@ import type { EnvironmentId, ThreadId, TurnItemId } from "@t3tools/contracts";
 import {
   makeMcpAppHost,
   McpAppHostRefusal,
-  mcpAppStyleVariables,
   mcpResourceBytes,
   type McpAppCallToolResult,
   type McpAppDisplayMode,
   type McpAppHost,
-  type McpAppHostContext,
 } from "@t3tools/client-runtime/mcp-apps";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import {
   clampMcpAppHeight,
-  MCP_APP_COLOR_SCHEME_PARAM,
   MCP_APP_DEFAULT_HEIGHT,
   MCP_APP_MAX_HEIGHT,
   mcpAppAllowAttribute,
@@ -24,13 +20,11 @@ import { Minimize2Icon } from "lucide-react";
 import { useEffect, useRef, useState, type FocusEvent, type ToggleEvent } from "react";
 import { flushSync } from "react-dom";
 
-import { useLongLivedAssetUrl } from "~/assets/longLivedAssetUrls";
 import { APP_VERSION } from "~/branding";
 import { isConfirmDialogActive, requestConfirmDialog } from "~/confirmDialog";
 import { useHtmlRenderTheme } from "~/hooks/useHtmlRenderTheme";
 import { useStableCallback } from "~/hooks/useStableCallback";
 import { Button } from "~/components/ui/button";
-import { isElectron } from "~/env";
 import { m } from "~/i18n/messages";
 import { cn } from "~/lib/utils";
 import { useEnvironmentQuery } from "~/state/query";
@@ -39,16 +33,12 @@ import { mcpAppEnvironment } from "~/state/mcpApps";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { observeResize } from "~/lib/observeResize";
 import { useNativeTitlebarHeight } from "~/lib/windowControlsOverlay";
-
-const commandFailure = (result: {
-  readonly cause: Parameters<typeof squashAtomCommandFailure>[0]["cause"];
-}) => {
-  const error = squashAtomCommandFailure(result);
-  return new McpAppHostRefusal({
-    message:
-      error instanceof Error && error.message.trim() !== "" ? error.message : "Request failed.",
-  });
-};
+import {
+  buildMcpAppHostContext,
+  openSandboxedAppLink,
+  SandboxedAppFrame,
+  sandboxedAppCommandFailure,
+} from "./SandboxedAppFrame";
 
 const fullscreenSupported =
   typeof HTMLElement !== "undefined" && "popover" in HTMLElement.prototype;
@@ -99,7 +89,6 @@ export function McpAppFrame(props: {
   const boxRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [height, setHeight] = useState(MCP_APP_DEFAULT_HEIGHT);
-  const [navigatedAway, setNavigatedAway] = useState(false);
   const [displayMode, setDisplayMode] = useState<McpAppDisplayMode>("inline");
   const [closed, setClosed] = useState(false);
   const [documentGeneration, setDocumentGeneration] = useState(0);
@@ -128,15 +117,6 @@ export function McpAppFrame(props: {
     disposition: "inline" as const,
     renderIntent: "mcp-app" as const,
   };
-  // The frame keeps its first URL: a re-minted one would reload the app.
-  const [src, setSrc] = useState<string | null>(null);
-  const asset = useLongLivedAssetUrl(src === null ? props.environmentId : null, resource);
-  if (src === null && asset._tag === "Success") {
-    // The app paints before `ui/initialize`, so it reads the initial scheme from its URL.
-    const url = new URL(asset.url);
-    url.searchParams.set(MCP_APP_COLOR_SCHEME_PARAM, theme.appearance);
-    setSrc(url.toString());
-  }
 
   const detail = useTurnItemDetail({
     environmentId: props.environmentId,
@@ -180,6 +160,7 @@ export function McpAppFrame(props: {
     updateModelContext,
     displayMode,
     toolDefinition,
+    toolCall,
   }));
   const hostRef = useRef<McpAppHost | null>(null);
 
@@ -216,27 +197,11 @@ export function McpAppFrame(props: {
     }
   };
 
-  // Navigation retains the frame window; reject second loads to prevent impersonation.
-  const loads = useRef({ generation: 0, count: 0 });
-  const onFrameLoad = () => {
-    if (loads.current.generation !== documentGeneration) {
-      loads.current = { generation: documentGeneration, count: 0 };
-    }
-    loads.current.count += 1;
-    if (loads.current.count > 1) {
-      hostRef.current?.dispose();
-      setNavigatedAway(true);
-    }
-  };
-
-  // The host belongs to this frame element, which is replaced when the document is reopened.
-  const attachFrame = (frame: HTMLIFrameElement) => {
-    frameRef.current = frame;
-    const hostContext = (): McpAppHostContext => {
+  const createHost = ({ post }: { readonly post: (message: unknown) => void }) => {
+    const hostContext = () => {
       const current = readLive();
-      return {
-        theme: current.theme.appearance,
-        styles: { variables: mcpAppStyleVariables(current.theme.variables) },
+      return buildMcpAppHostContext({
+        theme: current.theme,
         displayMode: current.displayMode,
         availableDisplayModes: fullscreenSupported ? ["inline", "fullscreen"] : ["inline"],
         containerDimensions:
@@ -246,19 +211,8 @@ export function McpAppFrame(props: {
                 height: frameRef.current?.clientHeight || window.innerHeight,
               }
             : { width: current.width, maxHeight: MCP_APP_MAX_HEIGHT },
-        platform: isElectron ? "desktop" : "web",
-        locale: navigator.language,
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        userAgent: `t3-code/${APP_VERSION}`,
-        deviceCapabilities: {
-          touch: window.matchMedia("(pointer: coarse)").matches,
-          hover: window.matchMedia("(hover: hover)").matches,
-        },
-        safeAreaInsets: { top: 0, right: 0, bottom: 0, left: 0 },
-        ...(current.toolDefinition === undefined
-          ? {}
-          : { toolInfo: { tool: current.toolDefinition } }),
-      };
+        toolDefinition: current.toolDefinition,
+      });
     };
     // Return inline so approvals stay visible above the app.
     const ask = async (message: string) => {
@@ -269,7 +223,6 @@ export function McpAppFrame(props: {
       }
       return approved;
     };
-    const target = () => frameRef.current?.contentWindow ?? null;
     const scope = () => {
       const { environmentId, threadId, itemId } = readLive().props;
       return { environmentId, input: { threadId, itemId } };
@@ -277,13 +230,12 @@ export function McpAppFrame(props: {
     const host = makeMcpAppHost({
       app,
       hostVersion: APP_VERSION,
-      // Opaque origins require "*"; the window reference scopes delivery to this frame.
-      post: (message) => target()?.postMessage(message, "*"),
+      post,
       hostContext,
       callTool: async ({ name, arguments: args }) => {
         const { environmentId, input } = scope();
         const info = await readLive().toolInfo({ environmentId, input: { ...input, name } });
-        if (info._tag !== "Success") throw commandFailure(info);
+        if (info._tag !== "Success") throw sandboxedAppCommandFailure(info);
         if (!info.value.callable)
           throw new McpAppHostRefusal({ message: "This app cannot call that tool." });
         if (!info.value.readOnly) {
@@ -296,7 +248,7 @@ export function McpAppFrame(props: {
           environmentId,
           input: { ...input, name, arguments: args },
         });
-        if (result._tag !== "Success") throw commandFailure(result);
+        if (result._tag !== "Success") throw sandboxedAppCommandFailure(result);
         return result.value;
       },
       readResource: async ({ uri }) => {
@@ -305,15 +257,10 @@ export function McpAppFrame(props: {
           environmentId,
           input: { ...input, uri },
         });
-        if (result._tag !== "Success") throw commandFailure(result);
+        if (result._tag !== "Success") throw sandboxedAppCommandFailure(result);
         return result.value;
       },
-      openLink: async (url) => {
-        if (document.activeElement !== frameRef.current || !navigator.userActivation?.isActive) {
-          throw new McpAppHostRefusal({ message: "Links open only from a click in the app." });
-        }
-        window.open(url, "_blank", "noopener,noreferrer");
-      },
+      openLink: (url) => openSandboxedAppLink(frameRef.current, url),
       sendMessage: async (text) => {
         const send = readLive().props.onSendMessage;
         if (send === undefined)
@@ -334,7 +281,7 @@ export function McpAppFrame(props: {
             conversationThreadId: readLive().props.conversationThreadId,
           },
         });
-        if (result._tag !== "Success") throw commandFailure(result);
+        if (result._tag !== "Success") throw sandboxedAppCommandFailure(result);
       },
       requestDisplayMode: async (mode) => {
         const otherFullscreen = document.querySelector("[data-mcp-app-fullscreen]");
@@ -370,7 +317,7 @@ export function McpAppFrame(props: {
               environmentId,
               input: { ...input, uri: file.uri },
             });
-            if (read._tag !== "Success") throw commandFailure(read);
+            if (read._tag !== "Success") throw sandboxedAppCommandFailure(read);
             const content = read.value.contents[0];
             bytes = mcpResourceBytes(content);
             const declared = (content as { readonly mimeType?: unknown } | undefined)?.mimeType;
@@ -400,17 +347,17 @@ export function McpAppFrame(props: {
         if (size.height !== undefined) setHeight(clampMcpAppHeight(size.height));
       },
     });
+    return host;
+  };
+  const handleFrameChange = (frame: HTMLIFrameElement | null) => {
+    frameRef.current = frame;
+  };
+  const handleHostChange = (host: McpAppHost | null) => {
     hostRef.current = host;
-    const receive = (event: MessageEvent) => {
-      if (event.source !== null && event.source === target()) host.receive(event.data);
-    };
-    window.addEventListener("message", receive);
-    return () => {
-      window.removeEventListener("message", receive);
-      void host.teardown();
-      hostRef.current = null;
-      frameRef.current = null;
-    };
+    if (host !== null) {
+      const currentCall = readLive().toolCall;
+      if (currentCall !== undefined) host.setToolCall(currentCall);
+    }
   };
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- pushes theme, width, display mode and tool definition to the MCP app host in the iframe
@@ -423,7 +370,7 @@ export function McpAppFrame(props: {
   useEffect(() => {
     if (toolCall !== undefined) hostRef.current?.setToolCall(toolCall);
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Each new document needs the call.
-  }, [toolCall, src, documentGeneration]);
+  }, [toolCall, documentGeneration]);
 
   if (closed) {
     return (
@@ -437,7 +384,6 @@ export function McpAppFrame(props: {
           size="xs"
           variant="ghost"
           onClick={() => {
-            setSrc(null);
             setDocumentGeneration((value) => value + 1);
             setClosed(false);
           }}
@@ -485,31 +431,32 @@ export function McpAppFrame(props: {
             </Button>
           </div>
         ) : null}
-        {navigatedAway ? (
-          <p className="flex size-full items-center justify-center text-muted-foreground text-xs">
-            <T>
-              The <Var>{app.server}</Var> app left its page and was stopped
-            </T>
-          </p>
-        ) : src !== null ? (
-          <iframe
-            ref={attachFrame}
-            src={src}
-            title={gt("{server} app", { server: app.server })}
-            // Omitting allow-same-origin isolates the app from the session.
-            sandbox="allow-scripts allow-forms"
-            allow={mcpAppAllowAttribute(app.permissions)}
-            onLoad={onFrameLoad}
-            className={cn("block w-full border-0", fullscreen ? "min-h-0 flex-1" : "h-full")}
-            style={{ colorScheme: theme.appearance }}
-          />
-        ) : asset._tag === "Failure" ? (
-          <p className="flex size-full items-center justify-center text-muted-foreground text-xs">
-            <T>
-              Unable to load the <Var>{app.server}</Var> app
-            </T>
-          </p>
-        ) : null}
+        <SandboxedAppFrame
+          key={documentGeneration}
+          environmentId={props.environmentId}
+          resource={resource}
+          title={gt("{server} app", { server: app.server })}
+          appearance={theme.appearance}
+          allow={mcpAppAllowAttribute(app.permissions)}
+          className={cn("block w-full border-0", fullscreen ? "min-h-0 flex-1" : "h-full")}
+          createHost={createHost}
+          onFrameChange={handleFrameChange}
+          onHostChange={handleHostChange}
+          navigatedAwayFallback={
+            <p className="flex size-full items-center justify-center text-muted-foreground text-xs">
+              <T>
+                The <Var>{app.server}</Var> app left its page and was stopped
+              </T>
+            </p>
+          }
+          loadErrorFallback={
+            <p className="flex size-full items-center justify-center text-muted-foreground text-xs">
+              <T>
+                Unable to load the <Var>{app.server}</Var> app
+              </T>
+            </p>
+          }
+        />
       </div>
     </div>
   );

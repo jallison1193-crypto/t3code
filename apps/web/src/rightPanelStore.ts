@@ -3,7 +3,8 @@ import {
   scopedThreadKey,
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
-import { EnvironmentId, RunId, ThreadId, type ScopedThreadRef } from "@t3tools/contracts";
+import { EnvironmentId, PluginId, RunId, ThreadId, type ScopedThreadRef } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import { msg } from "gt-react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
@@ -32,6 +33,7 @@ const RIGHT_PANEL_KINDS = [
   "issue",
   "thread",
   "linked-thread",
+  "plugin-panel",
 ] as const;
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
 
@@ -109,7 +111,31 @@ export type RightPanelSurface =
    */
   | ThreadSurface
   /** A linked environment's thread, read through `viaEnvironmentId`; it has no thread here. */
-  | LinkedThreadSurface;
+  | LinkedThreadSurface
+  /** A sandboxed right-panel tab contributed by an installed plugin. */
+  | PluginPanelSurface;
+
+export type PluginPanelSurface = {
+  id: `plugin:${string}:${string}`;
+  kind: "plugin-panel";
+  pluginId: string;
+  panelId: string;
+};
+
+const isPluginId = Schema.is(PluginId);
+
+const pluginPanelSurface = (pluginId: string, panelId: string): PluginPanelSurface => ({
+  id: `plugin:${pluginId}:${panelId}`,
+  kind: "plugin-panel",
+  pluginId,
+  panelId,
+});
+
+export function decodePluginPanelSurface(surface: object): PluginPanelSurface | null {
+  const { kind, pluginId, panelId } = surface as Record<string, unknown>;
+  if (kind !== "plugin-panel" || !isPluginId(pluginId) || !isPluginId(panelId)) return null;
+  return pluginPanelSurface(pluginId, panelId);
+}
 
 export type ThreadSurface = {
   id: `thread:${string}`;
@@ -195,12 +221,13 @@ interface RightPanelStoreState {
     ref: ScopedThreadRef,
     kind: Exclude<
       RightPanelKind,
-      "file" | "terminal" | "pull-request" | "issue" | "thread" | "linked-thread"
+      "file" | "terminal" | "pull-request" | "issue" | "thread" | "linked-thread" | "plugin-panel"
     >,
   ) => void;
   /** Opens a side chat, subagent, or project thread of `ref`'s environment as a tab; `ref` itself has no tab. */
   openThread: (ref: ScopedThreadRef, threadId: ThreadId, variant?: "thread") => void;
   openLinkedThread: (ref: ScopedThreadRef, target: LinkedThreadTarget) => void;
+  openPluginPanel: (ref: ScopedThreadRef, pluginId: string, panelId: string) => void;
   /** Records the title the linked environment gave, so the tab and a reopened one show it. */
   setLinkedThreadTitle: (ref: ScopedThreadRef, surfaceId: string, title: string) => void;
   openDevice: (ref: ScopedThreadRef, target: DeviceTabTarget, automatic?: boolean) => void;
@@ -269,7 +296,7 @@ interface RightPanelStoreState {
     ref: ScopedThreadRef,
     kind: Exclude<
       RightPanelKind,
-      "file" | "terminal" | "pull-request" | "issue" | "thread" | "linked-thread"
+      "file" | "terminal" | "pull-request" | "issue" | "thread" | "linked-thread" | "plugin-panel"
     >,
   ) => void;
   setThreadPanelOpen: (
@@ -295,7 +322,14 @@ const DEFAULT_THREAD_PANEL_VISIBILITY: ThreadPanelVisibility = {
 const singletonSurface = (
   kind: Exclude<
     RightPanelKind,
-    "file" | "preview" | "terminal" | "pull-request" | "issue" | "thread" | "linked-thread"
+    | "file"
+    | "preview"
+    | "terminal"
+    | "pull-request"
+    | "issue"
+    | "thread"
+    | "linked-thread"
+    | "plugin-panel"
   >,
 ): RightPanelSurface => {
   switch (kind) {
@@ -628,6 +662,10 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
                       const decoded = decodeLinkedThreadSurface(surface);
                       return decoded === null ? [] : [decoded];
                     }
+                    if (surface.kind === "plugin-panel") {
+                      const decoded = decodePluginPanelSurface(surface);
+                      return decoded === null ? [] : [decoded];
+                    }
                     if (
                       (surface.kind === "file" || surface.kind === "files") &&
                       "folderTrail" in surface &&
@@ -903,6 +941,12 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
               ),
             };
           }),
+        ),
+      openPluginPanel: (ref, pluginId, panelId) =>
+        set((state) =>
+          userAction(state, scopedThreadKey(ref), (current) =>
+            upsertSurface(current, pluginPanelSurface(pluginId, panelId)),
+          ),
         ),
       setLinkedThreadTitle: (ref, surfaceId, title) =>
         set((state) => {

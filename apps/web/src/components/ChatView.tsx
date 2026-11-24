@@ -2527,6 +2527,7 @@ export default function ChatView(props: ChatViewProps) {
     onOpenTurnDiffStable,
     openChangesFromThreadPanelStable,
     openFileSurfaceStable,
+    openPluginPanelSurfaceStable,
     toggleRightPanelMaximizedStable,
     toggleRightPanelStable: toggleStoredRightPanelStable,
     toggleThreadPanelStable,
@@ -4298,6 +4299,7 @@ export default function ChatView(props: ChatViewProps) {
           onAddPullRequests={addPullRequestsSurfaceStable}
           onAddDevice={addDeviceSurfaceStable}
           onAddSideChat={sideChatsOffered ? openSideChatStable : undefined}
+          onAddPluginPanel={openPluginPanelSurfaceStable}
           browserAvailable={canOperatePreview && browserAvailable}
           showTerminal={showCodingChrome}
           terminalAvailable={showCodingChrome && activeProject !== null && canOperateTerminal}

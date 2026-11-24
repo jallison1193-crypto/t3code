@@ -89,11 +89,18 @@ import {
 import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
 import {
   PluginOperationError,
+  PluginStateError,
+  ServerGetPluginStateInput,
+  ServerGetPluginStateResult,
   ServerListPluginsResult,
+  ServerPluginStateSnapshot,
   ServerRestorePluginRevisionInput,
   ServerRestorePluginRevisionResult,
   ServerSetPluginEnabledInput,
   ServerSetPluginEnabledResult,
+  ServerSetPluginStateInput,
+  ServerSetPluginStateResult,
+  ServerSubscribePluginStateInput,
   ServerUninstallPluginInput,
   ServerUninstallPluginResult,
 } from "./plugin.ts";
@@ -633,6 +640,9 @@ export const WS_METHODS = {
   serverSetPluginEnabled: "server.setPluginEnabled",
   serverUninstallPlugin: "server.uninstallPlugin",
   serverRestorePluginRevision: "server.restorePluginRevision",
+  serverGetPluginState: "server.getPluginState",
+  serverSetPluginState: "server.setPluginState",
+  serverSubscribePluginState: "server.subscribePluginState",
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverCheckSecretSource: "server.checkSecretSource",
   serverSearchAcpRegistry: "server.searchAcpRegistry",
@@ -1078,6 +1088,25 @@ const WsServerRestorePluginRevisionRpc = Rpc.make(WS_METHODS.serverRestorePlugin
   payload: ServerRestorePluginRevisionInput,
   success: ServerRestorePluginRevisionResult,
   error: Schema.Union([PluginOperationError, EnvironmentAuthorizationError]),
+});
+
+const WsServerGetPluginStateRpc = Rpc.make(WS_METHODS.serverGetPluginState, {
+  payload: ServerGetPluginStateInput,
+  success: ServerGetPluginStateResult,
+  error: Schema.Union([PluginStateError, EnvironmentAuthorizationError]),
+});
+
+const WsServerSetPluginStateRpc = Rpc.make(WS_METHODS.serverSetPluginState, {
+  payload: ServerSetPluginStateInput,
+  success: ServerSetPluginStateResult,
+  error: Schema.Union([PluginStateError, EnvironmentAuthorizationError]),
+});
+
+const WsServerSubscribePluginStateRpc = Rpc.make(WS_METHODS.serverSubscribePluginState, {
+  payload: ServerSubscribePluginStateInput,
+  success: ServerPluginStateSnapshot,
+  error: Schema.Union([PluginStateError, EnvironmentAuthorizationError]),
+  stream: true,
 });
 
 const WsServerDiscoverSourceControlRpc = Rpc.make(WS_METHODS.serverDiscoverSourceControl, {
@@ -2560,6 +2589,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerSetPluginEnabledRpc,
   WsServerUninstallPluginRpc,
   WsServerRestorePluginRevisionRpc,
+  WsServerGetPluginStateRpc,
+  WsServerSetPluginStateRpc,
+  WsServerSubscribePluginStateRpc,
   WsPeerLinksListRpc,
   WsPeerLinksNamesRpc,
   WsPeerLinksLinkRpc,

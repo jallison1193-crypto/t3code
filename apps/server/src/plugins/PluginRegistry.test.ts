@@ -3,9 +3,11 @@ import {
   PLUGIN_MANIFEST_DIR,
   PLUGIN_MANIFEST_FILE,
   THEME_CSS_MAX_LENGTH,
+  type EnvironmentPlugin,
   type ServerSettings,
 } from "@t3tools/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { MCP_APP_MAX_HTML_BYTES } from "@t3tools/shared/mcpApp";
 import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 import { assert, describe, it } from "@effect/vitest";
@@ -537,5 +539,220 @@ describe("PluginRegistry", () => {
         }
       }),
     ),
+  );
+
+  it.effect(
+    "lists a panel plugin with panels and contributes, and resolves its entry only when enabled",
+    () =>
+      withPluginRegistry(
+        {
+          pomodoro: {
+            manifest: JSON.stringify({
+              name: "pomodoro",
+              displayName: "Pomodoro",
+              panels: [{ id: "timer", title: "Pomodoro Timer", entry: "./timer.html" }],
+            }),
+            files: {
+              "timer.html": "<!doctype html><html><body>Timer</body></html>",
+            },
+          },
+        },
+        Effect.gen(function* () {
+          const registry = yield* PluginRegistry.PluginRegistry;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const { pluginsDir } = yield* ServerConfig.ServerConfig;
+
+          const listed = yield* registry.list;
+          assert.strictEqual(listed.plugins.length, 1);
+          assert.deepEqual(listed.plugins[0], {
+            id: "pomodoro",
+            displayName: "Pomodoro",
+            enabled: false,
+            contributes: ["panel"],
+            panels: [{ id: "timer", title: "Pomodoro Timer" }],
+            revision: listed.plugins[0]!.revision,
+          });
+
+          const refusedOff = yield* registry
+            .resolvePanelEntry("pomodoro", "timer")
+            .pipe(Effect.flip);
+          assert.strictEqual(refusedOff._tag, "PluginOperationError");
+          assert.strictEqual(refusedOff.reason, "not_found");
+
+          yield* registry.setEnabled("pomodoro", true);
+          const resolved = yield* registry.resolvePanelEntry("pomodoro", "timer");
+          assert.strictEqual(
+            resolved,
+            yield* fs.realPath(path.join(pluginsDir, "pomodoro", "timer.html")),
+          );
+
+          const unknownPanel = yield* registry
+            .resolvePanelEntry("pomodoro", "missing")
+            .pipe(Effect.flip);
+          assert.strictEqual(unknownPanel.reason, "not_found");
+
+          yield* registry.setEnabled("pomodoro", false);
+          const refusedAgain = yield* registry
+            .resolvePanelEntry("pomodoro", "timer")
+            .pipe(Effect.flip);
+          assert.strictEqual(refusedAgain.reason, "not_found");
+        }),
+      ),
+  );
+
+  it.effect("reports problems for plugins without css or panels and for bad panel entries", () =>
+    withPluginRegistry(
+      {
+        "empty-plugin": {
+          manifest: JSON.stringify({ name: "empty-plugin" }),
+        },
+        "missing-panel": {
+          manifest: JSON.stringify({
+            name: "missing-panel",
+            panels: [{ id: "main", title: "Main", entry: "./missing.html" }],
+          }),
+        },
+        "oversized-panel": {
+          manifest: JSON.stringify({
+            name: "oversized-panel",
+            panels: [{ id: "main", title: "Main", entry: "./big.html" }],
+          }),
+          files: {
+            "big.html": "x".repeat(MCP_APP_MAX_HTML_BYTES + 1),
+          },
+        },
+      },
+      Effect.gen(function* () {
+        const registry = yield* PluginRegistry.PluginRegistry;
+        const { plugins } = yield* registry.list;
+        const byId = new Map(plugins.map((plugin) => [plugin.id, plugin]));
+
+        assert.match(byId.get("empty-plugin")?.problem ?? "", /css.*panels|at least one/i);
+        assert.match(byId.get("missing-panel")?.problem ?? "", /not found/i);
+        assert.match(byId.get("oversized-panel")?.problem ?? "", /limit/i);
+        for (const id of ["empty-plugin", "missing-panel", "oversized-panel"]) {
+          assert.deepEqual(byId.get(id)?.contributes, []);
+          assert.isUndefined(byId.get(id)?.panels);
+        }
+      }),
+    ),
+  );
+
+  it.effect.skipIf(!symlinksSupported)("rejects a symlinked panel HTML entry with a problem", () =>
+    withPluginRegistry(
+      {
+        "linked-panel": {
+          manifest: JSON.stringify({
+            name: "linked-panel",
+            panels: [{ id: "main", title: "Main", entry: "./main.html" }],
+          }),
+        },
+      },
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const { pluginsDir } = yield* ServerConfig.ServerConfig;
+        const registry = yield* PluginRegistry.PluginRegistry;
+
+        const outside = path.join(pluginsDir, "..", "outside.html");
+        yield* fs.writeFileString(outside, "<html><body>Outside</body></html>");
+        yield* fs.symlink(outside, path.join(pluginsDir, "linked-panel", "main.html"));
+
+        const { plugins } = yield* registry.list;
+        assert.strictEqual(plugins.length, 1);
+        assert.match(plugins[0]?.problem ?? "", /symlink/i);
+        assert.deepEqual(plugins[0]?.contributes, []);
+      }),
+    ),
+  );
+
+  it.effect("keeps CSS-only revision ids equal to sha256(manifest + \\0 + css).slice(0, 12)", () =>
+    withPluginRegistry(
+      {},
+      Effect.gen(function* () {
+        const registry = yield* PluginRegistry.PluginRegistry;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const { pluginsDir } = yield* ServerConfig.ServerConfig;
+
+        const css = "[data-thread-item] { padding-block: 4px; }";
+        const created = yield* registry.write({
+          id: "css-only-hash",
+          displayName: "CSS Only",
+          css,
+        });
+        const manifestText = yield* fs.readFileString(
+          path.join(pluginsDir, "css-only-hash", PLUGIN_MANIFEST_DIR, PLUGIN_MANIFEST_FILE),
+        );
+        const digest = yield* Effect.promise(async () => {
+          const buffer = await globalThis.crypto.subtle.digest(
+            "SHA-256",
+            new TextEncoder().encode(`${manifestText}\0${css}`),
+          );
+          return Array.from(new Uint8Array(buffer), (b) => b.toString(16).padStart(2, "0"))
+            .join("")
+            .slice(0, 12);
+        });
+        assert.strictEqual(created.after, digest);
+      }),
+    ),
+  );
+
+  it.effect(
+    "write with panels updates files and restore(before) brings back old HTML and removes new file",
+    () =>
+      withPluginRegistry(
+        {},
+        Effect.gen(function* () {
+          const registry = yield* PluginRegistry.PluginRegistry;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const { pluginsDir } = yield* ServerConfig.ServerConfig;
+
+          const first = yield* registry.write({
+            id: "notes-panel",
+            displayName: "Notes",
+            panels: [{ id: "notes", title: "Notes", html: "<html><body>v1</body></html>" }],
+          });
+          assert.deepEqual(first.plugin.contributes, ["panel"]);
+          assert.deepEqual(first.plugin.panels, [{ id: "notes", title: "Notes" }]);
+          yield* registry.setEnabled("notes-panel", true);
+
+          const seen = yield* Queue.unbounded<ReadonlyArray<EnvironmentPlugin>>();
+          yield* Stream.runForEach(registry.streamChanges, (active) =>
+            Queue.offer(seen, active),
+          ).pipe(Effect.forkScoped);
+          assert.deepEqual(yield* Queue.take(seen), [
+            { id: "notes-panel", css: "", panels: [{ id: "notes", title: "Notes" }] },
+          ]);
+
+          const second = yield* registry.write({
+            id: "notes-panel",
+            displayName: "Notes",
+            panels: [{ id: "board", title: "Board", html: "<html><body>v2</body></html>" }],
+          });
+          assert.strictEqual(second.plugin.enabled, true);
+          assert.strictEqual(second.before, first.after);
+          assert.notStrictEqual(second.after, first.after);
+          assert.isFalse(yield* fs.exists(path.join(pluginsDir, "notes-panel", "notes.html")));
+          assert.isTrue(yield* fs.exists(path.join(pluginsDir, "notes-panel", "board.html")));
+          assert.deepEqual(yield* Queue.take(seen), [
+            { id: "notes-panel", css: "", panels: [{ id: "board", title: "Board" }] },
+          ]);
+
+          const restored = yield* registry.restore("notes-panel", second.before!);
+          assert.strictEqual(restored.plugin.revision, first.after);
+          assert.isTrue(yield* fs.exists(path.join(pluginsDir, "notes-panel", "notes.html")));
+          assert.isFalse(yield* fs.exists(path.join(pluginsDir, "notes-panel", "board.html")));
+          const readBack = yield* registry.read("notes-panel");
+          assert.deepEqual(readBack.panels, [
+            { id: "notes", title: "Notes", html: "<html><body>v1</body></html>" },
+          ]);
+          assert.deepEqual(yield* Queue.take(seen), [
+            { id: "notes-panel", css: "", panels: [{ id: "notes", title: "Notes" }] },
+          ]);
+        }),
+      ),
   );
 });

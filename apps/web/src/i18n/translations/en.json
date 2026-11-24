@@ -12744,5 +12744,27 @@
   "a780192787ba0339": "Turn off",
   "de5d81466963b903": "Install anyway",
   "f510356291976f4f": "Undo",
-  "4fc630d6b2bf647f": "Restore"
+  "4fc630d6b2bf647f": "Restore",
+  "10c34fe32ba2b806": "Adds a right panel tab",
+  "bfb4b72da2a01636": "{title} plugin panel",
+  "99959d940786543c": "This plugin is off",
+  "ccd8dfabd9c81e97": "Settings → Plugins",
+  "51085622bb53a1fb": [
+    "The ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " panel left its page and was stopped"
+  ],
+  "74b84cb162d33f2d": [
+    "Unable to load the ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " panel"
+  ]
 }

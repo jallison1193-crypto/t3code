@@ -6,6 +6,7 @@ import {
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
   PROVIDER_SEND_TURN_SUPPORTED_IMAGE_MIME_TYPES,
 } from "./chatAttachment.ts";
+import { PluginId } from "./plugin.ts";
 import { ProjectFaviconPath } from "./project.ts";
 import { ToolActivityNativeAppReference } from "./providerRuntime.ts";
 import { EnvironmentThemeId } from "./server.ts";
@@ -69,6 +70,10 @@ export const AssetResource = Schema.Union([
   // names the change request's repository, which can differ from the checkout at `cwd`.
   Schema.TaggedStruct("environment-theme-background", {
     themeId: EnvironmentThemeId,
+  }),
+  Schema.TaggedStruct("plugin-panel", {
+    pluginId: PluginId,
+    panelId: PluginId,
   }),
   Schema.TaggedStruct(SOURCE_CONTROL_MEDIA_ASSET, {
     cwd: TrimmedNonEmptyString.check(Schema.isMaxLength(ASSET_PATH_MAX_LENGTH)),
@@ -245,7 +250,9 @@ export class AssetWorkspaceAssetNotFoundError extends Schema.TaggedError<AssetWo
       ? "Media file was not found."
       : this.resource._tag === "tool-output-image"
         ? "Tool output image was not found."
-        : "Workspace asset was not found.";
+        : this.resource._tag === "plugin-panel"
+          ? "Plugin panel was not found."
+          : "Workspace asset was not found.";
   }
 }
 

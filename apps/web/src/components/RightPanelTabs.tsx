@@ -19,6 +19,7 @@ import {
 import type {
   ContextMenuItem,
   EnvironmentId,
+  InstalledPlugin,
   IssueTrackerKind,
   PreviewSessionSnapshot,
   ProjectId,
@@ -51,6 +52,7 @@ import {
   Globe2,
   MessagesSquare,
   Plus,
+  Puzzle,
   TerminalSquare,
   Volume2Icon,
   VolumeOffIcon,
@@ -84,6 +86,7 @@ import {
   Menu,
   MenuItem,
   MenuPopup,
+  MenuSeparator,
   MenuShortcut,
   MenuSub,
   MenuSubPopup,
@@ -103,6 +106,7 @@ import {
   useSharedPullRequestSummary,
 } from "~/state/pullRequests";
 import { useEnvironmentQuery } from "~/state/query";
+import { serverEnvironment } from "~/state/server";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
 
 import { PreviewPanelShell, type PreviewPanelMode } from "./preview/PreviewPanelShell";
@@ -111,6 +115,11 @@ import { previewBridge } from "./preview/previewBridge";
 import { dispatchPreviewAction } from "./preview/previewActionBus";
 import { preventThumbButtonFocus, takeThumbButtonNavigation } from "./preview/thumbButtons";
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
+import {
+  pluginPanelLauncherItems,
+  resolvePluginPanelTitle,
+  type PluginPanelLauncherItem,
+} from "./chat/pluginPanel.logic";
 import { resolvePullRequestState } from "./pullRequest/pullRequestPresentation";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { observeResize } from "~/lib/observeResize";
@@ -159,6 +168,7 @@ export interface RightPanelTabsProps {
   onAddDevice: () => void;
   /** Absent where side chats are not offered. */
   onAddSideChat?: (() => void) | undefined;
+  onAddPluginPanel?: ((pluginId: string, panelId: string) => void) | undefined;
   browserAvailable: boolean;
   showTerminal?: boolean;
   terminalAvailable: boolean;
@@ -347,6 +357,8 @@ function RightPanelEmptyState(props: {
   onAddDevice: () => void;
   /** Absent where side chats are not offered. */
   onAddSideChat?: (() => void) | undefined;
+  onAddPluginPanel?: ((pluginId: string, panelId: string) => void) | undefined;
+  pluginPanels: readonly PluginPanelLauncherItem[];
   browserAvailable: boolean;
   showTerminal?: boolean;
   terminalAvailable: boolean;
@@ -599,6 +611,24 @@ function RightPanelEmptyState(props: {
               />
             ),
           )}
+          {props.onAddPluginPanel && props.pluginPanels.length > 0 ? (
+            <>
+              <div className="my-1.5 h-px bg-border/60" />
+              {props.pluginPanels.map((panel) => (
+                <button
+                  key={panel.id}
+                  type="button"
+                  onClick={() => props.onAddPluginPanel?.(panel.pluginId, panel.panelId)}
+                  className="flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-(--control-radius) px-2.5 text-left text-sm transition-colors hover:bg-accent/60"
+                >
+                  <span className="relative inline-flex shrink-0">
+                    <Puzzle className="size-4" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{panel.title}</span>
+                </button>
+              ))}
+            </>
+          ) : null}
         </div>
       </div>
     </div>
@@ -610,6 +640,7 @@ function surfaceTitle(
   sessions: Readonly<Record<string, PreviewSessionSnapshot>>,
   terminalLabelsById: ReadonlyMap<string, string>,
   resolve: MessageResolver = m,
+  plugins: ReadonlyArray<InstalledPlugin> | null = null,
 ): string {
   switch (surface.kind) {
     case "diff":
@@ -642,6 +673,8 @@ function surfaceTitle(
         surface,
         resolve(msg("Thread on {label}", { label: surface.label })),
       );
+    case "plugin-panel":
+      return resolvePluginPanelTitle(plugins, surface.pluginId, surface.panelId);
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return resolve(msg("Browser"));
@@ -736,6 +769,8 @@ function SurfaceIcon({
       return <SideChatTabIcon environmentId={environmentId} threadId={surface.threadId} />;
     case "linked-thread":
       return <MessagesSquare className="size-3 shrink-0" />;
+    case "plugin-panel":
+      return <Puzzle className="size-3 shrink-0" />;
     case "device":
       return surface.target?.platform === "ios" ? (
         <AppleIcon className="size-3 shrink-0" />
@@ -1140,6 +1175,18 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
   const ownsDesktopTitleBar = isElectron && props.mode === "inline";
   const browserProfiles = useBrowserDefaults().profiles;
   const { resolvedTheme } = useTheme();
+  const configs = useServerConfigs();
+  const hasPluginSurface = props.surfaces.some((surface) => surface.kind === "plugin-panel");
+  const pluginsSupported =
+    props.environmentId !== null &&
+    configs.get(props.environmentId)?.environment.capabilities.environmentPlugins === true;
+  const pluginsQuery = useEnvironmentQuery(
+    pluginsSupported && (props.onAddPluginPanel !== undefined || hasPluginSurface)
+      ? serverEnvironment.pluginsList({ environmentId: props.environmentId!, input: {} })
+      : null,
+  );
+  const installedPlugins = pluginsQuery.data?.plugins ?? null;
+  const pluginPanels = props.onAddPluginPanel ? pluginPanelLauncherItems(installedPlugins) : [];
   const tabListRef = useRef<HTMLDivElement>(null);
   const addSurfaceTriggerRef = useRef<HTMLButtonElement>(null);
   const [renamingDevice, setRenamingDevice] = useState<string | null>(null);
@@ -1482,6 +1529,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                 props.previewSessions,
                 props.terminalLabelsById,
                 messages,
+                installedPlugins,
               ),
             })
           : gt("Workspace panel")
@@ -1542,6 +1590,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                       props.previewSessions,
                       props.terminalLabelsById,
                       messages,
+                      installedPlugins,
                     )}
                     audio={tabAudioState(
                       previewTabId ? (props.desktopByTabId[previewTabId] ?? null) : null,
@@ -1638,6 +1687,20 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                       </SurfaceMenuItem>
                     );
                   })}
+                  {props.onAddPluginPanel && pluginPanels.length > 0 ? (
+                    <>
+                      <MenuSeparator />
+                      {pluginPanels.map((panel) => (
+                        <MenuItem
+                          key={panel.id}
+                          onClick={() => props.onAddPluginPanel?.(panel.pluginId, panel.panelId)}
+                        >
+                          <Puzzle />
+                          <span className="min-w-0 truncate">{panel.title}</span>
+                        </MenuItem>
+                      ))}
+                    </>
+                  ) : null}
                 </MenuPopup>
               </Menu>
             ) : null}
@@ -1715,6 +1778,8 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddPullRequests={props.onAddPullRequests}
             onAddDevice={props.onAddDevice}
             onAddSideChat={props.onAddSideChat}
+            onAddPluginPanel={props.onAddPluginPanel}
+            pluginPanels={pluginPanels}
             browserAvailable={props.browserAvailable}
             showTerminal={showTerminal}
             terminalAvailable={props.terminalAvailable}

@@ -12741,5 +12741,26 @@
   "a780192787ba0339": "Stäng av",
   "de5d81466963b903": "Installera ändå",
   "f510356291976f4f": "Ångra",
-  "4fc630d6b2bf647f": "Återställ"
+  "4fc630d6b2bf647f": "Återställ",
+  "10c34fe32ba2b806": "Lägger till en flik i högerpanelen",
+  "bfb4b72da2a01636": "Tilläggspanelen {title}",
+  "99959d940786543c": "Det här tillägget är avstängt",
+  "ccd8dfabd9c81e97": "Inställningar → Tillägg",
+  "51085622bb53a1fb": [
+    "Panelen ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " lämnade sin sida och stoppades"
+  ],
+  "74b84cb162d33f2d": [
+    "Det gick inte att läsa in panelen ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ]
 }

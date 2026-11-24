@@ -7,12 +7,14 @@ import {
   AssetAccessError,
   AssetCreateUrlInput,
   AssetPreviewTypeValidationError,
+  DEFAULT_SERVER_SETTINGS,
   SOURCE_CONTROL_MEDIA_ASSET,
   ThreadId,
   TurnItemId,
 } from "@t3tools/contracts";
 import { PROJECT_FAVICON_FALLBACK_MARKER } from "@t3tools/shared/projectFavicon";
 import { MCP_APP_MAX_HTML_BYTES } from "@t3tools/shared/mcpApp";
+import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 import { describe, expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -20,7 +22,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
+import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import { HttpClientRequest, HttpClientResponse, HttpServerResponse } from "effect/http";
 import { vi } from "vite-plus/test";
@@ -29,6 +33,8 @@ import * as AssetSigner from "./AssetSigner.ts";
 import * as WorkspacePreviewRevisions from "./WorkspacePreviewRevisions.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
+import * as PluginRegistry from "../plugins/PluginRegistry.ts";
+import { ServerSettingsService } from "../serverSettings.ts";
 import { makeFakeWslHost } from "../testUtils/fakeWsl.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import * as ProjectFaviconResolver from "../project/ProjectFaviconResolver.ts";
@@ -104,6 +110,17 @@ const oversizedScreenshotItem = {
   },
 };
 
+const layerServerSettings = Layer.unwrap(
+  Effect.map(Ref.make(DEFAULT_SERVER_SETTINGS), (settingsRef) =>
+    Layer.mock(ServerSettingsService)({
+      getSettings: Ref.get(settingsRef),
+      updateSettings: (patch) =>
+        Ref.updateAndGet(settingsRef, (current) => applyServerSettingsPatch(current, patch)),
+      streamChanges: Stream.empty,
+    }),
+  ),
+);
+
 const layerTest = Layer.mergeAll(
   NodeHttpPlatform.layer,
   Layer.mock(Orchestrator.OrchestratorV2)({
@@ -117,6 +134,10 @@ const layerTest = Layer.mergeAll(
       ),
   }),
   layerConfig,
+  PluginRegistry.layer.pipe(
+    Layer.provideMerge(layerConfig),
+    Layer.provideMerge(layerServerSettings),
+  ),
   WorkspacePaths.layer,
   ProjectFaviconResolver.layer.pipe(
     Layer.provide(WorkspacePaths.layer),
@@ -1914,5 +1935,55 @@ describe("AssetAccess", () => {
         expect(encoded).not.toContain(url);
       }
     }).pipe(Effect.provide(layerTest)),
+  );
+
+  it.effect(
+    "serves an enabled plugin panel with MCP app sandbox CSP and refuses once disabled",
+    () =>
+      Effect.gen(function* () {
+        const registry = yield* PluginRegistry.PluginRegistry;
+        const html = "<!doctype html><html><head></head><body><h1>Pomodoro</h1></body></html>";
+        yield* registry.write({
+          id: "pomodoro-asset",
+          displayName: "Pomodoro",
+          panels: [{ id: "timer", title: "Pomodoro", html }],
+        });
+
+        const resource = {
+          _tag: "plugin-panel" as const,
+          pluginId: "pomodoro-asset",
+          panelId: "timer",
+        };
+        const offIssueError = yield* issueAssetUrl({ resource }).pipe(Effect.flip);
+        expect(offIssueError._tag).toBe("AssetWorkspaceAssetNotFoundError");
+
+        yield* registry.setEnabled("pomodoro-asset", true);
+        const issued = yield* issueAssetUrl({ resource });
+        const suffix = issued.relativeUrl.slice(`${ASSET_ROUTE_PREFIX}/`.length);
+        const separator = suffix.indexOf("/");
+        const token = suffix.slice(0, separator);
+        const fileName = suffix.slice(separator + 1);
+
+        const resolved = yield* resolveAsset(token, fileName);
+        expect(resolved).toMatchObject({
+          kind: "file",
+          mimeType: "text/html",
+          renderIntent: "mcp-app",
+          injectDefaultCsp: true,
+        });
+        if (resolved?.kind !== "file") return;
+
+        const response = HttpServerResponse.toWeb(yield* assetFileResponse(resolved));
+        expect(response.status).toBe(200);
+        expect(response.headers.get("content-security-policy")).toContain("sandbox allow-scripts");
+        expect(response.headers.get("cache-control")).toBe("private, no-store");
+        const body = yield* Effect.promise(() => response.text());
+        expect(body).toContain("default-src 'none'");
+        expect(body).toContain("connect-src 'none'");
+        expect(body).toContain("<h1>Pomodoro</h1>");
+
+        yield* registry.setEnabled("pomodoro-asset", false);
+        expect(yield* resolveAsset(token, fileName)).toBeNull();
+      }).pipe(Effect.provide(layerTest)),
   );
 });

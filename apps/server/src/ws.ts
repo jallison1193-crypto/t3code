@@ -204,6 +204,7 @@ import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
 import * as ServerSettings from "./serverSettings.ts";
 import * as PluginRegistry from "./plugins/PluginRegistry.ts";
+import * as PluginStateStore from "./plugins/PluginStateStore.ts";
 import { invalidateSettingsSecrets } from "./sourceControl/sourceControlHostSecrets.ts";
 import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
@@ -1616,6 +1617,7 @@ export const layerWsRpc = (
       const featureFlags = yield* FeatureFlags.FeatureFlags;
       const environmentTheme = yield* EnvironmentTheme.EnvironmentThemeService;
       const pluginRegistry = yield* PluginRegistry.PluginRegistry;
+      const pluginStateStore = yield* PluginStateStore.PluginStateStore;
       const projectMemoryStore = yield* ProjectMemoryStore.ProjectMemoryStore;
       const externalLauncher = yield* ExternalLauncher.ExternalLauncher;
       const remoteOpenTargets = yield* RemoteOpenTargets.RemoteOpenTargets;
@@ -2871,6 +2873,18 @@ export const layerWsRpc = (
         [WS_METHODS.serverUninstallPlugin]: (input) => pluginRegistry.uninstall(input.id),
         [WS_METHODS.serverRestorePluginRevision]: (input) =>
           pluginRegistry.restore(input.id, input.revision, input.enable),
+        [WS_METHODS.serverGetPluginState]: (input) =>
+          pluginStateStore
+            .get(input.pluginId, input.scope)
+            .pipe(Effect.map((value) => ({ value }))),
+        [WS_METHODS.serverSetPluginState]: (input) =>
+          pluginStateStore
+            .set(input.pluginId, input.scope, input.value)
+            .pipe(Effect.as({ ok: true as const })),
+        [WS_METHODS.serverSubscribePluginState]: (input) =>
+          pluginStateStore
+            .streamChanges(input.pluginId, input.scope)
+            .pipe(Stream.map((value) => ({ value }))),
         [WS_METHODS.serverDiscoverSourceControl]: (_input) => sourceControlDiscovery.discover,
         [WS_METHODS.serverCheckSecretSource]: (input) => secretCheck.check(input.source),
         [WS_METHODS.serverGetTraceDiagnostics]: (_input) =>
@@ -3294,6 +3308,7 @@ export const layerWsRpc = (
             const path = yield* Path.Path;
             if (
               input.resource._tag === "attachment" ||
+              input.resource._tag === "plugin-panel" ||
               input.resource._tag === "native-app-icon" ||
               input.resource._tag === "environment-theme-background" ||
               input.resource._tag === "tool-output-image" ||

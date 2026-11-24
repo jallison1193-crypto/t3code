@@ -16,6 +16,7 @@ import {
   SOURCE_CONTROL_MEDIA_ASSET,
   ThreadId,
   NativeAppIconReference,
+  PluginId,
   TurnItemId,
   EnvironmentThemeId,
 } from "@t3tools/contracts";
@@ -54,6 +55,7 @@ import { makeIsServerInternalPath } from "../auth/serverInternalPaths.ts";
 import { parseAttachmentFileExtension, resolveAttachmentPathById } from "../attachmentStore.ts";
 import * as ServerConfig from "../config.ts";
 import { findThemeBackground } from "../environmentTheme.ts";
+import * as PluginRegistry from "../plugins/PluginRegistry.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import * as ProjectFaviconResolver from "../project/ProjectFaviconResolver.ts";
@@ -192,6 +194,14 @@ const AssetClaimsSchema = Schema.Union([
   }),
   Schema.Struct({
     version: Schema.Literal(1),
+    kind: Schema.Literal("plugin-panel"),
+    pluginId: PluginId,
+    panelId: PluginId,
+    renderIntent: Schema.Literal("mcp-app"),
+    expiresAt: Schema.Number,
+  }),
+  Schema.Struct({
+    version: Schema.Literal(1),
     kind: Schema.Literal("tool-output-image"),
     threadId: ThreadId,
     itemId: TurnItemId,
@@ -223,6 +233,7 @@ export type ResolvedAsset =
       readonly mimeType?: string;
       readonly file?: OpenMediaFile;
       readonly renderIntent?: "mcp-app" | "file-preview";
+      readonly injectDefaultCsp?: boolean;
     }
   | {
       readonly kind: "bytes";
@@ -904,6 +915,24 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
       fileName = `${input.resource.themeId}-background`;
       break;
     }
+    case "plugin-panel": {
+      const pluginRegistry = yield* PluginRegistry.PluginRegistry;
+      const entryPath = yield* pluginRegistry
+        .resolvePanelEntry(input.resource.pluginId, input.resource.panelId)
+        .pipe(
+          Effect.mapError(() => new AssetWorkspaceAssetNotFoundError({ resource: input.resource })),
+        );
+      claims = {
+        version: 1,
+        kind: "plugin-panel",
+        pluginId: input.resource.pluginId,
+        panelId: input.resource.panelId,
+        renderIntent: "mcp-app",
+        expiresAt,
+      };
+      fileName = path.basename(entryPath);
+      break;
+    }
     case "native-app-icon": {
       claims = {
         version: 1,
@@ -1068,6 +1097,35 @@ export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
       Effect.orElseSucceed(() => null),
     );
     return file ? ({ kind: "file", path: background.path, file } satisfies ResolvedAsset) : null;
+  }
+
+  if (claims.kind === "plugin-panel") {
+    const pluginRegistry = yield* PluginRegistry.PluginRegistry;
+    const entryPath = yield* pluginRegistry
+      .resolvePanelEntry(claims.pluginId, claims.panelId)
+      .pipe(Effect.orElseSucceed(() => null));
+    if (entryPath === null) return null;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const info = yield* ProjectFaviconResolver.optionOnNotFound(fileSystem.stat(entryPath)).pipe(
+      Effect.tapError((cause) =>
+        Effect.logError("Failed to inspect plugin panel asset.", {
+          pluginId: claims.pluginId,
+          panelId: claims.panelId,
+          path: entryPath,
+          cause,
+        }),
+      ),
+      Effect.orElseSucceed(() => Option.none()),
+    );
+    return Option.isSome(info) && info.value.type === "File"
+      ? ({
+          kind: "file",
+          path: entryPath,
+          mimeType: "text/html",
+          renderIntent: "mcp-app" as const,
+          injectDefaultCsp: true,
+        } satisfies ResolvedAsset)
+      : null;
   }
 
   if (claims.kind === "native-app-icon") {

@@ -6,8 +6,12 @@ import * as NodePath from "node:path";
 import {
   type EnvironmentPlugin,
   type InstalledPlugin,
+  type InstalledPluginPanel,
   PLUGIN_MANIFEST_DIR,
   PLUGIN_MANIFEST_FILE,
+  PLUGIN_MAX_PANELS,
+  PLUGIN_PANEL_HTML_MAX_CHARS,
+  type PluginContribution,
   PluginId,
   PluginManifest,
   PluginOperationError,
@@ -18,6 +22,7 @@ import {
   type ServerUninstallPluginResult,
   THEME_CSS_MAX_LENGTH,
 } from "@t3tools/contracts";
+import { MCP_APP_MAX_HTML_BYTES } from "@t3tools/shared/mcpApp";
 import { fromJsonStringPretty } from "@t3tools/shared/schemaJson";
 import { themeCssLoadsRemoteFiles } from "@t3tools/shared/themeCss";
 import * as Context from "effect/Context";
@@ -41,6 +46,7 @@ import * as ServerConfig from "../config.ts";
 import { readThemeFileGuarded } from "../environmentTheme.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { watchDirectoryPath } from "../watchDirectoryReplacements.ts";
+import { writeFileAtomic } from "./atomicFile.ts";
 
 const PLUGINS_ARCHIVE_DIR_NAME = "plugins-archive";
 const PLUGINS_HISTORY_DIR_NAME = "plugins-history";
@@ -50,6 +56,7 @@ const MAX_PLUGIN_HISTORY_REVISIONS = 20;
 const MAX_PLUGIN_MANIFEST_BYTES = 64 * 1024;
 const MAX_PLUGIN_CSS_BYTES = 4 * THEME_CSS_MAX_LENGTH;
 const PLUGIN_REVISION_PATTERN = /^[a-f0-9]{12}$/;
+const PANEL_ROOT_ENTRY_PATTERN = /^\.\/(?!\.)[^/\\\0]+\.html$/;
 
 const isPluginId = Schema.is(PluginId);
 const isPluginRevision = (value: string): boolean => PLUGIN_REVISION_PATTERN.test(value);
@@ -59,32 +66,55 @@ const decodePluginManifestJsonExit = Schema.decodeUnknownExit(
 );
 const encodePluginManifestJson = Schema.encodeEffect(fromJsonStringPretty(PluginManifest));
 
-const computePluginRevision = (manifestText: string, cssText: string): string =>
-  NodeCrypto.createHash("sha256")
-    .update(manifestText)
-    .update("\0")
-    .update(cssText)
-    .digest("hex")
-    .slice(0, 12);
+const computePluginRevision = (
+  manifestText: string,
+  cssText: string,
+  panelHtmls: ReadonlyArray<string> = [],
+): string => {
+  const hash = NodeCrypto.createHash("sha256").update(manifestText).update("\0").update(cssText);
+  for (const html of panelHtmls) {
+    hash.update("\0").update(html);
+  }
+  return hash.digest("hex").slice(0, 12);
+};
 
 interface PluginSnapshot {
   readonly seq: number;
   readonly plugins: ReadonlyArray<InstalledPlugin>;
   readonly active: ReadonlyArray<EnvironmentPlugin>;
+  readonly panelEntries: ReadonlyMap<string, ReadonlyMap<string, string>>;
+}
+
+interface ScannedPanel {
+  readonly id: PluginId;
+  readonly title: string;
+  readonly fileName: string;
+  readonly canonicalPath: string;
+  readonly html: string;
 }
 
 interface ScannedPlugin {
   readonly plugin: InstalledPlugin;
   readonly css?: string;
+  readonly cssPath?: string;
+  readonly panels?: ReadonlyArray<ScannedPanel>;
   readonly rawManifest?: string;
   readonly rawCss?: string;
+  readonly rawPanels?: ReadonlyArray<{ readonly fileName: string; readonly html: string }>;
+}
+
+export interface PluginPanelContent {
+  readonly id: PluginId;
+  readonly title: string;
+  readonly html: string;
 }
 
 export interface PluginReadResult {
   readonly displayName?: string;
   readonly description?: string;
   readonly version?: string;
-  readonly css: string;
+  readonly css?: string;
+  readonly panels?: ReadonlyArray<PluginPanelContent>;
 }
 
 export interface PluginWriteInput {
@@ -92,7 +122,8 @@ export interface PluginWriteInput {
   readonly displayName?: string;
   readonly description?: string;
   readonly version?: string;
-  readonly css: string;
+  readonly css?: string;
+  readonly panels?: ReadonlyArray<PluginPanelContent>;
 }
 
 export interface PluginWriteResult {
@@ -122,6 +153,10 @@ export class PluginRegistry extends Context.Service<
     readonly uninstall: (
       id: string,
     ) => Effect.Effect<ServerUninstallPluginResult, PluginOperationError>;
+    readonly resolvePanelEntry: (
+      pluginId: string,
+      panelId: string,
+    ) => Effect.Effect<string, PluginOperationError>;
     /** Subscribes before reading to retain changes during connection. */
     readonly streamChanges: Stream.Stream<ReadonlyArray<EnvironmentPlugin>>;
   }
@@ -170,6 +205,8 @@ const withProblem = (
     readonly revision?: string;
     readonly rawManifest?: string;
     readonly rawCss?: string;
+    readonly cssPath?: string;
+    readonly rawPanels?: ReadonlyArray<{ readonly fileName: string; readonly html: string }>;
   } = {},
 ): ScannedPlugin => ({
   plugin: {
@@ -182,22 +219,113 @@ const withProblem = (
   },
   ...(extra.rawManifest !== undefined ? { rawManifest: extra.rawManifest } : {}),
   ...(extra.rawCss !== undefined ? { rawCss: extra.rawCss } : {}),
+  ...(extra.cssPath !== undefined ? { cssPath: extra.cssPath } : {}),
+  ...(extra.rawPanels !== undefined ? { rawPanels: extra.rawPanels } : {}),
 });
 
-const resolveSafeCssPath = (folderPath: string, cssName: string): string | null => {
-  const resolvedCssPath = NodePath.resolve(folderPath, cssName);
+const resolveSafePluginFilePath = (
+  folderPath: string,
+  relativePath: string,
+  allowSubfolders: boolean,
+): string | null => {
   if (
-    !cssName.startsWith("./") ||
-    cssName.includes("\\") ||
-    cssName.includes("\0") ||
-    !isInsideDirectory(NodePath.resolve(folderPath), resolvedCssPath, false)
+    !relativePath.startsWith("./") ||
+    relativePath.includes("\\") ||
+    relativePath.includes("\0")
   ) {
     return null;
   }
-  return resolvedCssPath;
+  const resolvedFolder = NodePath.resolve(folderPath);
+  const resolvedPath = NodePath.resolve(folderPath, relativePath);
+  if (!isInsideDirectory(resolvedFolder, resolvedPath, false)) {
+    return null;
+  }
+  if (
+    !allowSubfolders &&
+    (NodePath.dirname(resolvedPath) !== resolvedFolder ||
+      !PANEL_ROOT_ENTRY_PATTERN.test(relativePath))
+  ) {
+    return null;
+  }
+  return resolvedPath;
 };
 
-const isExistingTargetSafe = (folderPath: string, targetCssPath: string | null): boolean => {
+const readPluginFileGuarded = (
+  folderPath: string,
+  pluginRootReal: string,
+  relativePath: string,
+  options: {
+    readonly kind: "CSS" | "Panel";
+    readonly maxBytes: number;
+    readonly allowSubfolders: boolean;
+    readonly oversizeProblem?: string;
+  },
+):
+  | {
+      readonly ok: true;
+      readonly path: string;
+      readonly canonicalPath: string;
+      readonly content: string;
+    }
+  | { readonly ok: false; readonly problem: string } => {
+  const resolvedPath = resolveSafePluginFilePath(folderPath, relativePath, options.allowSubfolders);
+  if (resolvedPath === null) {
+    return {
+      ok: false,
+      problem: options.allowSubfolders
+        ? `${options.kind} path must start with "./" and stay inside the plugin folder.`
+        : `${options.kind} path must be "./<name>.html" at the plugin folder root.`,
+    };
+  }
+  let stat: NodeFS.Stats;
+  try {
+    stat = NodeFS.lstatSync(resolvedPath);
+  } catch (error) {
+    return {
+      ok: false,
+      problem: isMissingPath(error)
+        ? `${options.kind} file "${relativePath}" was not found.`
+        : `${options.kind} file "${relativePath}" could not be accessed.`,
+    };
+  }
+  if (stat.isSymbolicLink()) {
+    return { ok: false, problem: `${options.kind} file "${relativePath}" cannot be a symlink.` };
+  }
+  if (!stat.isFile()) {
+    return {
+      ok: false,
+      problem: `${options.kind} file "${relativePath}" is not a regular file.`,
+    };
+  }
+  if (stat.size > options.maxBytes) {
+    return {
+      ok: false,
+      problem:
+        options.oversizeProblem ??
+        `${options.kind} file "${relativePath}" exceeds the ${options.maxBytes} byte limit.`,
+    };
+  }
+  const dirReal = realpathOrNull(NodePath.dirname(resolvedPath));
+  if (dirReal === null || !isInsideDirectory(pluginRootReal, dirReal, true)) {
+    return { ok: false, problem: `${options.kind} path must stay inside the plugin folder.` };
+  }
+  const content = readThemeFileGuarded(resolvedPath, options.maxBytes);
+  if (content === null) {
+    return { ok: false, problem: `${options.kind} file "${relativePath}" could not be read.` };
+  }
+  return {
+    ok: true,
+    path: resolvedPath,
+    canonicalPath: NodePath.join(dirReal, NodePath.basename(resolvedPath)),
+    content,
+  };
+};
+
+const isExistingTargetSafe = (
+  folderPath: string,
+  targetCssPath: string | null,
+  targetPanelPaths: ReadonlyArray<string>,
+): boolean => {
   const folderStat = lstatOrNull(folderPath);
   if (folderStat === null) return true;
   if (folderStat.isSymbolicLink() || !folderStat.isDirectory()) return false;
@@ -216,27 +344,37 @@ const isExistingTargetSafe = (folderPath: string, targetCssPath: string | null):
     const cssDir = NodePath.dirname(targetCssPath);
     if (cssDir !== folderPath && lstatOrNull(cssDir)?.isSymbolicLink() === true) return false;
   }
+  for (const panelPath of targetPanelPaths) {
+    if (lstatOrNull(panelPath)?.isSymbolicLink() === true) return false;
+  }
   return true;
 };
 
 // Untraced: called inside traced PluginRegistry write/restore spans.
-const writeFileAtomic = Effect.fnUntraced(function* (
+const cleanupStalePluginFiles = Effect.fnUntraced(function* (
   fs: FileSystem.FileSystem,
-  filePath: string,
-  content: string,
-  errorFor: (cause: unknown) => PluginOperationError,
+  folderPath: string,
+  keepPanelFileNames: ReadonlySet<string>,
+  previousCssPath: string | null,
+  nextCssPath: string | null,
 ) {
-  const dir = NodePath.dirname(filePath);
-  const base = NodePath.basename(filePath);
-  const tempPath = NodePath.join(
-    dir,
-    `.${base}.${process.pid}.${NodeCrypto.randomBytes(6).toString("hex")}.tmp`,
-  );
-  yield* fs.writeFileString(tempPath, content).pipe(
-    Effect.andThen(fs.rename(tempPath, filePath)),
-    Effect.tapError(() => fs.remove(tempPath).pipe(Effect.ignore)),
-    Effect.mapError(errorFor),
-  );
+  const entries = yield* fs
+    .readDirectory(folderPath)
+    .pipe(Effect.orElseSucceed((): Array<string> => []));
+  for (const entry of entries) {
+    if (!entry.endsWith(".html") || keepPanelFileNames.has(entry)) continue;
+    const candidate = NodePath.join(folderPath, entry);
+    const stat = lstatOrNull(candidate);
+    if (stat !== null && !stat.isSymbolicLink() && stat.isFile()) {
+      yield* fs.remove(candidate, { force: true }).pipe(Effect.ignoreCause({ log: true }));
+    }
+  }
+  if (previousCssPath !== null && previousCssPath !== nextCssPath) {
+    const stat = lstatOrNull(previousCssPath);
+    if (stat !== null && !stat.isSymbolicLink() && stat.isFile()) {
+      yield* fs.remove(previousCssPath, { force: true }).pipe(Effect.ignoreCause({ log: true }));
+    }
+  }
 });
 
 // Untraced: called inside traced PluginRegistry write/restore spans.
@@ -246,14 +384,23 @@ const saveHistoryRevision = Effect.fnUntraced(function* (
   pluginId: string,
   manifestText: string,
   cssText: string,
+  panels: ReadonlyArray<{ readonly fileName: string; readonly html: string }>,
   operation: "write" | "restore",
 ) {
-  const revision = computePluginRevision(manifestText, cssText);
+  const revision = computePluginRevision(
+    manifestText,
+    cssText,
+    panels.map((panel) => panel.html),
+  );
   const historyRoot = NodePath.join(stateDir, PLUGINS_HISTORY_DIR_NAME);
   const pluginHistoryDir = NodePath.join(historyRoot, pluginId);
   const revisionDir = NodePath.join(pluginHistoryDir, revision);
   const manifestPath = NodePath.join(revisionDir, PLUGIN_MANIFEST_FILE);
   const cssPath = NodePath.join(revisionDir, PLUGIN_CSS_FILE);
+  const panelTargets = panels.map((panel) => ({
+    path: NodePath.join(revisionDir, panel.fileName),
+    html: panel.html,
+  }));
   const mapError = (cause: unknown) =>
     new PluginOperationError({
       pluginId,
@@ -262,7 +409,14 @@ const saveHistoryRevision = Effect.fnUntraced(function* (
       cause,
     });
 
-  for (const candidate of [historyRoot, pluginHistoryDir, revisionDir, manifestPath, cssPath]) {
+  for (const candidate of [
+    historyRoot,
+    pluginHistoryDir,
+    revisionDir,
+    manifestPath,
+    cssPath,
+    ...panelTargets.map((panel) => panel.path),
+  ]) {
     if (lstatOrNull(candidate)?.isSymbolicLink() === true) {
       return yield* new PluginOperationError({
         pluginId,
@@ -274,7 +428,11 @@ const saveHistoryRevision = Effect.fnUntraced(function* (
 
   const existingManifest = lstatOrNull(manifestPath);
   const existingCss = lstatOrNull(cssPath);
-  if (existingManifest?.isFile() && existingCss?.isFile()) {
+  if (
+    existingManifest?.isFile() &&
+    existingCss?.isFile() &&
+    panelTargets.every((panel) => lstatOrNull(panel.path)?.isFile() === true)
+  ) {
     return revision;
   }
 
@@ -298,6 +456,9 @@ const saveHistoryRevision = Effect.fnUntraced(function* (
   yield* fs.makeDirectory(revisionDir, { recursive: true }).pipe(Effect.mapError(mapError));
   yield* writeFileAtomic(fs, manifestPath, manifestText, mapError);
   yield* writeFileAtomic(fs, cssPath, cssText, mapError);
+  for (const panel of panelTargets) {
+    yield* writeFileAtomic(fs, panel.path, panel.html, mapError);
+  }
 
   // Keep mtimes strictly ordered across back-to-back writes within one OS timer tick.
   const writtenStat = lstatOrNull(revisionDir);
@@ -443,74 +604,121 @@ const inspectPluginFolder = (
     ...(manifest.description !== undefined ? { description: manifest.description } : {}),
     ...(manifest.version !== undefined ? { version: manifest.version } : {}),
   };
-  if (manifest.css === undefined) {
-    return {
-      plugin: {
-        id: folderName,
-        ...metadata,
-        enabled: storedEnabled,
-        contributes: [],
-        revision: emptyCssRevision,
-      },
-      rawManifest,
-    };
+  if (manifest.css === undefined && manifest.panels === undefined) {
+    return withProblem(
+      folderName,
+      "Plugin manifest must define css or at least one panel.",
+      metadata,
+      { revision: emptyCssRevision, rawManifest },
+    );
   }
 
-  const cssProblem = (problem: string, css?: string) =>
-    withProblem(folderName, problem, metadata, {
-      revision: css === undefined ? emptyCssRevision : computePluginRevision(rawManifest, css),
-      rawManifest,
-      ...(css !== undefined ? { rawCss: css } : {}),
+  let css: string | undefined;
+  let cssPath: string | undefined;
+  if (manifest.css !== undefined) {
+    const cssRead = readPluginFileGuarded(folderPath, pluginRootReal, manifest.css, {
+      kind: "CSS",
+      maxBytes: MAX_PLUGIN_CSS_BYTES,
+      allowSubfolders: true,
+      oversizeProblem: `CSS exceeds the ${THEME_CSS_MAX_LENGTH} character limit.`,
     });
-  const cssName = manifest.css;
-  const resolvedCssPath = resolveSafeCssPath(folderPath, cssName);
-  if (resolvedCssPath === null) {
-    return cssProblem('CSS path must start with "./" and stay inside the plugin folder.');
+    if (!cssRead.ok) {
+      return withProblem(folderName, cssRead.problem, metadata, {
+        revision: emptyCssRevision,
+        rawManifest,
+      });
+    }
+    css = cssRead.content;
+    cssPath = cssRead.path;
+    if (css.length > THEME_CSS_MAX_LENGTH) {
+      return withProblem(
+        folderName,
+        `CSS exceeds the ${THEME_CSS_MAX_LENGTH} character limit.`,
+        metadata,
+        {
+          revision: computePluginRevision(rawManifest, css),
+          rawManifest,
+          rawCss: css,
+          cssPath,
+        },
+      );
+    }
+    if (themeCssLoadsRemoteFiles(css)) {
+      return withProblem(
+        folderName,
+        "CSS cannot load remote files (@import, image-set(), or non-local url()).",
+        metadata,
+        {
+          revision: computePluginRevision(rawManifest, css),
+          rawManifest,
+          rawCss: css,
+          cssPath,
+        },
+      );
+    }
   }
 
-  let cssStat: NodeFS.Stats;
-  try {
-    cssStat = NodeFS.lstatSync(resolvedCssPath);
-  } catch (error) {
-    return cssProblem(
-      isMissingPath(error)
-        ? `CSS file "${cssName}" was not found.`
-        : `CSS file "${cssName}" could not be accessed.`,
-    );
-  }
-  if (cssStat.isSymbolicLink()) return cssProblem(`CSS file "${cssName}" cannot be a symlink.`);
-  if (!cssStat.isFile()) return cssProblem(`CSS file "${cssName}" is not a regular file.`);
-  if (cssStat.size > MAX_PLUGIN_CSS_BYTES) {
-    return cssProblem(`CSS exceeds the ${THEME_CSS_MAX_LENGTH} character limit.`);
-  }
-  const cssDirReal = realpathOrNull(NodePath.dirname(resolvedCssPath));
-  if (cssDirReal === null || !isInsideDirectory(pluginRootReal, cssDirReal, true)) {
-    return cssProblem("CSS path must stay inside the plugin folder.");
+  const panels: Array<ScannedPanel> = [];
+  if (manifest.panels !== undefined) {
+    for (const panel of manifest.panels) {
+      const panelRead = readPluginFileGuarded(folderPath, pluginRootReal, panel.entry, {
+        kind: "Panel",
+        maxBytes: MCP_APP_MAX_HTML_BYTES,
+        allowSubfolders: false,
+      });
+      if (!panelRead.ok) {
+        return withProblem(folderName, panelRead.problem, metadata, {
+          revision: computePluginRevision(
+            rawManifest,
+            css ?? "",
+            panels.map((item) => item.html),
+          ),
+          rawManifest,
+          ...(css !== undefined ? { rawCss: css } : {}),
+          ...(cssPath !== undefined ? { cssPath } : {}),
+          ...(panels.length > 0
+            ? { rawPanels: panels.map(({ fileName, html }) => ({ fileName, html })) }
+            : {}),
+        });
+      }
+      panels.push({
+        id: panel.id,
+        title: panel.title,
+        fileName: NodePath.basename(panelRead.path),
+        canonicalPath: panelRead.canonicalPath,
+        html: panelRead.content,
+      });
+    }
   }
 
-  const css = readThemeFileGuarded(resolvedCssPath, MAX_PLUGIN_CSS_BYTES);
-  if (css === null) return cssProblem(`CSS file "${cssName}" could not be read.`);
-  if (css.length > THEME_CSS_MAX_LENGTH) {
-    return cssProblem(`CSS exceeds the ${THEME_CSS_MAX_LENGTH} character limit.`, css);
-  }
-  if (themeCssLoadsRemoteFiles(css)) {
-    return cssProblem(
-      "CSS cannot load remote files (@import, image-set(), or non-local url()).",
-      css,
-    );
-  }
+  const contributes: Array<PluginContribution> = [];
+  if (css !== undefined) contributes.push("css");
+  if (panels.length > 0) contributes.push("panel");
+  const installedPanels: ReadonlyArray<InstalledPluginPanel> | undefined =
+    panels.length > 0 ? panels.map(({ id, title }) => ({ id, title })) : undefined;
 
   return {
     plugin: {
       id: folderName,
       ...metadata,
       enabled: storedEnabled,
-      contributes: ["css"],
-      revision: computePluginRevision(rawManifest, css),
+      contributes,
+      ...(installedPanels !== undefined ? { panels: installedPanels } : {}),
+      revision: computePluginRevision(
+        rawManifest,
+        css ?? "",
+        panels.map((panel) => panel.html),
+      ),
     },
-    css,
+    ...(css !== undefined ? { css, rawCss: css } : {}),
+    ...(cssPath !== undefined ? { cssPath } : {}),
+    ...(panels.length > 0
+      ? {
+          panels,
+          rawPanels: panels.map(({ fileName, html }) => ({ fileName, html })),
+        }
+      : {}),
     rawManifest,
-    rawCss: css,
   };
 };
 
@@ -525,6 +733,7 @@ const scanPlugins = Effect.fnUntraced(function* (
 
   const plugins: Array<InstalledPlugin> = [];
   const active: Array<EnvironmentPlugin> = [];
+  const panelEntries = new Map<string, ReadonlyMap<string, string>>();
   let examined = 0;
 
   for (const folderName of entries.toSorted()) {
@@ -546,14 +755,29 @@ const scanPlugins = Effect.fnUntraced(function* (
     if (
       scanned.plugin.enabled &&
       scanned.plugin.problem === undefined &&
-      scanned.css !== undefined &&
       isPluginId(scanned.plugin.id)
     ) {
-      active.push({ id: scanned.plugin.id, css: scanned.css });
+      const activePanels =
+        scanned.panels !== undefined && scanned.panels.length > 0
+          ? scanned.panels.map(({ id, title }) => ({ id, title }))
+          : undefined;
+      if (scanned.css !== undefined || activePanels !== undefined) {
+        active.push({
+          id: scanned.plugin.id,
+          css: scanned.css ?? "",
+          ...(activePanels !== undefined ? { panels: activePanels } : {}),
+        });
+      }
+      if (scanned.panels !== undefined && scanned.panels.length > 0) {
+        panelEntries.set(
+          scanned.plugin.id,
+          new Map(scanned.panels.map((panel) => [panel.id, panel.canonicalPath])),
+        );
+      }
     }
   }
 
-  return { plugins, active };
+  return { plugins, active, panelEntries };
 });
 
 const make = Effect.gen(function* () {
@@ -562,7 +786,12 @@ const make = Effect.gen(function* () {
   const settings = yield* ServerSettings.ServerSettingsService;
 
   const changes = yield* PubSub.sliding<PluginSnapshot>(1);
-  const published = yield* Ref.make<PluginSnapshot>({ seq: 0, plugins: [], active: [] });
+  const published = yield* Ref.make<PluginSnapshot>({
+    seq: 0,
+    plugins: [],
+    active: [],
+    panelEntries: new Map(),
+  });
   const refreshSemaphore = yield* Semaphore.make(1);
   const mutationSemaphore = yield* Semaphore.make(1);
   const watcherScope = yield* Scope.make("sequential");
@@ -574,7 +803,7 @@ const make = Effect.gen(function* () {
         Effect.map((current) => current.plugins),
         Effect.orElseSucceed((): Readonly<Record<string, PluginSettingEntry>> => ({})),
       );
-      const { plugins, active } = yield* scanPlugins(pluginsDir, pluginSettings).pipe(
+      const { plugins, active, panelEntries } = yield* scanPlugins(pluginsDir, pluginSettings).pipe(
         Effect.provideService(FileSystem.FileSystem, fs),
       );
       const [activeChanged, next] = yield* Ref.modify(
@@ -582,12 +811,15 @@ const make = Effect.gen(function* () {
         (previous): readonly [readonly [boolean, PluginSnapshot], PluginSnapshot] => {
           const sameActive = Equal.equals(previous.active, active);
           const samePlugins = Equal.equals(previous.plugins, plugins);
-          if (sameActive && samePlugins) return [[false, previous], previous];
           const updated: PluginSnapshot = {
             seq: sameActive ? previous.seq : previous.seq + 1,
             plugins,
             active,
+            panelEntries,
           };
+          if (sameActive && samePlugins) {
+            return [[false, updated], updated];
+          }
           return [[!sameActive, updated], updated];
         },
       );
@@ -698,7 +930,16 @@ const make = Effect.gen(function* () {
             ? { description: scanned.plugin.description }
             : {}),
           ...(scanned.plugin.version !== undefined ? { version: scanned.plugin.version } : {}),
-          css: scanned.css ?? "",
+          ...(scanned.css !== undefined ? { css: scanned.css } : {}),
+          ...(scanned.panels !== undefined && scanned.panels.length > 0
+            ? {
+                panels: scanned.panels.map(({ id: panelId, title, html }) => ({
+                  id: panelId,
+                  title,
+                  html,
+                })),
+              }
+            : {}),
         };
       }),
     );
@@ -715,25 +956,69 @@ const make = Effect.gen(function* () {
               reason: "invalid_id",
             });
           }
-          if (input.css.length > THEME_CSS_MAX_LENGTH || themeCssLoadsRemoteFiles(input.css)) {
+          const hasCss = input.css !== undefined;
+          const hasPanels = input.panels !== undefined && input.panels.length > 0;
+          if (!hasCss && !hasPanels) {
+            return yield* new PluginOperationError({
+              pluginId: input.id,
+              operation: "write",
+              reason: "invalid_panel",
+            });
+          }
+          if (
+            input.css !== undefined &&
+            (input.css.length > THEME_CSS_MAX_LENGTH || themeCssLoadsRemoteFiles(input.css))
+          ) {
             return yield* new PluginOperationError({
               pluginId: input.id,
               operation: "write",
               reason: "invalid_css",
             });
           }
+          if (input.panels !== undefined) {
+            if (input.panels.length === 0 || input.panels.length > PLUGIN_MAX_PANELS) {
+              return yield* new PluginOperationError({
+                pluginId: input.id,
+                operation: "write",
+                reason: "invalid_panel",
+              });
+            }
+            for (const panel of input.panels) {
+              if (
+                !isPluginId(panel.id) ||
+                panel.html.length > PLUGIN_PANEL_HTML_MAX_CHARS ||
+                Buffer.byteLength(panel.html, "utf8") > MCP_APP_MAX_HTML_BYTES
+              ) {
+                return yield* new PluginOperationError({
+                  pluginId: input.id,
+                  operation: "write",
+                  reason: "invalid_panel",
+                });
+              }
+            }
+          }
+
           const manifestDecoded = decodePluginManifestExit({
             name: input.id,
             ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
             ...(input.description !== undefined ? { description: input.description } : {}),
             ...(input.version !== undefined ? { version: input.version } : {}),
-            css: `./${PLUGIN_CSS_FILE}`,
+            ...(input.css !== undefined ? { css: `./${PLUGIN_CSS_FILE}` } : {}),
+            ...(input.panels !== undefined
+              ? {
+                  panels: input.panels.map((panel) => ({
+                    id: panel.id,
+                    title: panel.title,
+                    entry: `./${panel.id}.html`,
+                  })),
+                }
+              : {}),
           });
           if (manifestDecoded._tag === "Failure") {
             return yield* new PluginOperationError({
               pluginId: input.id,
               operation: "write",
-              reason: "has_problem",
+              reason: input.panels !== undefined ? "invalid_panel" : "has_problem",
             });
           }
           const manifestText = `${yield* encodePluginManifestJson(manifestDecoded.value).pipe(
@@ -759,8 +1044,20 @@ const make = Effect.gen(function* () {
           const folderStat = lstatOrNull(folderPath);
           const manifestDir = NodePath.join(folderPath, PLUGIN_MANIFEST_DIR);
           const manifestPath = NodePath.join(manifestDir, PLUGIN_MANIFEST_FILE);
-          const cssPath = NodePath.join(folderPath, PLUGIN_CSS_FILE);
-          if (!isExistingTargetSafe(folderPath, cssPath)) {
+          const cssPath =
+            input.css !== undefined ? NodePath.join(folderPath, PLUGIN_CSS_FILE) : null;
+          const panelWrites = (input.panels ?? []).map((panel) => ({
+            fileName: `${panel.id}.html`,
+            targetPath: NodePath.join(folderPath, `${panel.id}.html`),
+            html: panel.html,
+          }));
+          if (
+            !isExistingTargetSafe(
+              folderPath,
+              cssPath,
+              panelWrites.map((panel) => panel.targetPath),
+            )
+          ) {
             return yield* new PluginOperationError({
               pluginId: input.id,
               operation: "write",
@@ -770,8 +1067,10 @@ const make = Effect.gen(function* () {
 
           const created = folderStat === null;
           let before: string | undefined;
+          let previousCssPath: string | null = null;
           if (!created) {
             const existing = inspectPluginFolder(pluginsDir, input.id, false);
+            previousCssPath = existing?.cssPath ?? null;
             if (existing?.rawManifest !== undefined) {
               before = yield* saveHistoryRevision(
                 fs,
@@ -779,6 +1078,7 @@ const make = Effect.gen(function* () {
                 input.id,
                 existing.rawManifest,
                 existing.rawCss ?? "",
+                existing.rawPanels ?? [],
                 "write",
               );
             }
@@ -795,14 +1095,27 @@ const make = Effect.gen(function* () {
             .makeDirectory(manifestDir, { recursive: true })
             .pipe(Effect.mapError(mapWriteError));
           yield* writeFileAtomic(fs, manifestPath, manifestText, mapWriteError);
-          yield* writeFileAtomic(fs, cssPath, input.css, mapWriteError);
+          if (cssPath !== null && input.css !== undefined) {
+            yield* writeFileAtomic(fs, cssPath, input.css, mapWriteError);
+          }
+          for (const panel of panelWrites) {
+            yield* writeFileAtomic(fs, panel.targetPath, panel.html, mapWriteError);
+          }
+          yield* cleanupStalePluginFiles(
+            fs,
+            folderPath,
+            new Set(panelWrites.map((panel) => panel.fileName)),
+            previousCssPath,
+            cssPath,
+          );
 
           const after = yield* saveHistoryRevision(
             fs,
             stateDir,
             input.id,
             manifestText,
-            input.css,
+            input.css ?? "",
+            panelWrites.map(({ fileName, html }) => ({ fileName, html })),
             "write",
           );
           const updated = yield* refresh;
@@ -892,7 +1205,11 @@ const make = Effect.gen(function* () {
           }
 
           const decoded = decodePluginManifestJsonExit(manifestText);
-          if (decoded._tag === "Failure" || decoded.value.name !== id) {
+          if (
+            decoded._tag === "Failure" ||
+            decoded.value.name !== id ||
+            (decoded.value.css === undefined && decoded.value.panels === undefined)
+          ) {
             return yield* new PluginOperationError({
               pluginId: id,
               operation: "restore",
@@ -903,7 +1220,7 @@ const make = Effect.gen(function* () {
           const targetCssPath =
             decoded.value.css === undefined
               ? null
-              : resolveSafeCssPath(folderPath, decoded.value.css);
+              : resolveSafePluginFilePath(folderPath, decoded.value.css, true);
           if (decoded.value.css !== undefined) {
             if (targetCssPath === null) {
               return yield* new PluginOperationError({
@@ -921,17 +1238,62 @@ const make = Effect.gen(function* () {
             }
           }
 
+          const panelRestores: Array<{
+            readonly fileName: string;
+            readonly targetPath: string;
+            readonly html: string;
+          }> = [];
+          for (const panel of decoded.value.panels ?? []) {
+            const targetPanelPath = resolveSafePluginFilePath(folderPath, panel.entry, false);
+            if (targetPanelPath === null) {
+              return yield* new PluginOperationError({
+                pluginId: id,
+                operation: "restore",
+                reason: "has_problem",
+              });
+            }
+            const fileName = NodePath.basename(targetPanelPath);
+            const histPanelPath = NodePath.resolve(revisionDir, fileName);
+            if (
+              !isInsideDirectory(revisionDir, histPanelPath, false) ||
+              lstatOrNull(histPanelPath)?.isSymbolicLink() === true
+            ) {
+              return yield* new PluginOperationError({
+                pluginId: id,
+                operation: "restore",
+                reason: "has_problem",
+              });
+            }
+            const html = readThemeFileGuarded(histPanelPath, MCP_APP_MAX_HTML_BYTES);
+            if (html === null) {
+              return yield* new PluginOperationError({
+                pluginId: id,
+                operation: "restore",
+                reason: "not_found",
+              });
+            }
+            panelRestores.push({ fileName, targetPath: targetPanelPath, html });
+          }
+
           const manifestDir = NodePath.join(folderPath, PLUGIN_MANIFEST_DIR);
           const manifestPath = NodePath.join(manifestDir, PLUGIN_MANIFEST_FILE);
-          if (!isExistingTargetSafe(folderPath, targetCssPath)) {
+          if (
+            !isExistingTargetSafe(
+              folderPath,
+              targetCssPath,
+              panelRestores.map((panel) => panel.targetPath),
+            )
+          ) {
             return yield* new PluginOperationError({
               pluginId: id,
               operation: "restore",
               reason: "has_problem",
             });
           }
+          let previousCssPath: string | null = null;
           if (lstatOrNull(folderPath) !== null) {
             const existing = inspectPluginFolder(pluginsDir, id, false);
+            previousCssPath = existing?.cssPath ?? null;
             if (existing?.rawManifest !== undefined) {
               yield* saveHistoryRevision(
                 fs,
@@ -939,6 +1301,7 @@ const make = Effect.gen(function* () {
                 id,
                 existing.rawManifest,
                 existing.rawCss ?? "",
+                existing.rawPanels ?? [],
                 "restore",
               );
             }
@@ -961,6 +1324,16 @@ const make = Effect.gen(function* () {
               .pipe(Effect.mapError(mapWriteError));
             yield* writeFileAtomic(fs, targetCssPath, cssText, mapWriteError);
           }
+          for (const panel of panelRestores) {
+            yield* writeFileAtomic(fs, panel.targetPath, panel.html, mapWriteError);
+          }
+          yield* cleanupStalePluginFiles(
+            fs,
+            folderPath,
+            new Set(panelRestores.map((panel) => panel.fileName)),
+            previousCssPath,
+            targetCssPath,
+          );
 
           if (enable === true) {
             yield* settings.updateSettings({ plugins: { [id]: { enabled: true } } }).pipe(
@@ -1124,6 +1497,28 @@ const make = Effect.gen(function* () {
     },
   );
 
+  const resolvePanelEntry: PluginRegistry["Service"]["resolvePanelEntry"] = Effect.fn(
+    "PluginRegistry.resolvePanelEntry",
+  )(function* (pluginId, panelId) {
+    if (!isPluginId(pluginId) || !isPluginId(panelId)) {
+      return yield* new PluginOperationError({
+        pluginId,
+        operation: "resolvePanelEntry",
+        reason: "not_found",
+      });
+    }
+    const snapshot = yield* refresh;
+    const entryPath = snapshot.panelEntries.get(pluginId)?.get(panelId);
+    if (entryPath === undefined) {
+      return yield* new PluginOperationError({
+        pluginId,
+        operation: "resolvePanelEntry",
+        reason: "not_found",
+      });
+    }
+    return entryPath;
+  });
+
   return PluginRegistry.of({
     list: list(),
     read,
@@ -1131,6 +1526,7 @@ const make = Effect.gen(function* () {
     restore,
     setEnabled,
     uninstall,
+    resolvePanelEntry,
     get streamChanges() {
       return Stream.unwrap(
         Effect.gen(function* () {

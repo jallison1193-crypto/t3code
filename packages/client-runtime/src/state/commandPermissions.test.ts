@@ -157,6 +157,8 @@ describe("command permissions", () => {
     { method: WS_METHODS.serverSetPluginEnabled, scope: AuthSettingsWriteScope },
     { method: WS_METHODS.serverUninstallPlugin, scope: AuthSettingsWriteScope },
     { method: WS_METHODS.serverRestorePluginRevision, scope: AuthSettingsWriteScope },
+    { method: WS_METHODS.serverGetPluginState, scope: AuthSettingsWriteScope },
+    { method: WS_METHODS.serverSetPluginState, scope: AuthSettingsWriteScope },
     { method: WS_METHODS.serverReclaimDatabaseSpace, scope: AuthEnvironmentMaintainScope },
     { method: WS_METHODS.workspaceAddTaskFolderRepository, scope: AuthSourceControlWriteScope },
     { method: WS_METHODS.providerMcpSignInStart, scope: AuthProvidersManageScope },

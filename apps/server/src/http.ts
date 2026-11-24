@@ -5,7 +5,11 @@ import {
   EnvironmentHttpApi,
 } from "@t3tools/contracts";
 import { isDevProxiedPath } from "@t3tools/shared/devProxy";
-import { injectMcpAppCookieBootstrap, injectMcpAppThemeBootstrap } from "@t3tools/shared/mcpApp";
+import {
+  injectMcpAppCookieBootstrap,
+  injectMcpAppCsp,
+  injectMcpAppThemeBootstrap,
+} from "@t3tools/shared/mcpApp";
 import { FILE_PREVIEW_SCROLL_SCRIPT } from "@t3tools/shared/htmlRender";
 import { decodeOtlpTraceRecords } from "@t3tools/shared/observability";
 import * as ByteSize from "effect/ByteSize";
@@ -169,6 +173,7 @@ export const assetFileResponse = Effect.fn("assetFileResponse")(function* (
     readonly mimeType?: string;
     readonly file?: OpenMediaFile;
     readonly renderIntent?: "mcp-app" | "file-preview";
+    readonly injectDefaultCsp?: boolean;
   },
   rangeHeader?: string,
   ifRangeHeader?: string,
@@ -184,12 +189,16 @@ export const assetFileResponse = Effect.fn("assetFileResponse")(function* (
     if (bytes === null) {
       return HttpServerResponse.text("MCP app is too large to preview.", { status: 413 });
     }
+    const decoded = new TextDecoder().decode(bytes);
     const body = pipe(
-      new TextDecoder().decode(bytes),
+      asset.injectDefaultCsp === true ? injectMcpAppCsp(decoded, undefined) : decoded,
       injectMcpAppThemeBootstrap,
       injectMcpAppCookieBootstrap,
       (html) => new TextEncoder().encode(html),
     );
+    if (asset.injectDefaultCsp === true) {
+      headers["Cache-Control"] = "private, no-store";
+    }
     headers["Content-Length"] = String(body.byteLength);
     return method === "HEAD"
       ? HttpServerResponse.empty({ status: 200, headers })

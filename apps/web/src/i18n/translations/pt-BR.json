@@ -12734,5 +12734,26 @@
   "a780192787ba0339": "Desativar",
   "de5d81466963b903": "Instalar mesmo assim",
   "f510356291976f4f": "Desfazer",
-  "4fc630d6b2bf647f": "Restaurar"
+  "4fc630d6b2bf647f": "Restaurar",
+  "10c34fe32ba2b806": "Adiciona uma aba ao painel direito",
+  "bfb4b72da2a01636": "Painel do plugin {title}",
+  "99959d940786543c": "Este plugin está desativado",
+  "ccd8dfabd9c81e97": "Configurações → Plugins",
+  "51085622bb53a1fb": [
+    "O painel ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " saiu da página e foi interrompido"
+  ],
+  "74b84cb162d33f2d": [
+    "Não foi possível carregar o painel ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ]
 }

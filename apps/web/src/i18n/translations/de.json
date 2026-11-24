@@ -12733,5 +12733,27 @@
   "a780192787ba0339": "Ausschalten",
   "de5d81466963b903": "Trotzdem installieren",
   "f510356291976f4f": "Rückgängig",
-  "4fc630d6b2bf647f": "Wiederherstellen"
+  "4fc630d6b2bf647f": "Wiederherstellen",
+  "10c34fe32ba2b806": "Fügt einen Tab im rechten Panel hinzu",
+  "bfb4b72da2a01636": "Plugin-Panel {title}",
+  "99959d940786543c": "Dieses Plugin ist ausgeschaltet",
+  "ccd8dfabd9c81e97": "Einstellungen → Plugins",
+  "51085622bb53a1fb": [
+    "Das Panel ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " hat seine Seite verlassen und wurde gestoppt"
+  ],
+  "74b84cb162d33f2d": [
+    "Das Panel ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " kann nicht geladen werden"
+  ]
 }

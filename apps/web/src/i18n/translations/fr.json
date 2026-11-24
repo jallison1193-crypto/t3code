@@ -12734,5 +12734,26 @@
   "a780192787ba0339": "Désactiver",
   "de5d81466963b903": "Installer quand même",
   "f510356291976f4f": "Annuler",
-  "4fc630d6b2bf647f": "Restaurer"
+  "4fc630d6b2bf647f": "Restaurer",
+  "10c34fe32ba2b806": "Ajoute un onglet au panneau de droite",
+  "bfb4b72da2a01636": "Panneau du plugin {title}",
+  "99959d940786543c": "Ce plugin est désactivé",
+  "ccd8dfabd9c81e97": "Paramètres → Plugins",
+  "51085622bb53a1fb": [
+    "Le panneau ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " a quitté sa page et a été arrêté"
+  ],
+  "74b84cb162d33f2d": [
+    "Impossible de charger le panneau ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ]
 }

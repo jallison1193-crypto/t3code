@@ -176,6 +176,11 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     useRightPanelStore.getState().openFile(activeThreadRef, relativePath);
   };
   const openFileSurfaceStable = useStableCallback(openFileSurface);
+  const openPluginPanelSurface = (pluginId: string, panelId: string) => {
+    if (!activeThreadRef) return;
+    useRightPanelStore.getState().openPluginPanel(activeThreadRef, pluginId, panelId);
+  };
+  const openPluginPanelSurfaceStable = useStableCallback(openPluginPanelSurface);
   const closePreviewPanel = () => {
     if (activeThreadRef) {
       if (activeRightPanelSurface?.kind === "preview" && activeRightPanelSurface.resourceId) {
@@ -363,6 +368,7 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     onToggleDiffStable,
     openChangesFromThreadPanelStable,
     openFileSurfaceStable,
+    openPluginPanelSurfaceStable,
     toggleRightPanelMaximizedStable,
     toggleRightPanelStable,
     toggleThreadPanelStable,
