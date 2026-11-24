@@ -452,4 +452,42 @@ describe("makeMcpAppHost", () => {
       expect(sent.find((m) => m.id === id)?.result).toEqual({});
     }
   });
+
+  it("gates custom notifications and onInitialized behind ui/notifications/initialized", () => {
+    let initializedCalls = 0;
+    const { host, sent } = setup({
+      onInitialized: () => {
+        initializedCalls += 1;
+        host.notify("t3/notifications/state-changed", { scope: "global", value: { count: 1 } });
+      },
+    });
+
+    expect(host.notify("t3/notifications/state-changed", { scope: "global", value: null })).toBe(
+      false,
+    );
+    expect(sent).toEqual([]);
+    expect(initializedCalls).toBe(0);
+
+    initialize(host);
+    expect(initializedCalls).toBe(1);
+    expect(sent.at(-1)).toEqual({
+      jsonrpc: "2.0",
+      method: "t3/notifications/state-changed",
+      params: { scope: "global", value: { count: 1 } },
+    });
+
+    expect(
+      host.notify("t3/notifications/state-changed", { scope: "global", value: { count: 2 } }),
+    ).toBe(true);
+    expect(sent.at(-1)).toEqual({
+      jsonrpc: "2.0",
+      method: "t3/notifications/state-changed",
+      params: { scope: "global", value: { count: 2 } },
+    });
+
+    host.dispose();
+    expect(
+      host.notify("t3/notifications/state-changed", { scope: "global", value: { count: 3 } }),
+    ).toBe(false);
+  });
 });

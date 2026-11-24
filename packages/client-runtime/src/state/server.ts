@@ -1836,6 +1836,19 @@ export function createServerEnvironmentAtoms<R, E>(
           registry.refresh(pluginsList({ environmentId, input: {} }));
         }),
     }),
+    getPluginState: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:plugins:get-state",
+      tag: WS_METHODS.serverGetPluginState,
+    }),
+    setPluginState: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:plugins:set-state",
+      tag: WS_METHODS.serverSetPluginState,
+    }),
+    pluginState: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:server:plugins:state",
+      tag: WS_METHODS.serverSubscribePluginState,
+      idleTtlMs: 0,
+    }),
     mutateProviderInstance: updateSettings,
     prepareAcpRegistryAgent: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:acp-registry:prepare",

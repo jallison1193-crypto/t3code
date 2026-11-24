@@ -13,6 +13,7 @@ import type {
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { lazy, Suspense } from "react";
 import { LinkedThreadPane } from "./LinkedThreadPane";
+import { PluginPanelFrame } from "./PluginPanelFrame";
 import SideThreadPane from "./SideThreadPane";
 import ThreadBesidePane from "../projectHome/ThreadBesidePane";
 import type { ComposerImageAttachment, DraftId } from "../../composerDraftStore";
@@ -259,6 +260,17 @@ export function RightPanelSurfaceContent(props: {
           panelRef={threadRef}
           surface={surface}
           visible={visible && props.activeSurfaceId === surface.id}
+        />
+      );
+    case "plugin-panel":
+      return (
+        <PluginPanelFrame
+          key={`${scopedThreadKey(threadRef)}:${surface.id}`}
+          environmentId={props.environmentId}
+          threadId={threadRef.threadId}
+          projectId={props.files.projectId ?? props.pullRequest.projectId ?? undefined}
+          pluginId={surface.pluginId}
+          panelId={surface.panelId}
         />
       );
     case "device":

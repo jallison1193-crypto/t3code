@@ -12,7 +12,11 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { decodeLinkedThreadSurface } from "./linkedThreadSurface";
 import { resolveStorage } from "./lib/storage";
 import { randomUUID } from "./lib/utils";
-import { decodeThreadSurface, type RightPanelSurface } from "./rightPanelStore";
+import {
+  decodePluginPanelSurface,
+  decodeThreadSurface,
+  type RightPanelSurface,
+} from "./rightPanelStore";
 
 export type ClosedView =
   | {
@@ -91,6 +95,8 @@ const isClosedViewEntry = (entry: unknown): entry is ClosedViewEntry => {
         (surface.title === null || typeof surface.title === "string") &&
         decodeLinkedThreadSurface(surface)?.id === surface.id
       );
+    case "plugin-panel":
+      return decodePluginPanelSurface(surface)?.id === surface.id;
     case "pull-request":
       return (
         typeof surface.projectId === "string" &&

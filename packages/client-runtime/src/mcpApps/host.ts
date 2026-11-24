@@ -39,6 +39,13 @@ export interface McpAppHostContext {
     readonly left: number;
   };
   readonly toolInfo?: { readonly tool: unknown };
+  readonly t3?: {
+    readonly environmentId: string;
+    readonly pluginId: string;
+    readonly panelId: string;
+    readonly projectId?: string;
+    readonly threadId?: string;
+  };
 }
 
 export type McpAppDownload =
@@ -101,6 +108,7 @@ export interface McpAppHostOptions {
   readonly downloadFile: (files: ReadonlyArray<McpAppDownload>) => Promise<void>;
   readonly onRequestTeardown: () => void;
   readonly onSizeChanged: (size: { readonly width?: number; readonly height?: number }) => void;
+  readonly onInitialized?: () => void;
 }
 
 export interface McpAppHost {
@@ -111,6 +119,8 @@ export interface McpAppHost {
     readonly result: McpAppCallToolResult | undefined;
   }) => void;
   readonly updateHostContext: () => void;
+  /** Posts a notification only once the app has finished initializing; returns whether it was sent. */
+  readonly notify: (method: string, params: unknown) => boolean;
   /**
    * Asks the app to wrap up before its document goes away (`ui/resource-teardown`),
    * resolving once it answers or after a short timeout, then disposes the host.
@@ -387,6 +397,7 @@ export function makeMcpAppHost(options: McpAppHostOptions): McpAppHost {
         initialized = true;
         sendToolCall();
         hostHandle.updateHostContext();
+        options.onInitialized?.();
         return;
       }
       case "ui/notifications/size-changed": {
@@ -465,6 +476,11 @@ export function makeMcpAppHost(options: McpAppHostOptions): McpAppHost {
       if (Object.keys(changes).length > 0) {
         notify("ui/notifications/host-context-changed", changes);
       }
+    },
+    notify: (method, params) => {
+      if (!initialized || disposed) return false;
+      notify(method, params);
+      return true;
     },
     teardown: () =>
       new Promise<void>((resolve) => {

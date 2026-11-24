@@ -12729,5 +12729,26 @@
   "a780192787ba0339": "Desactivar",
   "de5d81466963b903": "Instalar de todos modos",
   "f510356291976f4f": "Deshacer",
-  "4fc630d6b2bf647f": "Restaurar"
+  "4fc630d6b2bf647f": "Restaurar",
+  "10c34fe32ba2b806": "Añade una pestaña al panel derecho",
+  "bfb4b72da2a01636": "Panel del plugin {title}",
+  "99959d940786543c": "Este plugin está desactivado",
+  "ccd8dfabd9c81e97": "Configuración → Plugins",
+  "51085622bb53a1fb": [
+    "El panel ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " salió de su página y se detuvo"
+  ],
+  "74b84cb162d33f2d": [
+    "No se puede cargar el panel ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ]
 }

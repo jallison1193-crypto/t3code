@@ -43,6 +43,8 @@ function ContributionLine({ contribution }: { readonly contribution: PluginContr
   switch (contribution) {
     case "css":
       return <T>Restyles T3 with CSS</T>;
+    case "panel":
+      return <T>Adds a right panel tab</T>;
   }
 }
 

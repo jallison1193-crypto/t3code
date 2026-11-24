@@ -1,6 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
+  PLUGIN_PANEL_HTML_MAX_CHARS,
   PluginOperationError,
   ProviderInstanceId,
   ThreadId,
@@ -349,3 +350,120 @@ it("advertises Gemini-compatible JSON schemas with only string enums", () => {
   collect(advertisedJsonSchema(PluginToolkit.tools.t3_plugin_write));
   expect(enumValues.filter((value) => typeof value !== "string")).toEqual([]);
 });
+
+it.effect("writes and reads panel plugins and rejects empty or oversized panel writes", () =>
+  Effect.gen(function* () {
+    const html = "<!doctype html><html><body>Pomodoro</body></html>";
+    const layer = runWithRegistry({
+      list: Effect.succeed({
+        pluginsDir: "/state/plugins",
+        plugins: [
+          {
+            id: "pomodoro",
+            displayName: "Pomodoro",
+            enabled: true,
+            contributes: ["panel" as const],
+            panels: [{ id: "timer", title: "Pomodoro" }],
+            revision: "111111111111",
+          },
+        ],
+      }),
+      read: (id) =>
+        id === "pomodoro"
+          ? Effect.succeed({
+              displayName: "Pomodoro",
+              panels: [{ id: "timer", title: "Pomodoro", html }],
+            })
+          : Effect.fail(
+              new PluginOperationError({
+                pluginId: id,
+                operation: "read",
+                reason: "not_found",
+              }),
+            ),
+      write: (input) =>
+        Effect.succeed({
+          plugin: {
+            id: input.id,
+            displayName: input.displayName,
+            enabled: false,
+            contributes: [
+              ...(input.css !== undefined ? (["css"] as const) : []),
+              ...(input.panels?.length ? (["panel"] as const) : []),
+            ],
+            ...(input.panels?.length
+              ? { panels: input.panels.map(({ id, title }) => ({ id, title })) }
+              : {}),
+            revision: "222222222222",
+          },
+          created: true,
+          after: "222222222222",
+        }),
+    });
+
+    yield* Effect.gen(function* () {
+      const toolkit = yield* PluginToolkit;
+      const callRead = (params: Parameters<typeof toolkit.handle<"t3_plugin_read">>[1]) =>
+        toolkit.handle("t3_plugin_read", params).pipe(
+          Stream.unwrap,
+          Stream.runCollect,
+          Effect.map((parts) => parts.at(-1)?.result),
+        );
+      const callWrite = (params: Parameters<typeof toolkit.handle<"t3_plugin_write">>[1]) =>
+        toolkit.handle("t3_plugin_write", params).pipe(
+          Stream.unwrap,
+          Stream.runCollect,
+          Effect.map((parts) => parts.at(-1)?.result),
+        );
+
+      expect(
+        yield* callWrite({
+          pluginId: "pomodoro",
+          displayName: "Pomodoro",
+          panels: [{ id: "timer", title: "Pomodoro", html }],
+        }),
+      ).toEqual({
+        pluginId: "pomodoro",
+        created: true,
+        enabled: false,
+        applied: false,
+        contributes: ["panel"],
+        after: "222222222222",
+        next: "The user turns it on with Install on the card in the chat.",
+      });
+
+      const listed = yield* callRead({});
+      expect(listed).toMatchObject({
+        plugins: [
+          {
+            id: "pomodoro",
+            contributes: ["panel"],
+            panels: [{ id: "timer", title: "Pomodoro" }],
+          },
+        ],
+        guide: expect.stringContaining("t3_plugin_state_get"),
+      });
+
+      const detailed = yield* callRead({ pluginId: "pomodoro" });
+      expect(detailed).toMatchObject({
+        plugin: {
+          displayName: "Pomodoro",
+          panels: [{ id: "timer", title: "Pomodoro", html }],
+        },
+      });
+
+      expect(yield* callWrite({ pluginId: "empty-plugin" })).toMatchObject({
+        code: "invalid_request",
+      });
+
+      expect(
+        yield* callWrite({
+          pluginId: "too-big",
+          panels: [{ id: "main", title: "Big", html: "a".repeat(PLUGIN_PANEL_HTML_MAX_CHARS + 1) }],
+        }),
+      ).toMatchObject({
+        code: "invalid_request",
+      });
+    }).pipe(Effect.provide(layer));
+  }),
+);

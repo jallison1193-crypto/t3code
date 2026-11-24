@@ -116,6 +116,7 @@ import * as ProcessRunner from "./processRunner.ts";
 import * as GitManager from "./git/GitManager.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
 import * as PluginRegistry from "./plugins/PluginRegistry.ts";
+import * as PluginStateStore from "./plugins/PluginStateStore.ts";
 import * as ProjectMemoryStore from "./projectMemory/ProjectMemoryStore.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
@@ -776,7 +777,11 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   Layer.provideMerge(SecretCheck.layer),
   Layer.provideMerge(SecretResolver.layer),
   // Above the settings they read and write.
-  Layer.provideMerge(Layer.merge(EnvironmentTheme.layer, PluginRegistry.layer)),
+  Layer.provideMerge(
+    PluginStateStore.layer.pipe(
+      Layer.provideMerge(Layer.merge(EnvironmentTheme.layer, PluginRegistry.layer)),
+    ),
+  ),
   Layer.provideMerge(ProjectMemoryStore.layer),
   Layer.provideMerge(layerServerSettings),
   Layer.provideMerge(layerSourceControlProviderRegistry),
