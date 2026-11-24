@@ -8,22 +8,31 @@ import {
   type EnvironmentPlugin,
   type EnvironmentPluginCommand,
   type InstalledPlugin,
+  type InstalledPluginMcpServer,
   type InstalledPluginPanel,
   type InstalledPluginWorker,
   type IsoDateTime,
+  PLUGIN_AGENT_MAX_BYTES,
+  PLUGIN_HOOKS_JSON_MAX_BYTES,
   PLUGIN_INSTRUCTIONS_MAX_BYTES,
   PLUGIN_MANIFEST_DIR,
   PLUGIN_MANIFEST_FILE,
+  PLUGIN_MAX_AGENTS,
   PLUGIN_MAX_PANELS,
   PLUGIN_MAX_SKILLS,
+  PLUGIN_MCP_JSON_MAX_BYTES,
   PLUGIN_PANEL_HTML_MAX_CHARS,
   PLUGIN_SKILL_MAX_BYTES,
   PLUGIN_WORKER_CODE_MAX_CHARS,
   PLUGIN_WORKER_MAX_FOLDERS,
   type PluginContribution,
+  type PluginExternalStatus,
+  type PluginHookMatcherGroup,
   PluginId,
   PluginManifest,
   type PluginManifestWorkerFolder,
+  type PluginMcpServerConfig,
+  type PluginMcpServerStatus,
   PluginOperationError,
   type PluginSettingEntry,
   type PluginWorkerEveryMinutes,
@@ -40,6 +49,7 @@ import {
   type ServerUninstallPluginResult,
   THEME_CSS_MAX_LENGTH,
 } from "@t3tools/contracts";
+import type { ProviderAdapterV2PluginAgent } from "@t3tools/provider-core/server/ProviderAdapter";
 import type { ProjectContextPlugin } from "@t3tools/provider-core/server/projectInstructions";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { MCP_APP_MAX_HTML_BYTES } from "@t3tools/shared/mcpApp";
@@ -70,6 +80,22 @@ import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { watchDirectoryPath } from "../watchDirectoryReplacements.ts";
 import { writeFileAtomic } from "./atomicFile.ts";
+import {
+  computePluginMcpServerConfigKey,
+  expandPluginHooksEventMap,
+  formatPluginAgentMarkdown,
+  PLUGIN_AGENTS_DIR,
+  PLUGIN_HOOKS_FILE,
+  PLUGIN_MCP_FILE,
+  type PluginAgentWriteContent,
+  pluginDataDirFor,
+  resolveManifestExternalJsonPath,
+  type ScannedPluginAgent,
+  type ScannedPluginMcpServer,
+  scanPluginExternalParts,
+  validateAndSerializePluginHooksWrite,
+  validateAndSerializePluginMcpWrite,
+} from "./pluginExternalConfig.ts";
 import {
   formatPluginSkillMarkdown,
   parsePluginSkillMarkdown,
@@ -175,13 +201,45 @@ export interface PluginWorkerRuntimeState {
   readonly networkRestricted?: boolean;
 }
 
+export interface PluginMcpServerDesiredSpec {
+  readonly pluginId: PluginId;
+  readonly pluginDisplayName?: string;
+  readonly pluginRootReal: string;
+  readonly pluginDataDir: string;
+  readonly serverName: string;
+  readonly configKey: string;
+  readonly transport:
+    | {
+        readonly kind: "stdio";
+        readonly command: string;
+        readonly args: ReadonlyArray<string>;
+        readonly env: Readonly<Record<string, string>>;
+      }
+    | {
+        readonly kind: "http";
+        readonly url: string;
+        readonly headers: Readonly<Record<string, string>>;
+      };
+  readonly timeoutMs?: number;
+}
+
+export interface PluginMcpServerRuntimeState {
+  readonly status: "starting" | "running" | "failed" | "stopped";
+  readonly toolCount?: number;
+  readonly truncatedTools?: boolean;
+  readonly error?: string;
+}
+
 interface PluginSnapshot {
   readonly seq: number;
   readonly workerSeq: number;
+  readonly mcpSeq: number;
   readonly plugins: ReadonlyArray<InstalledPlugin>;
   readonly active: ReadonlyArray<EnvironmentPlugin>;
   readonly panelEntries: ReadonlyMap<string, ReadonlyMap<string, string>>;
   readonly workerSpecs: ReadonlyArray<PluginWorkerDesiredSpec>;
+  readonly mcpSpecs: ReadonlyArray<PluginMcpServerDesiredSpec>;
+  readonly externalPowersHashes: ReadonlyMap<string, string>;
   readonly activeUserScanned: ReadonlyArray<ScannedPlugin>;
 }
 
@@ -222,12 +280,21 @@ interface ScannedWorker {
 interface ScannedPlugin {
   readonly plugin: InstalledPlugin;
   readonly pluginRootReal?: string;
+  readonly pluginDataDir?: string;
   readonly css?: string;
   readonly cssPath?: string;
   readonly panels?: ReadonlyArray<ScannedPanel>;
   readonly worker?: ScannedWorker;
   readonly skills?: ReadonlyArray<ScannedSkill>;
   readonly instructions?: string;
+  readonly mcpServers?: ReadonlyArray<ScannedPluginMcpServer>;
+  readonly mcpDesiredSpecs?: ReadonlyArray<PluginMcpServerDesiredSpec>;
+  readonly hooks?: Readonly<Record<string, ReadonlyArray<PluginHookMatcherGroup>>>;
+  readonly agents?: ReadonlyArray<ScannedPluginAgent>;
+  readonly externalPowersHash?: string;
+  readonly externalApproved?: boolean;
+  readonly manifestMcpServers?: unknown;
+  readonly manifestHooks?: unknown;
   readonly rawManifest?: string;
   readonly rawCss?: string;
   readonly rawPanels?: ReadonlyArray<{ readonly fileName: string; readonly html: string }>;
@@ -259,6 +326,9 @@ export interface PluginReadResult {
   readonly worker?: PluginWorkerContent;
   readonly skills?: ReadonlyArray<PluginSkillContent>;
   readonly instructions?: string;
+  readonly mcpServers?: Readonly<Record<string, PluginMcpServerConfig>>;
+  readonly hooks?: Readonly<Record<string, ReadonlyArray<PluginHookMatcherGroup>>>;
+  readonly agents?: ReadonlyArray<PluginAgentWriteContent>;
 }
 
 export interface PluginWriteInput {
@@ -271,6 +341,9 @@ export interface PluginWriteInput {
   readonly worker?: PluginWorkerContent;
   readonly skills?: ReadonlyArray<PluginSkillContent>;
   readonly instructions?: string;
+  readonly mcpServers?: Readonly<Record<string, PluginMcpServerConfig>>;
+  readonly hooks?: Readonly<Record<string, ReadonlyArray<PluginHookMatcherGroup>>>;
+  readonly agents?: ReadonlyArray<PluginAgentWriteContent>;
 }
 
 export interface PluginWriteResult {
@@ -283,6 +356,8 @@ export interface PluginWriteResult {
 export interface PluginTurnContext {
   readonly contextPlugins: ReadonlyArray<ProjectContextPlugin>;
   readonly commands: ReadonlyArray<PluginSlashCommandEntry>;
+  readonly hooks?: Readonly<Record<string, ReadonlyArray<PluginHookMatcherGroup>>>;
+  readonly agents?: ReadonlyArray<ProviderAdapterV2PluginAgent>;
 }
 
 export class PluginRegistry extends Context.Service<
@@ -297,13 +372,18 @@ export class PluginRegistry extends Context.Service<
       id: string,
       revision: string,
       enable?: boolean,
-      options?: { readonly approveWorker?: boolean; readonly projectId?: ProjectId },
+      options?: {
+        readonly approveWorker?: boolean;
+        readonly approveExternal?: boolean;
+        readonly projectId?: ProjectId;
+      },
     ) => Effect.Effect<ServerRestorePluginRevisionResult, PluginOperationError>;
     readonly setEnabled: (
       id: string,
       enabled: boolean,
       options?: {
         readonly approveWorker?: boolean;
+        readonly approveExternal?: boolean;
         readonly revision?: string;
         readonly projectId?: ProjectId;
       },
@@ -329,10 +409,16 @@ export class PluginRegistry extends Context.Service<
       pluginId: string,
       state: PluginWorkerRuntimeState | null,
     ) => Effect.Effect<void>;
+    readonly reportMcpRuntime: (
+      pluginId: string,
+      serverName: string,
+      state: PluginMcpServerRuntimeState | null,
+    ) => Effect.Effect<void>;
     readonly getTurnContext: (projectId: ProjectId) => Effect.Effect<PluginTurnContext>;
     /** Subscribes before reading to retain changes during connection. */
     readonly streamChanges: Stream.Stream<ReadonlyArray<EnvironmentPlugin>>;
     readonly streamWorkerDesiredState: Stream.Stream<ReadonlyArray<PluginWorkerDesiredSpec>>;
+    readonly streamMcpDesiredState: Stream.Stream<ReadonlyArray<PluginMcpServerDesiredSpec>>;
   }
 >()("t3/plugins/PluginRegistry") {}
 
@@ -532,6 +618,9 @@ const detectUnsupportedParts = (
   manifest: PluginManifest,
   isRepo: boolean,
 ): ReadonlyArray<string> => {
+  if (!isRepo) {
+    return [];
+  }
   const found = new Set<string>();
   if (
     hasNonEmptyManifestField(parsedJson, "hooks") ||
@@ -545,17 +634,9 @@ const detectUnsupportedParts = (
   ) {
     found.add("mcp");
   }
-  if (
-    hasNonEmptyManifestField(parsedJson, "agents") ||
-    lstatOrNull(NodePath.join(folderPath, "agents"))?.isDirectory() === true
-  ) {
-    found.add("agents");
-  }
-  if (isRepo) {
-    if (manifest.css !== undefined) found.add("css");
-    if (manifest.panels !== undefined && manifest.panels.length > 0) found.add("panels");
-    if (manifest.worker !== undefined) found.add("worker");
-  }
+  if (manifest.css !== undefined) found.add("css");
+  if (manifest.panels !== undefined && manifest.panels.length > 0) found.add("panels");
+  if (manifest.worker !== undefined) found.add("worker");
   return UNSUPPORTED_PART_ORDER.filter((part) => found.has(part));
 };
 
@@ -833,12 +914,32 @@ const scanPluginTextParts = (
 
 const readHistoryTextFiles = (
   revisionDir: string,
+  extraJsonRelativePaths: ReadonlyArray<string> = [],
 ):
   | { readonly ok: true; readonly files: ReadonlyArray<RawPluginTextFile> }
   | { readonly ok: false } => {
-  const files: Array<RawPluginTextFile> = [];
+  const filesByPath = new Map<string, string>();
   const checkNoSymlink = (targetPath: string): boolean =>
     lstatOrNull(targetPath)?.isSymbolicLink() !== true;
+
+  const readJsonRelative = (relativePath: string, maxBytes: number): boolean => {
+    if (filesByPath.has(relativePath)) return true;
+    const parts = relativePath.split("/");
+    let current = revisionDir;
+    for (const part of parts) {
+      current = NodePath.join(current, part);
+      const stat = lstatOrNull(current);
+      if (stat === null) return true;
+      if (stat.isSymbolicLink()) return false;
+    }
+    const stat = lstatOrNull(current);
+    if (stat === null) return true;
+    if (!stat.isFile()) return false;
+    const content = readThemeFileGuarded(current, maxBytes);
+    if (content === null) return false;
+    filesByPath.set(relativePath, content);
+    return true;
+  };
 
   const instructionsPath = NodePath.join(revisionDir, PLUGIN_INSTRUCTIONS_FILE);
   const instructionsStat = lstatOrNull(instructionsPath);
@@ -846,7 +947,7 @@ const readHistoryTextFiles = (
     if (instructionsStat.isSymbolicLink() || !instructionsStat.isFile()) return { ok: false };
     const content = readThemeFileGuarded(instructionsPath, PLUGIN_INSTRUCTIONS_MAX_BYTES);
     if (content === null) return { ok: false };
-    files.push({ relativePath: PLUGIN_INSTRUCTIONS_FILE, content });
+    filesByPath.set(PLUGIN_INSTRUCTIONS_FILE, content);
   }
 
   const skillsDir = NodePath.join(revisionDir, PLUGIN_SKILLS_DIR);
@@ -864,7 +965,7 @@ const readHistoryTextFiles = (
       if (!checkNoSymlink(skillFile)) return { ok: false };
       const content = readThemeFileGuarded(skillFile, PLUGIN_SKILL_MAX_BYTES);
       if (content === null) return { ok: false };
-      files.push({ relativePath: `${PLUGIN_SKILLS_DIR}/${entry}/${PLUGIN_SKILL_FILE}`, content });
+      filesByPath.set(`${PLUGIN_SKILLS_DIR}/${entry}/${PLUGIN_SKILL_FILE}`, content);
     }
   }
 
@@ -878,10 +979,38 @@ const readHistoryTextFiles = (
       if (!checkNoSymlink(commandFile)) return { ok: false };
       const content = readThemeFileGuarded(commandFile, PLUGIN_SKILL_MAX_BYTES);
       if (content === null) return { ok: false };
-      files.push({ relativePath: `${PLUGIN_COMMANDS_DIR}/${entry}`, content });
+      filesByPath.set(`${PLUGIN_COMMANDS_DIR}/${entry}`, content);
     }
   }
 
+  const agentsDir = NodePath.join(revisionDir, PLUGIN_AGENTS_DIR);
+  const agentsDirStat = lstatOrNull(agentsDir);
+  if (agentsDirStat !== null) {
+    if (agentsDirStat.isSymbolicLink() || !agentsDirStat.isDirectory()) return { ok: false };
+    for (const entry of readDirEntriesSorted(agentsDir)) {
+      if (!isSafeFolderName(entry) || !entry.endsWith(".md")) return { ok: false };
+      const agentFile = NodePath.join(agentsDir, entry);
+      if (!checkNoSymlink(agentFile)) return { ok: false };
+      const content = readThemeFileGuarded(agentFile, PLUGIN_AGENT_MAX_BYTES);
+      if (content === null) return { ok: false };
+      filesByPath.set(`${PLUGIN_AGENTS_DIR}/${entry}`, content);
+    }
+  }
+
+  if (!readJsonRelative(PLUGIN_MCP_FILE, PLUGIN_MCP_JSON_MAX_BYTES)) return { ok: false };
+  if (!readJsonRelative(PLUGIN_HOOKS_FILE, PLUGIN_HOOKS_JSON_MAX_BYTES)) return { ok: false };
+  for (const extraRel of extraJsonRelativePaths) {
+    if (
+      !readJsonRelative(extraRel, Math.max(PLUGIN_MCP_JSON_MAX_BYTES, PLUGIN_HOOKS_JSON_MAX_BYTES))
+    ) {
+      return { ok: false };
+    }
+  }
+
+  const files = [...filesByPath.entries()].map(([relativePath, content]) => ({
+    relativePath,
+    content,
+  }));
   return { ok: true, files: sortRawTextFiles(files) };
 };
 
@@ -1193,6 +1322,8 @@ const inspectPluginFolder = (
   runtimeState: PluginWorkerRuntimeState | undefined,
   defaultNetworkRestricted: boolean,
   isRepo = false,
+  stateDir = NodePath.dirname(pluginsDir),
+  mcpRuntimeStates: ReadonlyMap<string, PluginMcpServerRuntimeState> = new Map(),
 ): ScannedPlugin | null => {
   const storedEnabled = !isRepo && storedSetting?.enabled === true;
   if (folderName.startsWith(".")) return null;
@@ -1508,6 +1639,106 @@ const inspectPluginFolder = (
     });
   }
 
+  const externalParts = scanPluginExternalParts({
+    folderPath,
+    pluginRootReal,
+    manifestMcpServers: manifest.mcpServers,
+    manifestHooks: manifest.hooks,
+    isRepo,
+  });
+  const combinedRawTextFilesByPath = new Map<string, string>();
+  for (const file of textParts.rawTextFiles) {
+    combinedRawTextFilesByPath.set(file.relativePath, file.content);
+  }
+  for (const file of externalParts.rawFiles) {
+    combinedRawTextFilesByPath.set(file.relativePath, file.content);
+  }
+  const combinedRawTextFiles = sortRawTextFiles(
+    [...combinedRawTextFilesByPath.entries()].map(([relativePath, content]) => ({
+      relativePath,
+      content,
+    })),
+  );
+
+  const pluginDataDir = pluginDataDirFor(stateDir, folderName);
+  const externalPowersHash = externalParts.externalPowersHash;
+  const externalApproved =
+    !isRepo &&
+    externalPowersHash !== undefined &&
+    storedSetting?.externalApproval === externalPowersHash;
+
+  let externalStatus: PluginExternalStatus | undefined;
+  if (!isRepo && externalParts.hasRunnableExternal) {
+    if (!storedEnabled || runtimeProblem !== undefined) {
+      externalStatus = "stopped";
+    } else if (!externalApproved) {
+      externalStatus = "needs-approval";
+    } else {
+      externalStatus = "approved";
+    }
+  }
+
+  const installedMcpServers: Array<InstalledPluginMcpServer> = [];
+  const mcpDesiredSpecs: Array<PluginMcpServerDesiredSpec> = [];
+  if (!isRepo) {
+    for (const server of externalParts.mcpServers) {
+      let serverStatus: PluginMcpServerStatus;
+      let toolCount: number | undefined;
+      let truncatedTools: boolean | undefined;
+      let serverError: string | undefined;
+      if (server.notRunnableReason !== undefined || server.runnable === undefined) {
+        serverStatus = "not-runnable";
+      } else if (!storedEnabled || runtimeProblem !== undefined) {
+        serverStatus = "stopped";
+      } else if (!externalApproved) {
+        serverStatus = "needs-approval";
+      } else {
+        const runtime = mcpRuntimeStates.get(`${folderName}\0${server.name}`);
+        serverStatus = runtime?.status ?? "starting";
+        toolCount = runtime?.toolCount;
+        truncatedTools = runtime?.truncatedTools;
+        serverError = runtime?.error;
+        const configKey = computePluginMcpServerConfigKey(server, pluginRootReal, pluginDataDir);
+        mcpDesiredSpecs.push({
+          pluginId: manifest.name,
+          ...(manifest.displayName !== undefined
+            ? { pluginDisplayName: manifest.displayName }
+            : {}),
+          pluginRootReal,
+          pluginDataDir,
+          serverName: server.name,
+          configKey,
+          transport:
+            server.runnable.kind === "stdio"
+              ? {
+                  kind: "stdio",
+                  command: server.runnable.command,
+                  args: server.runnable.args,
+                  env: server.runnable.env,
+                }
+              : {
+                  kind: "http",
+                  url: server.runnable.url,
+                  headers: server.runnable.headers,
+                },
+          ...(server.runnable.timeoutMs !== undefined
+            ? { timeoutMs: server.runnable.timeoutMs }
+            : {}),
+        });
+      }
+      installedMcpServers.push({
+        name: server.name,
+        transport: server.transport,
+        target: server.target,
+        status: serverStatus,
+        ...(toolCount !== undefined ? { toolCount } : {}),
+        ...(truncatedTools === true ? { truncatedTools: true } : {}),
+        ...(serverError !== undefined ? { error: serverError } : {}),
+        ...(server.notRunnableReason !== undefined ? { reason: server.notRunnableReason } : {}),
+      });
+    }
+  }
+
   const commandNames = textParts.skills
     .filter((skill) => skill.userInvocable)
     .map((skill) => skill.name);
@@ -1521,30 +1752,32 @@ const inspectPluginFolder = (
   if (commandNames.length > 0) contributes.push("command");
   if (skillNames.length > 0) contributes.push("skill");
   if (textParts.instructions !== undefined) contributes.push("instructions");
+  if (installedMcpServers.length > 0) contributes.push("mcp");
+  if (externalParts.hookSummaries.length > 0) contributes.push("hook");
+  if (externalParts.agents.length > 0) contributes.push("agent");
 
   const revision = computePluginRevision(
     rawManifest,
     css ?? "",
     panels.map((panel) => panel.html),
     scannedWorker?.code,
-    textParts.rawTextFiles,
+    combinedRawTextFiles,
   );
   if (contributes.length === 0) {
-    return withProblem(
-      folderName,
-      unsupported.length > 0
-        ? isRepo
-          ? "Repo plugin has no supported parts (only skills, commands, and AGENTS.md are supported in repo plugins)."
-          : "Plugin has no supported parts in T3 yet."
-        : "Plugin manifest must define css, at least one panel, a worker, skills, commands, or AGENTS.md.",
-      metadata,
-      {
-        revision,
-        unsupported,
-        rawManifest,
-        ...(textParts.rawTextFiles.length > 0 ? { rawTextFiles: textParts.rawTextFiles } : {}),
-      },
-    );
+    const emptyProblem =
+      externalParts.partProblems.length > 0
+        ? externalParts.partProblems.join(" ")
+        : unsupported.length > 0
+          ? isRepo
+            ? "Repo plugin has no supported parts (only skills, commands, agents, and AGENTS.md are supported in repo plugins)."
+            : "Plugin has no supported parts in T3 yet."
+          : "Plugin manifest must define css, panels, a worker, skills, commands, agents, MCP servers, hooks, or AGENTS.md.";
+    return withProblem(folderName, emptyProblem, metadata, {
+      revision,
+      unsupported,
+      rawManifest,
+      ...(combinedRawTextFiles.length > 0 ? { rawTextFiles: combinedRawTextFiles } : {}),
+    });
   }
 
   const installedPanels: ReadonlyArray<InstalledPluginPanel> | undefined =
@@ -1560,11 +1793,19 @@ const inspectPluginFolder = (
       ...(installedWorker !== undefined ? { worker: installedWorker } : {}),
       ...(commandNames.length > 0 ? { commands: commandNames } : {}),
       ...(skillNames.length > 0 ? { skills: skillNames } : {}),
+      ...(installedMcpServers.length > 0 ? { mcpServers: installedMcpServers } : {}),
+      ...(externalParts.hookSummaries.length > 0 ? { hooks: externalParts.hookSummaries } : {}),
+      ...(externalParts.agentSummaries.length > 0 ? { agents: externalParts.agentSummaries } : {}),
+      ...(externalStatus !== undefined ? { externalStatus } : {}),
+      ...(externalParts.partProblems.length > 0
+        ? { partProblems: externalParts.partProblems }
+        : {}),
       ...(unsupported.length > 0 ? { unsupported } : {}),
       revision,
       ...(runtimeProblem !== undefined ? { problem: runtimeProblem } : {}),
     },
     pluginRootReal,
+    pluginDataDir,
     ...(css !== undefined ? { css, rawCss: css } : {}),
     ...(cssPath !== undefined ? { cssPath } : {}),
     ...(panels.length > 0
@@ -1581,7 +1822,15 @@ const inspectPluginFolder = (
       : {}),
     ...(textParts.skills.length > 0 ? { skills: textParts.skills } : {}),
     ...(textParts.instructions !== undefined ? { instructions: textParts.instructions } : {}),
-    ...(textParts.rawTextFiles.length > 0 ? { rawTextFiles: textParts.rawTextFiles } : {}),
+    ...(externalParts.mcpServers.length > 0 ? { mcpServers: externalParts.mcpServers } : {}),
+    ...(mcpDesiredSpecs.length > 0 ? { mcpDesiredSpecs } : {}),
+    ...(externalParts.hooks !== undefined ? { hooks: externalParts.hooks } : {}),
+    ...(externalParts.agents.length > 0 ? { agents: externalParts.agents } : {}),
+    ...(externalPowersHash !== undefined ? { externalPowersHash } : {}),
+    externalApproved,
+    ...(manifest.mcpServers !== undefined ? { manifestMcpServers: manifest.mcpServers } : {}),
+    ...(manifest.hooks !== undefined ? { manifestHooks: manifest.hooks } : {}),
+    ...(combinedRawTextFiles.length > 0 ? { rawTextFiles: combinedRawTextFiles } : {}),
     rawManifest,
   };
 };
@@ -1632,7 +1881,9 @@ const buildEnvironmentPlugin = (
     scanned.css === undefined &&
     activePanels === undefined &&
     scanned.plugin.worker === undefined &&
-    activeCommands === undefined
+    activeCommands === undefined &&
+    scanned.plugin.mcpServers === undefined &&
+    scanned.plugin.externalStatus === undefined
   ) {
     return null;
   }
@@ -1646,6 +1897,10 @@ const buildEnvironmentPlugin = (
     ...(activePanels !== undefined ? { panels: activePanels } : {}),
     ...(scanned.plugin.worker !== undefined ? { worker: scanned.plugin.worker } : {}),
     ...(activeCommands !== undefined ? { commands: activeCommands } : {}),
+    ...(scanned.plugin.mcpServers !== undefined ? { mcpServers: scanned.plugin.mcpServers } : {}),
+    ...(scanned.plugin.externalStatus !== undefined
+      ? { externalStatus: scanned.plugin.externalStatus }
+      : {}),
   };
 };
 
@@ -1698,7 +1953,14 @@ const fingerprintRepoPluginsDir = (
     record(`a/${folderName}`, NodePath.join(folderPath, PLUGIN_INSTRUCTIONS_FILE));
     record(`h/${folderName}`, NodePath.join(folderPath, "hooks", "hooks.json"));
     record(`c/${folderName}`, NodePath.join(folderPath, ".mcp.json"));
-    record(`g/${folderName}`, NodePath.join(folderPath, "agents"));
+    const agentsDir = NodePath.join(folderPath, PLUGIN_AGENTS_DIR);
+    const agentsStat = record(`g/${folderName}`, agentsDir);
+    if (agentsStat !== null && !agentsStat.isSymbolicLink() && agentsStat.isDirectory()) {
+      for (const child of readDirEntriesSorted(agentsDir)) {
+        if (child.startsWith(".") || !child.endsWith(".md")) continue;
+        record(`gf/${folderName}/${child}`, NodePath.join(agentsDir, child));
+      }
+    }
 
     const skillsDir = NodePath.join(folderPath, PLUGIN_SKILLS_DIR);
     const skillsStat = record(`s/${folderName}`, skillsDir);
@@ -1817,9 +2079,11 @@ const scanRepoPluginsForProject = (
 
 const scanPlugins = Effect.fnUntraced(function* (
   pluginsDir: string,
+  stateDir: string,
   pluginSettings: Readonly<Record<string, PluginSettingEntry>>,
   homeDirectory: string,
   runtimeStates: ReadonlyMap<string, PluginWorkerRuntimeState>,
+  mcpRuntimeStates: ReadonlyMap<string, PluginMcpServerRuntimeState>,
   defaultNetworkRestricted: boolean,
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -1832,6 +2096,8 @@ const scanPlugins = Effect.fnUntraced(function* (
   const activeUserScanned: Array<ScannedPlugin> = [];
   const panelEntries = new Map<string, ReadonlyMap<string, string>>();
   const workerSpecs: Array<PluginWorkerDesiredSpec> = [];
+  const mcpSpecs: Array<PluginMcpServerDesiredSpec> = [];
+  const externalPowersHashes = new Map<string, string>();
   let examined = 0;
 
   for (const folderName of entries.toSorted()) {
@@ -1846,6 +2112,8 @@ const scanPlugins = Effect.fnUntraced(function* (
       runtimeStates.get(folderName),
       defaultNetworkRestricted,
       false,
+      stateDir,
+      mcpRuntimeStates,
     );
     if (scanned === null) continue;
 
@@ -1862,12 +2130,18 @@ const scanPlugins = Effect.fnUntraced(function* (
     if (scanned.worker !== undefined) {
       workerSpecs.push(scanned.worker.desired);
     }
+    if (scanned.externalPowersHash !== undefined) {
+      externalPowersHashes.set(scanned.plugin.id, scanned.externalPowersHash);
+    }
     if (
       scanned.plugin.enabled &&
       scanned.plugin.problem === undefined &&
       isPluginId(scanned.plugin.id)
     ) {
       activeUserScanned.push(scanned);
+      if (scanned.mcpDesiredSpecs !== undefined && scanned.mcpDesiredSpecs.length > 0) {
+        mcpSpecs.push(...scanned.mcpDesiredSpecs);
+      }
       const envPlugin = buildEnvironmentPlugin(scanned);
       if (envPlugin !== null) {
         active.push(envPlugin);
@@ -1881,7 +2155,15 @@ const scanPlugins = Effect.fnUntraced(function* (
     }
   }
 
-  return { plugins, active, panelEntries, workerSpecs, activeUserScanned };
+  return {
+    plugins,
+    active,
+    panelEntries,
+    workerSpecs,
+    mcpSpecs,
+    externalPowersHashes,
+    activeUserScanned,
+  };
 });
 
 const make = Effect.gen(function* () {
@@ -1894,15 +2176,20 @@ const make = Effect.gen(function* () {
 
   const changes = yield* PubSub.sliding<PluginSnapshot>(1);
   const workerSpecChanges = yield* PubSub.unbounded<PluginSnapshot>();
+  const mcpSpecChanges = yield* PubSub.unbounded<PluginSnapshot>();
   const runtimeStates = new Map<string, PluginWorkerRuntimeState>();
+  const mcpRuntimeStates = new Map<string, PluginMcpServerRuntimeState>();
   const repoScanCache = new Map<string, CachedRepoProjectScan>();
   const published = yield* Ref.make<PluginSnapshot>({
     seq: 0,
     workerSeq: 0,
+    mcpSeq: 0,
     plugins: [],
     active: [],
     panelEntries: new Map(),
     workerSpecs: [],
+    mcpSpecs: [],
+    externalPowersHashes: new Map(),
     activeUserScanned: [],
   });
   const refreshSemaphore = yield* Semaphore.make(1);
@@ -1979,11 +2266,21 @@ const make = Effect.gen(function* () {
           repoPlugins: {} as Readonly<Record<string, Readonly<Record<string, string>>>>,
         })),
       );
-      const { plugins, active, panelEntries, workerSpecs, activeUserScanned } = yield* scanPlugins(
+      const {
+        plugins,
+        active,
+        panelEntries,
+        workerSpecs,
+        mcpSpecs,
+        externalPowersHashes,
+        activeUserScanned,
+      } = yield* scanPlugins(
         pluginsDir,
+        stateDir,
         currentSettings.plugins,
         homeDirectory,
         runtimeStates,
+        mcpRuntimeStates,
         defaultNetworkRestricted,
       ).pipe(Effect.provideService(FileSystem.FileSystem, fs));
       const repoProjects = yield* scanRepoProjects(currentSettings.repoPlugins, true);
@@ -1997,25 +2294,31 @@ const make = Effect.gen(function* () {
           }
         }
       }
-      const [activeChanged, workerSpecsChanged, next] = yield* Ref.modify(
+      const [activeChanged, workerSpecsChanged, mcpSpecsChanged, next] = yield* Ref.modify(
         published,
-        (previous): readonly [readonly [boolean, boolean, PluginSnapshot], PluginSnapshot] => {
+        (
+          previous,
+        ): readonly [readonly [boolean, boolean, boolean, PluginSnapshot], PluginSnapshot] => {
           const sameActive = Equal.equals(previous.active, combinedActive);
           const samePlugins = Equal.equals(previous.plugins, plugins);
           const sameWorkerSpecs = Equal.equals(previous.workerSpecs, workerSpecs);
+          const sameMcpSpecs = Equal.equals(previous.mcpSpecs, mcpSpecs);
           const updated: PluginSnapshot = {
             seq: sameActive ? previous.seq : previous.seq + 1,
             workerSeq: sameWorkerSpecs ? previous.workerSeq : previous.workerSeq + 1,
+            mcpSeq: sameMcpSpecs ? previous.mcpSeq : previous.mcpSeq + 1,
             plugins,
             active: combinedActive,
             panelEntries,
             workerSpecs,
+            mcpSpecs,
+            externalPowersHashes,
             activeUserScanned,
           };
-          if (sameActive && samePlugins && sameWorkerSpecs) {
-            return [[false, false, updated], updated];
+          if (sameActive && samePlugins && sameWorkerSpecs && sameMcpSpecs) {
+            return [[false, false, false, updated], updated];
           }
-          return [[!sameActive, !sameWorkerSpecs, updated], updated];
+          return [[!sameActive, !sameWorkerSpecs, !sameMcpSpecs, updated], updated];
         },
       );
       if (activeChanged) {
@@ -2023,6 +2326,9 @@ const make = Effect.gen(function* () {
       }
       if (workerSpecsChanged) {
         yield* PubSub.publish(workerSpecChanges, next).pipe(Effect.asVoid);
+      }
+      if (mcpSpecsChanged) {
+        yield* PubSub.publish(mcpSpecChanges, next).pipe(Effect.asVoid);
       }
       return next;
     }),
@@ -2136,6 +2442,9 @@ const make = Effect.gen(function* () {
             reason: "has_problem",
           });
         }
+        const readableMcpServers = (scanned.mcpServers ?? []).flatMap((server) =>
+          server.writeConfig === undefined ? [] : ([[server.name, server.writeConfig]] as const),
+        );
         return {
           ...(scanned.plugin.displayName !== undefined
             ? { displayName: scanned.plugin.displayName }
@@ -2179,6 +2488,26 @@ const make = Effect.gen(function* () {
               }
             : {}),
           ...(scanned.instructions !== undefined ? { instructions: scanned.instructions } : {}),
+          ...(readableMcpServers.length > 0
+            ? { mcpServers: Object.fromEntries(readableMcpServers) }
+            : {}),
+          ...(scanned.hooks !== undefined ? { hooks: scanned.hooks } : {}),
+          ...(scanned.agents !== undefined && scanned.agents.length > 0
+            ? {
+                agents: scanned.agents.map((agent) => ({
+                  name: agent.name,
+                  description: agent.description,
+                  ...(agent.tools !== undefined ? { tools: agent.tools } : {}),
+                  ...(agent.disallowedTools !== undefined
+                    ? { disallowedTools: agent.disallowedTools }
+                    : {}),
+                  ...(agent.model !== undefined ? { model: agent.model } : {}),
+                  ...(agent.effort !== undefined ? { effort: agent.effort } : {}),
+                  ...(agent.maxTurns !== undefined ? { maxTurns: agent.maxTurns } : {}),
+                  body: agent.prompt,
+                })),
+              }
+            : {}),
         };
       }),
     );
@@ -2285,6 +2614,13 @@ const make = Effect.gen(function* () {
             });
           }
 
+          const existingMcpPath = preserveExisting
+            ? resolveManifestExternalJsonPath(existing.manifestMcpServers)
+            : null;
+          const existingHooksPath = preserveExisting
+            ? resolveManifestExternalJsonPath(existing.manifestHooks)
+            : null;
+
           let nextSkillFiles: Array<RawPluginTextFile>;
           if (input.skills !== undefined) {
             if (input.skills.length > PLUGIN_MAX_SKILLS) {
@@ -2321,7 +2657,108 @@ const make = Effect.gen(function* () {
           } else {
             nextSkillFiles = preserveExisting
               ? (existing.rawTextFiles ?? []).filter(
-                  (file) => file.relativePath !== PLUGIN_INSTRUCTIONS_FILE,
+                  (file) =>
+                    file.relativePath.startsWith(`${PLUGIN_SKILLS_DIR}/`) ||
+                    file.relativePath.startsWith(`${PLUGIN_COMMANDS_DIR}/`),
+                )
+              : [];
+          }
+
+          let nextAgentFiles: Array<RawPluginTextFile>;
+          if (input.agents !== undefined) {
+            if (input.agents.length > PLUGIN_MAX_AGENTS) {
+              return yield* new PluginOperationError({
+                pluginId: input.id,
+                operation: "write",
+                reason: "invalid_agent",
+              });
+            }
+            const seenAgentNames = new Set<string>();
+            nextAgentFiles = [];
+            for (const agent of input.agents) {
+              if (
+                !isPluginId(agent.name) ||
+                seenAgentNames.has(agent.name) ||
+                agent.description.trim().length === 0
+              ) {
+                return yield* new PluginOperationError({
+                  pluginId: input.id,
+                  operation: "write",
+                  reason: "invalid_agent",
+                });
+              }
+              seenAgentNames.add(agent.name);
+              const content = formatPluginAgentMarkdown(agent);
+              if (Buffer.byteLength(content, "utf8") > PLUGIN_AGENT_MAX_BYTES) {
+                return yield* new PluginOperationError({
+                  pluginId: input.id,
+                  operation: "write",
+                  reason: "invalid_agent",
+                });
+              }
+              nextAgentFiles.push({
+                relativePath: `${PLUGIN_AGENTS_DIR}/${agent.name}.md`,
+                content,
+              });
+            }
+          } else {
+            nextAgentFiles = preserveExisting
+              ? (existing.rawTextFiles ?? []).filter((file) =>
+                  file.relativePath.startsWith(`${PLUGIN_AGENTS_DIR}/`),
+                )
+              : [];
+          }
+
+          let nextMcpFiles: Array<RawPluginTextFile>;
+          let nextManifestMcpServers: unknown;
+          if (input.mcpServers !== undefined) {
+            const validated = validateAndSerializePluginMcpWrite(input.mcpServers);
+            if (!validated.ok) {
+              return yield* new PluginOperationError({
+                pluginId: input.id,
+                operation: "write",
+                reason: "invalid_mcp",
+              });
+            }
+            nextMcpFiles =
+              validated.json === null
+                ? []
+                : [{ relativePath: PLUGIN_MCP_FILE, content: validated.json }];
+            nextManifestMcpServers = undefined;
+          } else {
+            nextManifestMcpServers = preserveExisting ? existing.manifestMcpServers : undefined;
+            nextMcpFiles = preserveExisting
+              ? (existing.rawTextFiles ?? []).filter(
+                  (file) =>
+                    file.relativePath === PLUGIN_MCP_FILE ||
+                    (existingMcpPath !== null && file.relativePath === existingMcpPath),
+                )
+              : [];
+          }
+
+          let nextHooksFiles: Array<RawPluginTextFile>;
+          let nextManifestHooks: unknown;
+          if (input.hooks !== undefined) {
+            const validated = validateAndSerializePluginHooksWrite(input.hooks);
+            if (!validated.ok) {
+              return yield* new PluginOperationError({
+                pluginId: input.id,
+                operation: "write",
+                reason: "invalid_hooks",
+              });
+            }
+            nextHooksFiles =
+              validated.json === null
+                ? []
+                : [{ relativePath: PLUGIN_HOOKS_FILE, content: validated.json }];
+            nextManifestHooks = undefined;
+          } else {
+            nextManifestHooks = preserveExisting ? existing.manifestHooks : undefined;
+            nextHooksFiles = preserveExisting
+              ? (existing.rawTextFiles ?? []).filter(
+                  (file) =>
+                    file.relativePath === PLUGIN_HOOKS_FILE ||
+                    (existingHooksPath !== null && file.relativePath === existingHooksPath),
                 )
               : [];
           }
@@ -2331,11 +2768,32 @@ const make = Effect.gen(function* () {
           const hasWorker = effectiveWorker !== undefined;
           const hasSkills = nextSkillFiles.length > 0;
           const hasInstructions = effectiveInstructions !== undefined;
-          if (!hasCss && !hasPanels && !hasWorker && !hasSkills && !hasInstructions) {
+          const hasAgents = nextAgentFiles.length > 0;
+          const hasMcp = nextMcpFiles.length > 0 || nextManifestMcpServers !== undefined;
+          const hasHooks = nextHooksFiles.length > 0 || nextManifestHooks !== undefined;
+          if (
+            !hasCss &&
+            !hasPanels &&
+            !hasWorker &&
+            !hasSkills &&
+            !hasInstructions &&
+            !hasAgents &&
+            !hasMcp &&
+            !hasHooks
+          ) {
             return yield* new PluginOperationError({
               pluginId: input.id,
               operation: "write",
-              reason: input.skills !== undefined ? "invalid_skill" : "invalid_panel",
+              reason:
+                input.mcpServers !== undefined
+                  ? "invalid_mcp"
+                  : input.hooks !== undefined
+                    ? "invalid_hooks"
+                    : input.agents !== undefined
+                      ? "invalid_agent"
+                      : input.skills !== undefined
+                        ? "invalid_skill"
+                        : "invalid_panel",
             });
           }
           if (
@@ -2416,6 +2874,8 @@ const make = Effect.gen(function* () {
                   },
                 }
               : {}),
+            ...(nextManifestMcpServers !== undefined ? { mcpServers: nextManifestMcpServers } : {}),
+            ...(nextManifestHooks !== undefined ? { hooks: nextManifestHooks } : {}),
           });
           if (manifestDecoded._tag === "Failure") {
             return yield* new PluginOperationError({
@@ -2451,17 +2911,32 @@ const make = Effect.gen(function* () {
           }));
           const workerPath =
             effectiveWorker !== undefined ? NodePath.join(folderPath, PLUGIN_WORKER_FILE) : null;
-          const nextTextFiles = sortRawTextFiles([
+          const nextTextFilesMap = new Map<string, string>();
+          for (const file of [
             ...(effectiveInstructions !== undefined
               ? [{ relativePath: PLUGIN_INSTRUCTIONS_FILE, content: effectiveInstructions }]
               : []),
             ...nextSkillFiles,
-          ]);
+            ...nextAgentFiles,
+            ...nextMcpFiles,
+            ...nextHooksFiles,
+          ]) {
+            nextTextFilesMap.set(file.relativePath, file.content);
+          }
+          const nextTextFiles = sortRawTextFiles(
+            [...nextTextFilesMap.entries()].map(([relativePath, content]) => ({
+              relativePath,
+              content,
+            })),
+          );
           const textFilesToWrite = sortRawTextFiles([
             ...(input.instructions !== undefined && effectiveInstructions !== undefined
               ? [{ relativePath: PLUGIN_INSTRUCTIONS_FILE, content: effectiveInstructions }]
               : []),
             ...(input.skills !== undefined ? nextSkillFiles : []),
+            ...(input.agents !== undefined ? nextAgentFiles : []),
+            ...(input.mcpServers !== undefined ? nextMcpFiles : []),
+            ...(input.hooks !== undefined ? nextHooksFiles : []),
           ]);
           if (
             !isExistingTargetSafe(
@@ -2653,7 +3128,19 @@ const make = Effect.gen(function* () {
               reason: "not_found",
             });
           }
-          const historyTextFiles = readHistoryTextFiles(revisionDir);
+          const decoded = decodePluginManifestJsonExit(manifestText);
+          if (decoded._tag === "Failure" || decoded.value.name !== id) {
+            return yield* new PluginOperationError({
+              pluginId: id,
+              operation: "restore",
+              reason: "has_problem",
+            });
+          }
+          const extraHistoryJsonPaths = [
+            resolveManifestExternalJsonPath(decoded.value.mcpServers),
+            resolveManifestExternalJsonPath(decoded.value.hooks),
+          ].filter((entry): entry is string => entry !== null);
+          const historyTextFiles = readHistoryTextFiles(revisionDir, extraHistoryJsonPaths);
           if (!historyTextFiles.ok) {
             return yield* new PluginOperationError({
               pluginId: id,
@@ -2661,15 +3148,13 @@ const make = Effect.gen(function* () {
               reason: "has_problem",
             });
           }
-
-          const decoded = decodePluginManifestJsonExit(manifestText);
           if (
-            decoded._tag === "Failure" ||
-            decoded.value.name !== id ||
-            (decoded.value.css === undefined &&
-              decoded.value.panels === undefined &&
-              decoded.value.worker === undefined &&
-              historyTextFiles.files.length === 0)
+            decoded.value.css === undefined &&
+            decoded.value.panels === undefined &&
+            decoded.value.worker === undefined &&
+            decoded.value.mcpServers === undefined &&
+            decoded.value.hooks === undefined &&
+            historyTextFiles.files.length === 0
           ) {
             return yield* new PluginOperationError({
               pluginId: id,
@@ -2893,6 +3378,19 @@ const make = Effect.gen(function* () {
           );
 
           if (enable === true) {
+            const restoredExternalHash =
+              options?.approveExternal === true
+                ? inspectPluginFolder(
+                    pluginsDir,
+                    id,
+                    undefined,
+                    homeDirectory,
+                    undefined,
+                    defaultNetworkRestricted,
+                    false,
+                    stateDir,
+                  )?.externalPowersHash
+                : undefined;
             yield* settings
               .updateSettings({
                 plugins: {
@@ -2900,6 +3398,9 @@ const make = Effect.gen(function* () {
                     enabled: true,
                     ...(options?.approveWorker === true && workerRestore !== undefined
                       ? { workerApproval: workerRestore.powersHash }
+                      : {}),
+                    ...(options?.approveExternal === true && restoredExternalHash !== undefined
+                      ? { externalApproval: restoredExternalHash }
                       : {}),
                   },
                 },
@@ -3080,6 +3581,7 @@ const make = Effect.gen(function* () {
           });
         }
         const targetSpec = current.workerSpecs.find((spec) => spec.pluginId === id);
+        const targetExternalHash = current.externalPowersHashes.get(id);
         yield* settings
           .updateSettings({
             plugins: {
@@ -3087,6 +3589,9 @@ const make = Effect.gen(function* () {
                 enabled,
                 ...(enabled && options?.approveWorker === true && targetSpec !== undefined
                   ? { workerApproval: targetSpec.powersHash }
+                  : {}),
+                ...(enabled && options?.approveExternal === true && targetExternalHash !== undefined
+                  ? { externalApproval: targetExternalHash }
                   : {}),
               },
             },
@@ -3346,6 +3851,12 @@ const make = Effect.gen(function* () {
           }
 
           runtimeStates.delete(id);
+          const mcpPrefix = `${id}\0`;
+          for (const key of mcpRuntimeStates.keys()) {
+            if (key.startsWith(mcpPrefix)) {
+              mcpRuntimeStates.delete(key);
+            }
+          }
           yield* refresh;
           return { id, archivedTo };
         }),
@@ -3360,6 +3871,19 @@ const make = Effect.gen(function* () {
         runtimeStates.delete(pluginId);
       } else {
         runtimeStates.set(pluginId, state);
+      }
+      yield* refresh.pipe(Effect.asVoid);
+    },
+  );
+
+  const reportMcpRuntime: PluginRegistry["Service"]["reportMcpRuntime"] = Effect.fnUntraced(
+    // Untraced: called on proxy runtime status transitions; refresh owns the span.
+    function* (pluginId, serverName, state) {
+      const key = `${pluginId}\0${serverName}`;
+      if (state === null) {
+        mcpRuntimeStates.delete(key);
+      } else {
+        mcpRuntimeStates.set(key, state);
       }
       yield* refresh.pipe(Effect.asVoid);
     },
@@ -3410,6 +3934,8 @@ const make = Effect.gen(function* () {
     ];
     const contextPlugins: Array<ProjectContextPlugin> = [];
     const commandsByKey = new Map<string, PluginSlashCommandEntry>();
+    const hooksByEvent: Record<string, Array<PluginHookMatcherGroup>> = {};
+    const agentsByKey = new Map<string, ProviderAdapterV2PluginAgent>();
 
     for (const scanned of activePlugins) {
       const modelSkills = (scanned.skills ?? []).filter((skill) => skill.modelInvocable);
@@ -3444,11 +3970,72 @@ const make = Effect.gen(function* () {
           });
         }
       }
+      if (
+        scanned.plugin.projectId === undefined &&
+        scanned.externalApproved &&
+        scanned.hooks !== undefined &&
+        pluginRoot !== undefined
+      ) {
+        const pluginDataDir =
+          scanned.pluginDataDir ?? pluginDataDirFor(stateDir, scanned.plugin.id);
+        const expanded = expandPluginHooksEventMap(scanned.hooks, {
+          pluginRoot,
+          pluginDataDir,
+        });
+        if (
+          Object.values(expanded).some((groups) =>
+            groups.some((group) =>
+              group.hooks.some((hook) => {
+                if (hook.type === "command") {
+                  return (
+                    hook.command.includes(pluginDataDir) ||
+                    (hook.args?.some((arg) => arg.includes(pluginDataDir)) ?? false)
+                  );
+                }
+                if (hook.type === "http") {
+                  return (
+                    hook.url.includes(pluginDataDir) ||
+                    Object.values(hook.headers ?? {}).some((value) => value.includes(pluginDataDir))
+                  );
+                }
+                if (hook.type === "prompt" || hook.type === "agent") {
+                  return hook.prompt.includes(pluginDataDir);
+                }
+                return false;
+              }),
+            ),
+          )
+        ) {
+          yield* fs.makeDirectory(pluginDataDir, { recursive: true }).pipe(Effect.ignore);
+        }
+        for (const [event, groups] of Object.entries(expanded)) {
+          const existing = hooksByEvent[event] ?? [];
+          existing.push(...groups);
+          hooksByEvent[event] = existing;
+        }
+      }
+      for (const agent of scanned.agents ?? []) {
+        agentsByKey.set(`${scanned.plugin.id}:${agent.name}`, {
+          pluginId: scanned.plugin.id,
+          name: agent.name,
+          description: agent.description,
+          prompt: agent.prompt,
+          ...(agent.tools !== undefined ? { tools: agent.tools } : {}),
+          ...(agent.disallowedTools !== undefined
+            ? { disallowedTools: agent.disallowedTools }
+            : {}),
+          ...(agent.model !== undefined ? { model: agent.model } : {}),
+          ...(agent.effort !== undefined ? { effort: agent.effort } : {}),
+          ...(agent.maxTurns !== undefined ? { maxTurns: agent.maxTurns } : {}),
+        });
+      }
     }
 
     return {
       contextPlugins,
       commands: [...commandsByKey.values()],
+      hooks: hooksByEvent,
+      agents: [...agentsByKey.values()],
     };
   });
 
@@ -3463,6 +4050,7 @@ const make = Effect.gen(function* () {
     uninstall,
     resolvePanelEntry,
     reportWorkerRuntime,
+    reportMcpRuntime,
     getTurnContext,
     get streamChanges() {
       return Stream.unwrap(
@@ -3489,6 +4077,21 @@ const make = Effect.gen(function* () {
             Stream.fromSubscription(subscription).pipe(
               Stream.filter((update) => update.workerSeq > snapshot.workerSeq),
               Stream.map((update) => update.workerSpecs),
+            ),
+          );
+        }),
+      );
+    },
+    get streamMcpDesiredState() {
+      return Stream.unwrap(
+        Effect.gen(function* () {
+          const subscription = yield* PubSub.subscribe(mcpSpecChanges);
+          const snapshot = yield* refresh;
+          return Stream.concat(
+            Stream.make(snapshot.mcpSpecs),
+            Stream.fromSubscription(subscription).pipe(
+              Stream.filter((update) => update.mcpSeq > snapshot.mcpSeq),
+              Stream.map((update) => update.mcpSpecs),
             ),
           );
         }),

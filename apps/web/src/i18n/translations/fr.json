@@ -12894,5 +12894,80 @@
   ],
   "d5b680b57724f530": "Modifié",
   "aeea775659127285": "Modifié depuis son activation",
-  "f96b011498a483b2": "Réactiver"
+  "f96b011498a483b2": "Réactiver",
+  "7a4e06d0b3b2beed": "Plugin non approuvé",
+  "0c31642763088630": "Impossible d'approuver les serveurs MCP et les hooks du plugin.",
+  "dce331a763ff9756": [
+    "Exécute le serveur MCP ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " : ",
+    {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    }
+  ],
+  "68a43146735830a7": "Exécute des serveurs MCP",
+  "497ff8b0c967e651": [
+    "Exécute des hooks dans les fils Claude : ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " ",
+    {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    }
+  ],
+  "d1d5d45adb0d7912": "Exécute des hooks dans les fils Claude",
+  "928b4f1cf406ce80": [
+    "Ajoute l'agent ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " (fils Claude)"
+  ],
+  "3bacdba0906fa41c": "Ajoute des agents (fils Claude)",
+  "3966fac273f3ec2f": "Les serveurs MCP et les hooks s'exécutent hors du bac à sable.",
+  "ead199761ab918fb": "Approbation non retirée",
+  "f05f476b2e0bf21a": "Impossible de retirer l'approbation externe du plugin.",
+  "f19ca2f26e431d8c": [
+    "Agents (fils Claude uniquement) :",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "ad8e1ff5b96cb6fb": [
+    "En cours (",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " outils)"
+  ],
+  "5fa281c639117f55": "Démarrage",
+  "1168d0b54232a485": "Échec",
+  "c0dcd3089414a393": "Non exécutable",
+  "e8bea9a04544caf1": "Serveurs MCP et hooks",
+  "9df67bcc43a70f4a": "Retirer l'approbation",
+  "c85b10dde0506e4a": "La liste d'outils a atteint la limite ; seuls les premiers outils sont exposés.",
+  "19f418961c74cfa4": "Hooks (fils Claude uniquement)",
+  "ae00a86c28b0a06a": "Les serveurs MCP et les hooks s'exécutent hors du bac à sable. Les hooks et les agents fonctionnent dans les fils Claude. N'approuvez que les plugins de confiance."
 }

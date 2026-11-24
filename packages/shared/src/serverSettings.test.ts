@@ -724,12 +724,13 @@ describe("serverSettings helpers", () => {
     expect(current.usagePriceOverrides["example-model"]?.cacheReadCostPerMillionTokens).toBe(0.5);
   });
 
-  it("upserts, merges, and removes plugins per entry while keeping folders and workerApproval on enabled toggles", () => {
+  it("upserts, merges, and removes plugins per entry while keeping folders, workerApproval, and externalApproval on enabled toggles", () => {
     const first = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
       plugins: {
         "vault-sync": {
           enabled: true,
           workerApproval: "0123456789ab",
+          externalApproval: "fedcba987654",
           folders: { vault: "/data/vault", ref: "/data/ref" },
         },
       },
@@ -740,6 +741,7 @@ describe("serverSettings helpers", () => {
     expect(toggledOff.plugins["vault-sync"]).toEqual({
       enabled: false,
       workerApproval: "0123456789ab",
+      externalApproval: "fedcba987654",
       folders: { vault: "/data/vault", ref: "/data/ref" },
     });
 
@@ -753,13 +755,20 @@ describe("serverSettings helpers", () => {
       "vault-sync": {
         enabled: false,
         workerApproval: "0123456789ab",
+        externalApproval: "fedcba987654",
         folders: { vault: "/data/vault-2" },
       },
       "bold-header": { enabled: true },
     });
 
     const clearedApproval = applyServerSettingsPatch(folderUpdated, {
-      plugins: { "vault-sync": { workerApproval: null, folders: { vault: null } } },
+      plugins: {
+        "vault-sync": {
+          workerApproval: null,
+          externalApproval: null,
+          folders: { vault: null },
+        },
+      },
     });
     expect(clearedApproval.plugins["vault-sync"]).toEqual({ enabled: false });
 

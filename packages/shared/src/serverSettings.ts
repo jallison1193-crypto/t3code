@@ -272,6 +272,10 @@ function mergePluginSettingsPatch(
       incoming.workerApproval === null
         ? undefined
         : (incoming.workerApproval ?? stored?.workerApproval);
+    const externalApproval =
+      incoming.externalApproval === null
+        ? undefined
+        : (incoming.externalApproval ?? stored?.externalApproval);
     let folders: Record<string, string> | undefined = stored?.folders
       ? { ...stored.folders }
       : undefined;
@@ -289,6 +293,7 @@ function mergePluginSettingsPatch(
     next.set(id, {
       enabled,
       ...(workerApproval !== undefined ? { workerApproval } : {}),
+      ...(externalApproval !== undefined ? { externalApproval } : {}),
       ...(folders !== undefined ? { folders } : {}),
     });
   }

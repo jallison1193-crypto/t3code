@@ -966,7 +966,7 @@ describe("PluginRegistry", () => {
   );
 
   it.effect(
-    "loads .claude-plugin fallback, parses skills/commands/AGENTS.md with collision and unsupported reporting, and prefers .t3-plugin",
+    "loads .claude-plugin fallback, parses skills/commands/AGENTS.md/mcp/hooks/agents with collision handling, and prefers .t3-plugin",
     () =>
       withPluginRegistry(
         {
@@ -1003,9 +1003,25 @@ describe("PluginRegistry", () => {
               "commands/release.md": "Prepare release $0",
               // Nested folder inside commands/ must be ignored.
               "commands/nested/ignored.md": "Nested ignored",
-              "hooks/hooks.json": "{}",
+              "hooks/hooks.json": JSON.stringify({
+                hooks: {
+                  PreToolUse: [
+                    {
+                      matcher: "Bash",
+                      hooks: [{ type: "command", command: "${CLAUDE_PLUGIN_ROOT}/guard.sh" }],
+                    },
+                  ],
+                },
+              }),
               ".mcp.json": "{}",
-              "agents/reviewer.md": "# Reviewer",
+              "agents/reviewer.md": [
+                "---",
+                "description: Code reviewer",
+                "tools: Read, Grep",
+                "---",
+                "",
+                "Review diffs carefully.",
+              ].join("\n"),
             },
           },
           "both-manifests": {
@@ -1030,15 +1046,30 @@ describe("PluginRegistry", () => {
           const claudePack = byId.get("claude-pack");
           assert.isDefined(claudePack);
           assert.isUndefined(claudePack?.problem);
-          assert.deepEqual(claudePack?.contributes, ["command", "skill", "instructions"]);
+          assert.deepEqual(claudePack?.contributes, [
+            "command",
+            "skill",
+            "instructions",
+            "mcp",
+            "hook",
+            "agent",
+          ]);
           assert.deepEqual(claudePack?.commands, ["standup", "release"]);
           assert.deepEqual(claudePack?.skills, ["review", "release"]);
-          assert.deepEqual(claudePack?.unsupported, ["hooks", "mcp", "agents"]);
+          assert.isUndefined(claudePack?.unsupported);
+          assert.strictEqual(claudePack?.mcpServers?.[0]?.name, "docs");
+          assert.strictEqual(claudePack?.hooks?.[0]?.event, "PreToolUse");
+          assert.deepEqual(claudePack?.agents, [
+            { name: PluginId.make("reviewer"), description: "Code reviewer" },
+          ]);
 
           assert.strictEqual(byId.get("both-manifests")?.displayName, "T3 Wins");
 
           const detail = yield* registry.read("claude-pack");
           assert.strictEqual(detail.instructions, "Always cite line numbers.");
+          assert.deepEqual(detail.mcpServers, { docs: { command: "npx" } });
+          assert.strictEqual(detail.hooks?.PreToolUse?.[0]?.matcher, "Bash");
+          assert.strictEqual(detail.agents?.[0]?.name, "reviewer");
           assert.deepEqual(
             detail.skills?.map((skill) => ({
               name: skill.name,
@@ -1068,6 +1099,8 @@ describe("PluginRegistry", () => {
             ],
           );
 
+          // Enabling without external approval still delivers skills, commands, instructions, and agents,
+          // while holding back hooks until approved.
           yield* registry.setEnabled("claude-pack", true);
           const turnCtx = yield* registry.getTurnContext(ProjectId.make("proj-1"));
           assert.strictEqual(turnCtx.contextPlugins.length, 1);
@@ -1081,6 +1114,9 @@ describe("PluginRegistry", () => {
             ["standup", "release"],
           );
           assert.strictEqual(turnCtx.commands[0]?.body, "Write standup for $ARGUMENTS.");
+          assert.deepEqual(turnCtx.hooks, {});
+          assert.strictEqual(turnCtx.agents?.length, 1);
+          assert.strictEqual(turnCtx.agents?.[0]?.name, "reviewer");
         }),
       ),
   );
@@ -1378,6 +1414,334 @@ describe("PluginRegistry", () => {
             projectId: projectB,
             title: "Project B",
             plugins: {},
+          },
+        ],
+      );
+    },
+  );
+
+  it.effect(
+    "reports part problems for invalid/oversized MCP/hooks/agents without blocking other parts, and marks unsupported MCP features not-runnable",
+    () =>
+      withPluginRegistry(
+        {
+          "mixed-mcp": {
+            manifest: JSON.stringify({
+              name: "mixed-mcp",
+              mcpServers: "./extra-mcp.json",
+              hooks: {
+                PreToolUse: [
+                  {
+                    matcher: "Bash",
+                    hooks: [{ type: "command", command: "echo ok" }],
+                  },
+                ],
+              },
+            }),
+            files: {
+              "AGENTS.md": "Keep loading despite not-runnable servers.",
+              ".mcp.json": JSON.stringify({
+                mcpServers: {
+                  good: { command: "node", args: ["server.mjs"] },
+                  oauthSrv: {
+                    type: "http",
+                    url: "https://example.test/mcp",
+                    oauth: { clientId: "x" },
+                  },
+                  helperSrv: {
+                    type: "http",
+                    url: "https://example.test/mcp",
+                    headersHelper: "./hdr.sh",
+                  },
+                  wsSrv: { type: "ws", url: "wss://example.test/mcp" },
+                  mcpbSrv: { type: "http", url: "https://example.test/pack.mcpb" },
+                  projDirSrv: { command: "${CLAUDE_PROJECT_DIR}/run.sh" },
+                  userCfgSrv: { command: "node", env: { KEY: "${user_config.api_key}" } },
+                },
+              }),
+              "extra-mcp.json": JSON.stringify({
+                remoteOk: { type: "streamable-http", url: "https://example.test/ok" },
+              }),
+            },
+          },
+          "broken-parts": {
+            manifest: JSON.stringify({ name: "broken-parts" }),
+            files: {
+              "AGENTS.md": "Instructions still load.",
+              ".mcp.json": "{not valid json",
+              "hooks/hooks.json": JSON.stringify({
+                hooks: { BadEvent: "not-an-array" },
+              }),
+              "agents/missing-desc.md": "# No frontmatter description",
+            },
+          },
+          "missing-type-url": {
+            manifest: JSON.stringify({ name: "missing-type-url" }),
+            files: {
+              "AGENTS.md": "Still loads.",
+              ".mcp.json": JSON.stringify({
+                bad: { url: "https://example.test/mcp" },
+              }),
+            },
+          },
+        },
+        Effect.gen(function* () {
+          const registry = yield* PluginRegistry.PluginRegistry;
+          const { plugins } = yield* registry.list;
+          const byId = new Map(plugins.map((plugin) => [plugin.id, plugin]));
+
+          const mixed = byId.get("mixed-mcp");
+          assert.isDefined(mixed);
+          assert.isUndefined(mixed?.problem);
+          const serversByName = new Map(
+            (mixed?.mcpServers ?? []).map((server) => [server.name, server]),
+          );
+          assert.strictEqual(serversByName.get("good")?.status, "stopped");
+          assert.strictEqual(serversByName.get("remoteOk")?.status, "stopped");
+          assert.strictEqual(serversByName.get("remoteOk")?.transport, "http");
+          assert.strictEqual(serversByName.get("oauthSrv")?.status, "not-runnable");
+          assert.match(serversByName.get("oauthSrv")?.reason ?? "", /oauth/i);
+          assert.strictEqual(serversByName.get("helperSrv")?.status, "not-runnable");
+          assert.match(serversByName.get("helperSrv")?.reason ?? "", /headersHelper/i);
+          assert.strictEqual(serversByName.get("wsSrv")?.status, "not-runnable");
+          assert.match(serversByName.get("wsSrv")?.reason ?? "", /ws/i);
+          assert.strictEqual(serversByName.get("mcpbSrv")?.status, "not-runnable");
+          assert.match(serversByName.get("mcpbSrv")?.reason ?? "", /mcpb/i);
+          assert.strictEqual(serversByName.get("projDirSrv")?.status, "not-runnable");
+          assert.match(serversByName.get("projDirSrv")?.reason ?? "", /CLAUDE_PROJECT_DIR/);
+          assert.strictEqual(serversByName.get("userCfgSrv")?.status, "not-runnable");
+          assert.match(serversByName.get("userCfgSrv")?.reason ?? "", /user_config/);
+
+          const broken = byId.get("broken-parts");
+          assert.isDefined(broken);
+          assert.isUndefined(broken?.problem);
+          assert.deepEqual(broken?.contributes, ["instructions"]);
+          assert.isAtLeast(broken?.partProblems?.length ?? 0, 3);
+
+          const missingType = byId.get("missing-type-url");
+          assert.isDefined(missingType);
+          assert.isUndefined(missingType?.problem);
+          assert.isTrue((missingType?.partProblems ?? []).some((problem) => /type/i.test(problem)));
+        }),
+      ),
+  );
+
+  it.effect(
+    "gates MCP servers and hooks behind externalApproval, re-asks only on MCP/hook config changes, supports Undo, and allows removing approval",
+    () =>
+      withPluginRegistry(
+        {},
+        Effect.gen(function* () {
+          const registry = yield* PluginRegistry.PluginRegistry;
+          const settings = yield* ServerSettingsService;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const { pluginsDir } = yield* ServerConfig.ServerConfig;
+
+          const created = yield* registry.write({
+            id: "ext-demo",
+            displayName: "Ext Demo",
+            instructions: "Rule v1.",
+            mcpServers: {
+              docs: { command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/srv.mjs"] },
+            },
+            hooks: {
+              PreToolUse: [
+                {
+                  matcher: "Bash",
+                  hooks: [
+                    {
+                      type: "command",
+                      command: "${CLAUDE_PLUGIN_ROOT}/check.sh",
+                      args: ["${CLAUDE_PLUGIN_DATA}/log.txt"],
+                    },
+                  ],
+                },
+              ],
+            },
+            agents: [
+              {
+                name: PluginId.make("auditor"),
+                description: "Audit shell commands",
+                tools: ["Read"],
+                model: "sonnet",
+                body: "Be thorough.",
+              },
+            ],
+          });
+
+          // Enabled without approveExternal -> needs-approval, no hooks, no MCP desired specs.
+          const enabledUnapproved = yield* registry.setEnabled("ext-demo", true);
+          assert.strictEqual(enabledUnapproved.plugin.externalStatus, "needs-approval");
+          assert.strictEqual(enabledUnapproved.plugin.mcpServers?.[0]?.status, "needs-approval");
+
+          const unapprovedSpecs = yield* registry.streamMcpDesiredState.pipe(
+            Stream.take(1),
+            Stream.runCollect,
+          );
+          assert.deepEqual(Array.from(unapprovedSpecs), [[]]);
+          const unapprovedTurn = yield* registry.getTurnContext(ProjectId.make("p1"));
+          assert.deepEqual(unapprovedTurn.hooks, {});
+          assert.strictEqual(unapprovedTurn.agents?.length, 1);
+
+          // Stale revision fails with changed.
+          const staleErr = yield* registry
+            .setEnabled("ext-demo", true, {
+              approveExternal: true,
+              revision: "000000000000",
+            })
+            .pipe(Effect.flip);
+          assert.strictEqual(staleErr.reason, "changed");
+
+          // Approve with matching revision -> approved, specs emitted, hooks expanded.
+          const approved = yield* registry.setEnabled("ext-demo", true, {
+            approveExternal: true,
+            revision: created.after,
+          });
+          assert.strictEqual(approved.plugin.externalStatus, "approved");
+
+          const approvedSpecs = yield* registry.streamMcpDesiredState.pipe(
+            Stream.take(1),
+            Stream.runCollect,
+          );
+          assert.strictEqual(Array.from(approvedSpecs)[0]?.length, 1);
+          assert.strictEqual(Array.from(approvedSpecs)[0]?.[0]?.serverName, "docs");
+
+          const approvedTurn = yield* registry.getTurnContext(ProjectId.make("p1"));
+          const hookCmd = approvedTurn.hooks?.PreToolUse?.[0]?.hooks[0];
+          assert.isDefined(hookCmd);
+          if (hookCmd?.type === "command") {
+            assert.isFalse(hookCmd.command.includes("${CLAUDE_PLUGIN_ROOT}"));
+            assert.isTrue(hookCmd.command.endsWith("check.sh"));
+            assert.isFalse(hookCmd.args?.[0]?.includes("${CLAUDE_PLUGIN_DATA}"));
+            assert.isTrue(yield* fs.exists(path.dirname(hookCmd.args![0]!)));
+          }
+
+          // Text-only edit keeps external approval intact.
+          const textEdit = yield* registry.write({
+            id: "ext-demo",
+            instructions: "Rule v2.",
+          });
+          assert.strictEqual(textEdit.plugin.externalStatus, "approved");
+
+          // MCP config edit changes external hash and drops approval.
+          const mcpEdit = yield* registry.write({
+            id: "ext-demo",
+            mcpServers: {
+              docs: { command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/srv-v2.mjs"] },
+            },
+          });
+          assert.strictEqual(mcpEdit.plugin.externalStatus, "needs-approval");
+          const afterEditSpecs = yield* registry.streamMcpDesiredState.pipe(
+            Stream.take(1),
+            Stream.runCollect,
+          );
+          assert.deepEqual(Array.from(afterEditSpecs), [[]]);
+
+          // Undo restores previous .mcp.json and matches the stored approval again.
+          const undone = yield* registry.restore("ext-demo", mcpEdit.before!);
+          assert.strictEqual(undone.plugin.externalStatus, "approved");
+          const readBack = yield* registry.read("ext-demo");
+          assert.deepEqual(readBack.mcpServers, {
+            docs: { command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/srv.mjs"] },
+          });
+
+          // Removing approval via settings null patch stops MCP specs and hooks.
+          yield* settings.updateSettings({
+            plugins: { "ext-demo": { externalApproval: null } },
+          });
+          const afterRevoke = yield* registry.list;
+          assert.strictEqual(
+            afterRevoke.plugins.find((plugin) => plugin.id === "ext-demo")?.externalStatus,
+            "needs-approval",
+          );
+          const revokedTurn = yield* registry.getTurnContext(ProjectId.make("p1"));
+          assert.deepEqual(revokedTurn.hooks, {});
+
+          // Empty {} removes .mcp.json and hooks/hooks.json; [] removes agents/.
+          yield* registry.write({
+            id: "ext-demo",
+            mcpServers: {},
+            hooks: {},
+            agents: [],
+          });
+          assert.isFalse(yield* fs.exists(path.join(pluginsDir, "ext-demo", ".mcp.json")));
+          assert.isFalse(
+            yield* fs.exists(path.join(pluginsDir, "ext-demo", "hooks", "hooks.json")),
+          );
+          assert.isFalse(
+            yield* fs.exists(path.join(pluginsDir, "ext-demo", "agents", "auditor.md")),
+          );
+        }),
+      ),
+  );
+
+  it.effect(
+    "repo plugins load agents when enabled while keeping MCP servers and hooks unsupported",
+    () => {
+      const projectA = ProjectId.make("project-repo-agents");
+      return withPluginRegistry(
+        {},
+        Effect.gen(function* () {
+          const registry = yield* PluginRegistry.PluginRegistry;
+          const listed = yield* registry.list;
+          const repoPlugin = listed.repoPlugins?.find((plugin) => plugin.id === "repo-ext");
+          assert.isDefined(repoPlugin);
+          assert.deepEqual(repoPlugin?.contributes, ["agent"]);
+          assert.deepEqual(repoPlugin?.agents, [
+            { name: PluginId.make("planner"), description: "Plan repo changes" },
+          ]);
+          assert.deepEqual(repoPlugin?.unsupported, ["hooks", "mcp"]);
+          assert.isUndefined(repoPlugin?.mcpServers);
+          assert.isUndefined(repoPlugin?.hooks);
+
+          // Off -> no agents delivered.
+          assert.deepEqual((yield* registry.getTurnContext(projectA)).agents, []);
+
+          // On -> agents delivered, hooks still empty, MCP desired specs still empty.
+          yield* registry.setEnabled("repo-ext", true, {
+            projectId: projectA,
+            revision: repoPlugin!.revision!,
+          });
+          const ctx = yield* registry.getTurnContext(projectA);
+          assert.strictEqual(ctx.agents?.length, 1);
+          assert.strictEqual(ctx.agents?.[0]?.name, "planner");
+          assert.deepEqual(ctx.hooks, {});
+          const specs = yield* registry.streamMcpDesiredState.pipe(
+            Stream.take(1),
+            Stream.runCollect,
+          );
+          assert.deepEqual(Array.from(specs), [[]]);
+        }),
+        DEFAULT_SERVER_SETTINGS,
+        [
+          {
+            projectId: projectA,
+            title: "Project Repo Agents",
+            plugins: {
+              "repo-ext": {
+                manifest: JSON.stringify({ name: "repo-ext" }),
+                files: {
+                  ".mcp.json": JSON.stringify({
+                    docs: { command: "node", args: ["srv.mjs"] },
+                  }),
+                  "hooks/hooks.json": JSON.stringify({
+                    hooks: {
+                      Stop: [{ hooks: [{ type: "command", command: "echo hi" }] }],
+                    },
+                  }),
+                  "agents/planner.md": [
+                    "---",
+                    "description: Plan repo changes",
+                    "tools: Read, Glob",
+                    "permissionMode: bypassPermissions",
+                    "---",
+                    "",
+                    "Produce a concise plan.",
+                  ].join("\n"),
+                },
+              },
+            },
           },
         ],
       );

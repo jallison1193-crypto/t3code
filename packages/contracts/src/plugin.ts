@@ -18,6 +18,11 @@ export const PLUGIN_WORKER_LOG_MAX_BYTES = 32 * 1024;
 export const PLUGIN_MAX_SKILLS = 32;
 export const PLUGIN_SKILL_MAX_BYTES = 32 * 1024;
 export const PLUGIN_INSTRUCTIONS_MAX_BYTES = 8 * 1024;
+export const PLUGIN_MAX_MCP_SERVERS = 8;
+export const PLUGIN_MAX_AGENTS = 16;
+export const PLUGIN_AGENT_MAX_BYTES = 32 * 1024;
+export const PLUGIN_HOOKS_JSON_MAX_BYTES = 64 * 1024;
+export const PLUGIN_MCP_JSON_MAX_BYTES = 64 * 1024;
 export const REPO_PLUGIN_MAX_FOLDERS = 16;
 
 const SingleLineTrimmedNonEmptyString = TrimmedNonEmptyString.check(
@@ -35,6 +40,13 @@ export const PluginId = Schema.String.pipe(
 );
 export type PluginId = typeof PluginId.Type;
 
+const PluginMcpServerNameChecked = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{1,40}$/));
+
+export const PluginMcpServerName = Schema.String.pipe(
+  Schema.decodeTo(PluginMcpServerNameChecked, SchemaTransformation.passthrough()),
+);
+export type PluginMcpServerName = typeof PluginMcpServerName.Type;
+
 export const PluginHash = Schema.String.check(Schema.isPattern(/^[a-f0-9]{12}$/));
 export type PluginHash = typeof PluginHash.Type;
 
@@ -45,6 +57,9 @@ export const PluginContribution = Schema.Literals([
   "skill",
   "command",
   "instructions",
+  "mcp",
+  "hook",
+  "agent",
 ]);
 export type PluginContribution = typeof PluginContribution.Type;
 
@@ -140,12 +155,15 @@ export const PluginManifest = Schema.Struct({
     ),
   ),
   worker: Schema.optional(PluginManifestWorker),
+  mcpServers: Schema.optional(Schema.Unknown),
+  hooks: Schema.optional(Schema.Unknown),
 });
 export type PluginManifest = typeof PluginManifest.Type;
 
 export const PluginSettingEntry = Schema.Struct({
   enabled: Schema.Boolean,
   workerApproval: Schema.optionalKey(PluginHash),
+  externalApproval: Schema.optionalKey(PluginHash),
   folders: Schema.optionalKey(Schema.Record(PluginId, TrimmedNonEmptyString)),
 });
 export type PluginSettingEntry = typeof PluginSettingEntry.Type;
@@ -153,9 +171,49 @@ export type PluginSettingEntry = typeof PluginSettingEntry.Type;
 export const PluginSettingEntryPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
   workerApproval: Schema.optionalKey(Schema.NullOr(PluginHash)),
+  externalApproval: Schema.optionalKey(Schema.NullOr(PluginHash)),
   folders: Schema.optionalKey(Schema.Record(PluginId, Schema.NullOr(TrimmedNonEmptyString))),
 });
 export type PluginSettingEntryPatch = typeof PluginSettingEntryPatch.Type;
+
+export const PluginMcpServerStatus = Schema.Literals([
+  "needs-approval",
+  "starting",
+  "running",
+  "failed",
+  "stopped",
+  "not-runnable",
+]);
+export type PluginMcpServerStatus = typeof PluginMcpServerStatus.Type;
+
+export const PluginExternalStatus = Schema.Literals(["needs-approval", "approved", "stopped"]);
+export type PluginExternalStatus = typeof PluginExternalStatus.Type;
+
+export const InstalledPluginMcpServer = Schema.Struct({
+  name: TrimmedNonEmptyString,
+  transport: Schema.Literals(["stdio", "http", "sse", "ws"]),
+  target: TrimmedNonEmptyString,
+  status: PluginMcpServerStatus,
+  toolCount: Schema.optional(Schema.Int),
+  truncatedTools: Schema.optional(Schema.Boolean),
+  error: Schema.optional(TrimmedNonEmptyString),
+  reason: Schema.optional(TrimmedNonEmptyString),
+});
+export type InstalledPluginMcpServer = typeof InstalledPluginMcpServer.Type;
+
+export const InstalledPluginHookSummary = Schema.Struct({
+  event: TrimmedNonEmptyString,
+  matcher: Schema.optional(TrimmedNonEmptyString),
+  type: Schema.Literals(["command", "http", "mcp_tool", "prompt", "agent"]),
+  target: TrimmedNonEmptyString,
+});
+export type InstalledPluginHookSummary = typeof InstalledPluginHookSummary.Type;
+
+export const InstalledPluginAgentSummary = Schema.Struct({
+  name: PluginId,
+  description: TrimmedNonEmptyString,
+});
+export type InstalledPluginAgentSummary = typeof InstalledPluginAgentSummary.Type;
 
 export const InstalledPluginPanel = Schema.Struct({
   id: PluginId,
@@ -198,6 +256,114 @@ export const PluginChangeWorker = Schema.Struct({
 });
 export type PluginChangeWorker = typeof PluginChangeWorker.Type;
 
+export const PluginAgentEffortLevel = Schema.Literals(["low", "medium", "high", "xhigh", "max"]);
+export type PluginAgentEffortLevel = typeof PluginAgentEffortLevel.Type;
+
+export const PluginHookHandlerCommand = Schema.Struct({
+  type: Schema.Literal("command"),
+  command: TrimmedNonEmptyString,
+  args: Schema.optionalKey(Schema.Array(Schema.String)),
+  if: Schema.optionalKey(Schema.String),
+  shell: Schema.optionalKey(Schema.Literals(["bash", "powershell"])),
+  timeout: Schema.optionalKey(Schema.Number),
+  onFailure: Schema.optionalKey(Schema.Literals(["continue", "block"])),
+  statusMessage: Schema.optionalKey(Schema.String),
+  once: Schema.optionalKey(Schema.Boolean),
+  async: Schema.optionalKey(Schema.Boolean),
+  asyncRewake: Schema.optionalKey(Schema.Boolean),
+});
+
+export const PluginHookHandlerHttp = Schema.Struct({
+  type: Schema.Literal("http"),
+  url: TrimmedNonEmptyString,
+  if: Schema.optionalKey(Schema.String),
+  timeout: Schema.optionalKey(Schema.Number),
+  onFailure: Schema.optionalKey(Schema.Literals(["continue", "block"])),
+  headers: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  allowedEnvVars: Schema.optionalKey(Schema.Array(Schema.String)),
+  statusMessage: Schema.optionalKey(Schema.String),
+  once: Schema.optionalKey(Schema.Boolean),
+});
+
+export const PluginHookHandlerMcpTool = Schema.Struct({
+  type: Schema.Literal("mcp_tool"),
+  server: TrimmedNonEmptyString,
+  tool: TrimmedNonEmptyString,
+  input: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+  if: Schema.optionalKey(Schema.String),
+  timeout: Schema.optionalKey(Schema.Number),
+  statusMessage: Schema.optionalKey(Schema.String),
+  once: Schema.optionalKey(Schema.Boolean),
+});
+
+export const PluginHookHandlerPrompt = Schema.Struct({
+  type: Schema.Literal("prompt"),
+  prompt: TrimmedNonEmptyString,
+  if: Schema.optionalKey(Schema.String),
+  timeout: Schema.optionalKey(Schema.Number),
+  model: Schema.optionalKey(Schema.String),
+  continueOnBlock: Schema.optionalKey(Schema.Boolean),
+  statusMessage: Schema.optionalKey(Schema.String),
+  once: Schema.optionalKey(Schema.Boolean),
+});
+
+export const PluginHookHandlerAgent = Schema.Struct({
+  type: Schema.Literal("agent"),
+  prompt: TrimmedNonEmptyString,
+  if: Schema.optionalKey(Schema.String),
+  timeout: Schema.optionalKey(Schema.Number),
+  model: Schema.optionalKey(Schema.String),
+  statusMessage: Schema.optionalKey(Schema.String),
+  once: Schema.optionalKey(Schema.Boolean),
+});
+
+export const PluginHookHandler = Schema.Union([
+  PluginHookHandlerCommand,
+  PluginHookHandlerHttp,
+  PluginHookHandlerMcpTool,
+  PluginHookHandlerPrompt,
+  PluginHookHandlerAgent,
+]);
+export type PluginHookHandler = typeof PluginHookHandler.Type;
+
+export const PluginHookMatcherGroup = Schema.Struct({
+  matcher: Schema.optionalKey(Schema.String),
+  hooks: Schema.Array(PluginHookHandler),
+});
+export type PluginHookMatcherGroup = typeof PluginHookMatcherGroup.Type;
+
+export const PluginHooksConfig = Schema.Record(
+  SingleLineTrimmedNonEmptyString,
+  Schema.Array(PluginHookMatcherGroup),
+);
+export type PluginHooksConfig = typeof PluginHooksConfig.Type;
+
+export const PluginMcpServerStdioConfig = Schema.Struct({
+  type: Schema.optionalKey(Schema.Literal("stdio")),
+  command: TrimmedNonEmptyString,
+  args: Schema.optionalKey(Schema.Array(Schema.String)),
+  env: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  timeout: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThan(0))),
+});
+export type PluginMcpServerStdioConfig = typeof PluginMcpServerStdioConfig.Type;
+
+export const PluginMcpServerRemoteConfig = Schema.Struct({
+  type: Schema.Literals(["http", "streamable-http", "sse"]),
+  url: TrimmedNonEmptyString,
+  headers: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  timeout: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThan(0))),
+});
+export type PluginMcpServerRemoteConfig = typeof PluginMcpServerRemoteConfig.Type;
+
+export const PluginMcpServerConfig = Schema.Union([
+  PluginMcpServerStdioConfig,
+  PluginMcpServerRemoteConfig,
+]);
+export type PluginMcpServerConfig = typeof PluginMcpServerConfig.Type;
+
+export const PluginMcpServersConfig = Schema.Record(PluginMcpServerName, PluginMcpServerConfig);
+export type PluginMcpServersConfig = typeof PluginMcpServersConfig.Type;
+
 export const InstalledPlugin = Schema.Struct({
   id: TrimmedNonEmptyString,
   displayName: Schema.optional(TrimmedNonEmptyString),
@@ -209,6 +375,11 @@ export const InstalledPlugin = Schema.Struct({
   worker: Schema.optional(InstalledPluginWorker),
   commands: Schema.optional(Schema.Array(PluginId)),
   skills: Schema.optional(Schema.Array(PluginId)),
+  mcpServers: Schema.optional(Schema.Array(InstalledPluginMcpServer)),
+  hooks: Schema.optional(Schema.Array(InstalledPluginHookSummary)),
+  agents: Schema.optional(Schema.Array(InstalledPluginAgentSummary)),
+  externalStatus: Schema.optional(PluginExternalStatus),
+  partProblems: Schema.optional(Schema.Array(TrimmedNonEmptyString)),
   projectId: Schema.optional(ProjectId),
   repoStatus: Schema.optional(RepoPluginStatus),
   unsupported: Schema.optional(Schema.Array(Schema.String)),
@@ -224,6 +395,8 @@ export const EnvironmentPlugin = Schema.Struct({
   panels: Schema.optional(Schema.Array(InstalledPluginPanel)),
   worker: Schema.optional(InstalledPluginWorker),
   commands: Schema.optional(Schema.Array(EnvironmentPluginCommand)),
+  mcpServers: Schema.optional(Schema.Array(InstalledPluginMcpServer)),
+  externalStatus: Schema.optional(PluginExternalStatus),
   projectId: Schema.optional(ProjectId),
 });
 export type EnvironmentPlugin = typeof EnvironmentPlugin.Type;
@@ -245,6 +418,7 @@ export const ServerSetPluginEnabledInput = Schema.Struct({
   id: TrimmedNonEmptyString,
   enabled: Schema.Boolean,
   approveWorker: Schema.optional(Schema.Boolean),
+  approveExternal: Schema.optional(Schema.Boolean),
   /** The revision the user reviewed; the call fails if the plugin changed since. */
   revision: Schema.optional(TrimmedNonEmptyString),
   projectId: Schema.optional(ProjectId),
@@ -273,6 +447,7 @@ export const ServerRestorePluginRevisionInput = Schema.Struct({
   revision: TrimmedNonEmptyString,
   enable: Schema.optional(Schema.Boolean),
   approveWorker: Schema.optional(Schema.Boolean),
+  approveExternal: Schema.optional(Schema.Boolean),
   projectId: Schema.optional(ProjectId),
 });
 export type ServerRestorePluginRevisionInput = typeof ServerRestorePluginRevisionInput.Type;
@@ -387,6 +562,9 @@ export class PluginOperationError extends Schema.TaggedError<PluginOperationErro
       "invalid_worker",
       "invalid_skill",
       "invalid_instructions",
+      "invalid_mcp",
+      "invalid_hooks",
+      "invalid_agent",
       "invalid_folder",
       "worker_not_running",
       "worker_run_failed",
@@ -426,6 +604,12 @@ export class PluginOperationError extends Schema.TaggedError<PluginOperationErro
         return `Skill or command definition for plugin "${id}" is invalid or exceeds the 32 KB limit.`;
       case "invalid_instructions":
         return `Instructions (AGENTS.md) for plugin "${id}" exceed the 8 KB limit.`;
+      case "invalid_mcp":
+        return `MCP server configuration for plugin "${id}" is invalid or exceeds limits.`;
+      case "invalid_hooks":
+        return `Hooks configuration for plugin "${id}" is invalid or exceeds the 64 KB limit.`;
+      case "invalid_agent":
+        return `Agent definition for plugin "${id}" is invalid or exceeds limits.`;
       case "invalid_folder":
         return `Folder path for plugin "${id}" must be an existing local directory and cannot be a UNC path.`;
       case "worker_not_running":

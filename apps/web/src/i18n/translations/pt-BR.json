@@ -12894,5 +12894,80 @@
   ],
   "d5b680b57724f530": "Alterado",
   "aeea775659127285": "Alterado desde que você o ativou",
-  "f96b011498a483b2": "Ativar novamente"
+  "f96b011498a483b2": "Ativar novamente",
+  "7a4e06d0b3b2beed": "Plugin não aprovado",
+  "0c31642763088630": "Não foi possível aprovar os servidores MCP e os hooks do plugin.",
+  "dce331a763ff9756": [
+    "Executa o servidor MCP ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ": ",
+    {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    }
+  ],
+  "68a43146735830a7": "Executa servidores MCP",
+  "497ff8b0c967e651": [
+    "Executa hooks em threads do Claude: ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " ",
+    {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    }
+  ],
+  "d1d5d45adb0d7912": "Executa hooks em threads do Claude",
+  "928b4f1cf406ce80": [
+    "Adiciona o agente ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " (threads do Claude)"
+  ],
+  "3bacdba0906fa41c": "Adiciona agentes (threads do Claude)",
+  "3966fac273f3ec2f": "Servidores MCP e hooks são executados fora do sandbox.",
+  "ead199761ab918fb": "Aprovação não removida",
+  "f05f476b2e0bf21a": "Não foi possível remover a aprovação externa do plugin.",
+  "f19ca2f26e431d8c": [
+    "Agentes (somente threads do Claude):",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "ad8e1ff5b96cb6fb": [
+    "Em execução (",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " ferramentas)"
+  ],
+  "5fa281c639117f55": "Iniciando",
+  "1168d0b54232a485": "Falhou",
+  "c0dcd3089414a393": "Não executável",
+  "e8bea9a04544caf1": "Servidores MCP e hooks",
+  "9df67bcc43a70f4a": "Remover aprovação",
+  "c85b10dde0506e4a": "A lista de ferramentas atingiu o limite; apenas as primeiras ferramentas estão expostas.",
+  "19f418961c74cfa4": "Hooks (somente threads do Claude)",
+  "ae00a86c28b0a06a": "Servidores MCP e hooks são executados fora do sandbox. Hooks e agentes funcionam em threads do Claude. Aprove apenas plugins em que você confia."
 }

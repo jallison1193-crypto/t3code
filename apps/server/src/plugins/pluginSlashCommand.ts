@@ -74,16 +74,21 @@ function stripPluginSkillFrontmatter(contents: string): string {
   return cleanBody(normalized.slice(match[0].length));
 }
 
-export function parsePluginSkillMarkdown(
-  contents: string,
-): ParsedPluginSkillMarkdown | { readonly ok: false; readonly problem: string } {
+export function parseYamlFrontmatter(contents: string):
+  | {
+      readonly ok: true;
+      readonly hasFrontmatter: boolean;
+      readonly data: Readonly<Record<string, unknown>>;
+      readonly body: string;
+    }
+  | { readonly ok: false; readonly problem: string } {
   const normalized = stripLeadingBom(contents);
   const match = FRONTMATTER_PATTERN.exec(normalized);
   if (!match) {
     return {
       ok: true,
-      userInvocable: true,
-      modelInvocable: true,
+      hasFrontmatter: false,
+      data: {},
       body: cleanBody(normalized),
     };
   }
@@ -121,6 +126,29 @@ export function parsePluginSkillMarkdown(
     return { ok: false, problem: "Frontmatter must be a YAML mapping." };
   }
 
+  return {
+    ok: true,
+    hasFrontmatter: true,
+    data: parsed as Readonly<Record<string, unknown>>,
+    body: cleanBody(normalized.slice(match[0].length)),
+  };
+}
+
+export function parsePluginSkillMarkdown(
+  contents: string,
+): ParsedPluginSkillMarkdown | { readonly ok: false; readonly problem: string } {
+  const fm = parseYamlFrontmatter(contents);
+  if (!fm.ok) return fm;
+  if (!fm.hasFrontmatter) {
+    return {
+      ok: true,
+      userInvocable: true,
+      modelInvocable: true,
+      body: fm.body,
+    };
+  }
+
+  const parsed = fm.data;
   const name = typeof parsed.name === "string" ? parsed.name.trim() : "";
   const description = typeof parsed.description === "string" ? parsed.description.trim() : "";
   const argumentHint =
@@ -135,7 +163,7 @@ export function parsePluginSkillMarkdown(
     ...(argumentHint.length > 0 ? { argumentHint } : {}),
     userInvocable: userInvocable !== false,
     modelInvocable: disableModelInvocation !== true,
-    body: cleanBody(normalized.slice(match[0].length)),
+    body: fm.body,
   };
 }
 

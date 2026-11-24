@@ -63,6 +63,7 @@ import { EnvironmentToolkit } from "./toolkits/environment/tools.ts";
 import * as EnvironmentHandlers from "./toolkits/environment/handlers.ts";
 import { ThemeToolkit } from "./toolkits/theme/tools.ts";
 import * as ThemeHandlers from "./toolkits/theme/handlers.ts";
+import * as PluginMcpProxy from "../plugins/PluginMcpProxy.ts";
 import { PluginToolkit } from "./toolkits/plugin/tools.ts";
 import * as PluginHandlers from "./toolkits/plugin/handlers.ts";
 import { FolderToolkit } from "./toolkits/folder/tools.ts";
@@ -1488,10 +1489,131 @@ const layerDeferredListing = McpServer.visibility(
   { global: true },
 );
 
+const encodePluginToolSignature = Schema.encodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
+
+/**
+ * Dynamic plugin MCP server tools stay outside `layerTools` so `AgentContextBudget.test.ts`
+ * continues measuring T3's built-in tool surface. Each tool checks the proxy's live catalog
+ * synchronously via `EnabledWhen` and re-checks authorization and liveness on call.
+ */
+export const layerPluginMcpTools = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const proxyOption = yield* Effect.serviceOption(PluginMcpProxy.PluginMcpProxy);
+    if (Option.isNone(proxyOption)) return;
+    const proxy = proxyOption.value;
+    const server = yield* McpServer.McpServer;
+
+    const registeredSignatures = new Map<string, string>();
+    let activeToolNames = new Set<string>();
+
+    const syncCatalog = Effect.fn("McpHttpServer.syncPluginMcpTools")(function* (
+      tools: ReadonlyArray<PluginMcpProxy.ProxiedPluginMcpTool>,
+    ) {
+      const nextNames = new Set<string>();
+      let addedOrUpdated = false;
+      for (const tool of tools) {
+        nextNames.add(tool.name);
+        const signature = Option.getOrElse(
+          encodePluginToolSignature({
+            description: tool.description,
+            inputSchema: tool.inputSchema,
+          }),
+          () => tool.description,
+        );
+        if (registeredSignatures.get(tool.name) === signature) {
+          continue;
+        }
+        registeredSignatures.set(tool.name, signature);
+        addedOrUpdated = true;
+        yield* server.addTool({
+          tool: new McpSchema.Tool({
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.inputSchema,
+          }),
+          annotations: Context.make(
+            McpSchema.EnabledWhen,
+            () => McpInvocationContext.hiddenFromOutsideClients() && proxy.isToolActive(tool.name),
+          ),
+          handle: (payload) =>
+            Effect.withFiber((fiber) => {
+              const invocation = Context.getOrUndefined(
+                fiber.context,
+                McpInvocationContext.McpInvocationContext,
+              );
+              if (invocation === undefined) {
+                return Effect.succeed(
+                  new McpSchema.CallToolResult({
+                    isError: true,
+                    content: [{ type: "text", text: "Missing MCP invocation context." }],
+                  }),
+                );
+              }
+              return McpToolAccess.refuseReadOnlyClient.pipe(
+                Effect.andThen(McpInvocationContext.requireThreadScope(invocation, tool.name)),
+                Effect.provideService(McpInvocationContext.McpInvocationContext, invocation),
+                Effect.andThen(
+                  Effect.suspend(() =>
+                    proxy.isToolActive(tool.name)
+                      ? proxy.callTool(tool.name, payload)
+                      : Effect.succeed(
+                          new McpSchema.CallToolResult({
+                            isError: true,
+                            content: [
+                              { type: "text", text: `Plugin tool "${tool.name}" is not active.` },
+                            ],
+                          }),
+                        ),
+                  ),
+                ),
+                Effect.catch((error) =>
+                  Effect.succeed(
+                    new McpSchema.CallToolResult({
+                      isError: true,
+                      content: [{ type: "text", text: error.message }],
+                    }),
+                  ),
+                ),
+              );
+            }),
+        });
+      }
+
+      let membershipChanged = false;
+      for (const prevName of activeToolNames) {
+        if (!nextNames.has(prevName)) {
+          membershipChanged = true;
+          break;
+        }
+      }
+      if (!membershipChanged) {
+        for (const nextName of nextNames) {
+          if (!activeToolNames.has(nextName)) {
+            membershipChanged = true;
+            break;
+          }
+        }
+      }
+      activeToolNames = nextNames;
+      if (membershipChanged && !addedOrUpdated) {
+        yield* server.notifications["notifications/tools/list_changed"]({});
+      }
+    });
+
+    yield* syncCatalog(proxy.listActiveTools());
+    yield* proxy.catalogChanges.pipe(
+      Stream.runForEach((tools) => syncCatalog(tools)),
+      Effect.forkScoped,
+    );
+  }),
+);
+
 /** Outside layerTools: the clients its budget measures never list `tool_search`. */
 export const layerToolSearch = Layer.mergeAll(
   toolkitRegistration(ToolSearchToolkit, ToolSearchHandlers.layer),
   layerDeferredListing,
 ).pipe(Layer.provide(layerToolExposure));
 
-export const layer = layerMcpTransport(Layer.mergeAll(layerTools, layerToolSearch));
+export const layer = layerMcpTransport(
+  Layer.mergeAll(layerTools, layerPluginMcpTools, layerToolSearch),
+);

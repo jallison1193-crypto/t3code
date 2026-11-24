@@ -1,8 +1,10 @@
 import type {
   EnvironmentId,
   InstalledPlugin,
+  InstalledPluginMcpServer,
   InstalledPluginWorker,
   PluginId,
+  PluginMcpServerStatus,
   PluginWorkerStatus,
   ProjectId,
   RepoPluginStatus,
@@ -43,7 +45,7 @@ import { useSettingsScope } from "./SettingsScopeContext";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useSearchableSetting } from "./settingsSearch";
 
-const REPO_DISALLOWED_PARTS = new Set(["css", "panels", "worker"]);
+const REPO_DISALLOWED_PARTS = new Set(["css", "panels", "worker", "mcp", "hooks"]);
 
 function unsupportedPartLabel(part: string, gt: ReturnType<typeof useGT>): string {
   switch (part) {
@@ -74,7 +76,9 @@ function PluginTextPartsDetails({
   const gt = useGT();
   const hasCommands = plugin.commands !== undefined && plugin.commands.length > 0;
   const hasSkills = plugin.skills !== undefined && plugin.skills.length > 0;
+  const hasAgents = plugin.agents !== undefined && plugin.agents.length > 0;
   const hasInstructions = plugin.contributes.includes("instructions");
+  const partProblems = plugin.partProblems ?? [];
   const unsupported = plugin.unsupported ?? [];
   const repoDisallowed = isRepo
     ? unsupported.filter((part) => REPO_DISALLOWED_PARTS.has(part))
@@ -86,7 +90,9 @@ function PluginTextPartsDetails({
   if (
     !hasCommands &&
     !hasSkills &&
+    !hasAgents &&
     !hasInstructions &&
+    partProblems.length === 0 &&
     repoDisallowed.length === 0 &&
     notYetSupported.length === 0
   ) {
@@ -115,11 +121,26 @@ function PluginTextPartsDetails({
           </T>
         </p>
       ) : null}
+      {hasAgents ? (
+        <p>
+          <T>
+            Agents (Claude threads only):{" "}
+            <span className="font-mono text-foreground">
+              <Var>{plugin.agents!.map((agent) => agent.name).join(", ")}</Var>
+            </span>
+          </T>
+        </p>
+      ) : null}
       {hasInstructions ? (
         <p>
           <T>Adds instructions for agents</T>
         </p>
       ) : null}
+      {partProblems.map((problem) => (
+        <p key={problem} className="text-warning-foreground">
+          {problem}
+        </p>
+      ))}
       {repoDisallowed.length > 0 ? (
         <p>
           <T>
@@ -138,6 +159,55 @@ function PluginTextPartsDetails({
       ) : null}
     </div>
   );
+}
+
+function McpServerStatusBadge({
+  status,
+  toolCount,
+}: {
+  readonly status: PluginMcpServerStatus;
+  readonly toolCount: number | undefined;
+}) {
+  switch (status) {
+    case "running":
+      return (
+        <Badge size="sm" variant="success">
+          <T>
+            Running (<Var>{toolCount ?? 0}</Var> tools)
+          </T>
+        </Badge>
+      );
+    case "starting":
+      return (
+        <Badge size="sm" variant="outline">
+          <T>Starting</T>
+        </Badge>
+      );
+    case "needs-approval":
+      return (
+        <Badge size="sm" variant="warning">
+          <T>Needs approval</T>
+        </Badge>
+      );
+    case "failed":
+      return (
+        <Badge size="sm" variant="error">
+          <T>Failed</T>
+        </Badge>
+      );
+    case "not-runnable":
+      return (
+        <Badge size="sm" variant="outline">
+          <T>Not runnable</T>
+        </Badge>
+      );
+    case "stopped":
+      return (
+        <Badge size="sm" variant="outline">
+          <T>Stopped</T>
+        </Badge>
+      );
+  }
 }
 
 function WorkerStatusBadge({ status }: { readonly status: PluginWorkerStatus }) {
@@ -398,11 +468,16 @@ function EnvironmentPluginsSection({
             {plugins.map((plugin) => {
               const label = plugin.displayName ?? plugin.id;
               const hasProblem = plugin.problem !== undefined;
+              const storedSetting = Object.hasOwn(livePluginSettings, plugin.id)
+                ? livePluginSettings[plugin.id]
+                : undefined;
               const enabled =
                 !hasProblem &&
-                (Object.hasOwn(livePluginSettings, plugin.id)
-                  ? livePluginSettings[plugin.id]?.enabled === true
-                  : plugin.enabled);
+                (storedSetting !== undefined ? storedSetting.enabled === true : plugin.enabled);
+              const hasExternalApproval = storedSetting?.externalApproval !== undefined;
+              const hasExternalParts =
+                (plugin.mcpServers !== undefined && plugin.mcpServers.length > 0) ||
+                (plugin.hooks !== undefined && plugin.hooks.length > 0);
               const busy = busyPluginKey === `user:${plugin.id}`;
               return (
                 <SettingsRow
@@ -417,6 +492,12 @@ function EnvironmentPluginsSection({
                       ) : null}
                       {plugin.worker !== undefined ? (
                         <WorkerStatusBadge status={plugin.worker.status} />
+                      ) : null}
+                      {plugin.externalStatus === "needs-approval" &&
+                      plugin.worker?.status !== "needs-approval" ? (
+                        <Badge size="sm" variant="warning">
+                          <T>Needs approval</T>
+                        </Badge>
                       ) : null}
                     </span>
                   }
@@ -448,6 +529,15 @@ function EnvironmentPluginsSection({
                   }
                 >
                   <PluginTextPartsDetails plugin={plugin} isRepo={false} />
+                  {hasExternalParts || hasExternalApproval ? (
+                    <PluginExternalDetails
+                      environmentId={environmentId}
+                      plugin={plugin}
+                      hasExternalApproval={hasExternalApproval}
+                      hasProblem={hasProblem}
+                      rowBusy={busy}
+                    />
+                  ) : null}
                   {plugin.worker !== undefined ? (
                     <PluginWorkerDetails
                       environmentId={environmentId}
@@ -919,6 +1009,193 @@ function PluginWorkerDetails({
       <p className="text-muted-foreground">
         <T>
           Plugin code runs with the folder and network limits above. Only turn on plugins you trust.
+        </T>
+      </p>
+    </div>
+  );
+}
+
+function PluginExternalDetails({
+  environmentId,
+  plugin,
+  hasExternalApproval,
+  hasProblem,
+  rowBusy,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly plugin: InstalledPlugin;
+  readonly hasExternalApproval: boolean;
+  readonly hasProblem: boolean;
+  readonly rowBusy: boolean;
+}) {
+  const gt = useGT();
+  const messages = useMessages();
+  const [actionBusy, setActionBusy] = useState(false);
+
+  const canSetEnabled = useAtomValue(
+    serverEnvironment.setPluginEnabled.permissionAtom(environmentId),
+  );
+  const canUpdateSettings = useAtomValue(
+    serverEnvironment.updateSettings.permissionAtom(environmentId),
+  );
+  const setPluginEnabled = useAtomCommand(serverEnvironment.setPluginEnabled, {
+    label: "plugin external approval",
+    reportFailure: false,
+  });
+  const updateSettings = useAtomCommand(serverEnvironment.updateSettings, {
+    label: "plugin external approval removal",
+    reportFailure: false,
+  });
+
+  const reportError = (
+    result: AtomCommandResult<unknown, unknown>,
+    title: string,
+    fallback: string,
+  ) => {
+    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      const error = squashAtomCommandFailure(result);
+      toastManager.add({
+        type: "error",
+        title,
+        description:
+          (error instanceof Error ? thrownErrorMessage(error, messages) : null) ?? fallback,
+      });
+    }
+  };
+
+  const handleApprove = async () => {
+    setActionBusy(true);
+    try {
+      const result = await setPluginEnabled({
+        environmentId,
+        input: {
+          id: plugin.id,
+          enabled: true,
+          approveExternal: true,
+          ...(plugin.revision !== undefined ? { revision: plugin.revision } : {}),
+        },
+      });
+      reportError(
+        result,
+        gt("Plugin not approved"),
+        gt("Could not approve plugin MCP servers and hooks."),
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleRemoveApproval = async () => {
+    setActionBusy(true);
+    try {
+      const result = await updateSettings({
+        environmentId,
+        input: {
+          patch: {
+            plugins: {
+              [plugin.id]: { externalApproval: null },
+            },
+          },
+        },
+      });
+      reportError(
+        result,
+        gt("Approval not removed"),
+        gt("Could not remove plugin external approval."),
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const busy = rowBusy || actionBusy;
+  const mcpServers: ReadonlyArray<InstalledPluginMcpServer> = plugin.mcpServers ?? [];
+  const hookRows = (() => {
+    const seen = new Map<string, number>();
+    return (plugin.hooks ?? []).map((hook) => {
+      const base = `${hook.event}:${hook.matcher ?? ""}:${hook.type}:${hook.target}`;
+      const count = seen.get(base) ?? 0;
+      seen.set(base, count + 1);
+      return { key: count === 0 ? base : `${base}#${count}`, hook };
+    });
+  })();
+
+  return (
+    <div className="mt-2.5 space-y-2 border-t border-border/60 pt-2.5 pb-2 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-medium text-foreground">
+          <T>MCP servers and hooks</T>
+        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {plugin.externalStatus === "needs-approval" && !hasProblem ? (
+            <Button
+              size="xs"
+              variant="default"
+              disabled={!canSetEnabled || busy}
+              onClick={() => void handleApprove()}
+            >
+              <T>Approve</T>
+            </Button>
+          ) : null}
+          {hasExternalApproval ? (
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={!canUpdateSettings || busy}
+              onClick={() => void handleRemoveApproval()}
+            >
+              <T>Remove approval</T>
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      {mcpServers.length > 0 ? (
+        <div className="space-y-1.5">
+          {mcpServers.map((server) => (
+            <div key={server.name} className="space-y-0.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono font-medium text-foreground">{server.name}</span>
+                <McpServerStatusBadge status={server.status} toolCount={server.toolCount} />
+              </div>
+              <p className="font-mono text-muted-foreground break-all">{server.target}</p>
+              {server.truncatedTools ? (
+                <p className="text-muted-foreground">
+                  <T>Tool list reached the limit; only the first tools are exposed.</T>
+                </p>
+              ) : null}
+              {server.error !== undefined ? (
+                <p className="text-destructive-foreground">{server.error}</p>
+              ) : null}
+              {server.reason !== undefined ? (
+                <p className="text-muted-foreground">{server.reason}</p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {hookRows.length > 0 ? (
+        <div className="space-y-1">
+          <p className="text-muted-foreground">
+            <T>Hooks (Claude threads only)</T>
+          </p>
+          <ul className="space-y-0.5 text-muted-foreground">
+            {hookRows.map(({ key, hook }) => (
+              <li key={key} className="font-mono break-all">
+                <span className="text-foreground">{hook.event}</span>
+                {hook.matcher !== undefined ? <span> ({hook.matcher})</span> : null}
+                <span>: {hook.target}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <p className="text-muted-foreground">
+        <T>
+          MCP servers and hooks run outside the sandbox. Hooks and agents work in Claude threads.
+          Only approve plugins you trust.
         </T>
       </p>
     </div>
