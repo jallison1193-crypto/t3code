@@ -183,7 +183,6 @@ interface PluginSnapshot {
   readonly panelEntries: ReadonlyMap<string, ReadonlyMap<string, string>>;
   readonly workerSpecs: ReadonlyArray<PluginWorkerDesiredSpec>;
   readonly activeUserScanned: ReadonlyArray<ScannedPlugin>;
-  readonly activeRepoScannedByProject: ReadonlyMap<ProjectId, ReadonlyArray<ScannedPlugin>>;
 }
 
 interface ScannedSkill {
@@ -1905,7 +1904,6 @@ const make = Effect.gen(function* () {
     panelEntries: new Map(),
     workerSpecs: [],
     activeUserScanned: [],
-    activeRepoScannedByProject: new Map(),
   });
   const refreshSemaphore = yield* Semaphore.make(1);
   const mutationSemaphore = yield* Semaphore.make(1);
@@ -1989,14 +1987,10 @@ const make = Effect.gen(function* () {
         defaultNetworkRestricted,
       ).pipe(Effect.provideService(FileSystem.FileSystem, fs));
       const repoProjects = yield* scanRepoProjects(currentSettings.repoPlugins, true);
-      const activeRepoScannedByProject = new Map<ProjectId, Array<ScannedPlugin>>();
       const combinedActive: Array<EnvironmentPlugin> = [...active];
       for (const { projectId, scanned } of repoProjects) {
         for (const item of scanned) {
           if (!item.plugin.enabled || item.plugin.problem !== undefined) continue;
-          const bucket = activeRepoScannedByProject.get(projectId) ?? [];
-          bucket.push(item);
-          activeRepoScannedByProject.set(projectId, bucket);
           const envPlugin = buildEnvironmentPlugin(item, projectId);
           if (envPlugin !== null) {
             combinedActive.push(envPlugin);
@@ -2017,7 +2011,6 @@ const make = Effect.gen(function* () {
             panelEntries,
             workerSpecs,
             activeUserScanned,
-            activeRepoScannedByProject,
           };
           if (sameActive && samePlugins && sameWorkerSpecs) {
             return [[false, false, updated], updated];
@@ -3397,10 +3390,23 @@ const make = Effect.gen(function* () {
   const getTurnContext: PluginRegistry["Service"]["getTurnContext"] = Effect.fn(
     "PluginRegistry.getTurnContext",
   )(function* (projectId) {
-    const snapshot = yield* refresh;
+    // User plugins are watched, so the published snapshot is current; repo folders are not.
+    const snapshot = yield* Ref.get(published);
+    const repoApprovals = yield* settings.getSettings.pipe(
+      Effect.map((current) =>
+        Object.hasOwn(current.repoPlugins, projectId) ? current.repoPlugins[projectId] : undefined,
+      ),
+      Effect.orElseSucceed(() => undefined),
+    );
+    const repoProjects =
+      repoApprovals === undefined
+        ? []
+        : yield* scanRepoProjects({ [projectId]: repoApprovals }, true);
     const activePlugins = [
       ...snapshot.activeUserScanned,
-      ...(snapshot.activeRepoScannedByProject.get(projectId) ?? []),
+      ...repoProjects.flatMap(({ scanned }) =>
+        scanned.filter((item) => item.plugin.enabled && item.plugin.problem === undefined),
+      ),
     ];
     const contextPlugins: Array<ProjectContextPlugin> = [];
     const commandsByKey = new Map<string, PluginSlashCommandEntry>();
