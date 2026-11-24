@@ -92,6 +92,7 @@ import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
 import * as PluginRegistry from "./plugins/PluginRegistry.ts";
 import * as PluginStateStore from "./plugins/PluginStateStore.ts";
+import * as PluginWorkerSupervisor from "./plugins/PluginWorkerSupervisor.ts";
 import * as ProjectMemoryStore from "./projectMemory/ProjectMemoryStore.ts";
 import * as GitWorkflowService from "./git/GitWorkflowService.ts";
 import * as HostResources from "./resourceTelemetry/HostResources.ts";
@@ -850,6 +851,7 @@ const layerUnusedConfigRpcServices = Layer.mergeAll(
   Layer.mock(EnvironmentTheme.EnvironmentThemeService)({}),
   Layer.mock(PluginRegistry.PluginRegistry)({}),
   Layer.mock(PluginStateStore.PluginStateStore)({}),
+  Layer.mock(PluginWorkerSupervisor.PluginWorkerSupervisor)({}),
   Layer.mock(ProjectMemoryStore.ProjectMemoryStore)({}),
   Layer.mock(GitWorkflowService.GitWorkflowService)({}),
   Layer.mock(HostResources.HostResources)({}),

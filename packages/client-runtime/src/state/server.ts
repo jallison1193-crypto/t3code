@@ -1836,6 +1836,38 @@ export function createServerEnvironmentAtoms<R, E>(
           registry.refresh(pluginsList({ environmentId, input: {} }));
         }),
     }),
+    approvePluginWorker: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:plugins:approve-worker",
+      tag: WS_METHODS.serverApprovePluginWorker,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+      onSuccess: ({ environmentId }, registry) =>
+        Effect.sync(() => {
+          registry.refresh(pluginsList({ environmentId, input: {} }));
+        }),
+    }),
+    setPluginWorkerFolder: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:plugins:set-worker-folder",
+      tag: WS_METHODS.serverSetPluginWorkerFolder,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+      onSuccess: ({ environmentId }, registry) =>
+        Effect.sync(() => {
+          registry.refresh(pluginsList({ environmentId, input: {} }));
+        }),
+    }),
+    runPluginWorker: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:plugins:run-worker",
+      tag: WS_METHODS.serverRunPluginWorker,
+      onSuccess: ({ environmentId }, registry) =>
+        Effect.sync(() => {
+          registry.refresh(pluginsList({ environmentId, input: {} }));
+        }),
+    }),
+    getPluginWorkerLog: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:plugins:get-worker-log",
+      tag: WS_METHODS.serverGetPluginWorkerLog,
+    }),
     getPluginState: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:plugins:get-state",
       tag: WS_METHODS.serverGetPluginState,

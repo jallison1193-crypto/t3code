@@ -12756,5 +12756,65 @@
   "ac10cafdeea93121": "{count, plural, one {Escribió un plugin {count} vez} other {Escribió un plugin {count} veces}}",
   "52b987ceaa1e9498": "{count, plural, one {Intentó escribir un plugin {count} vez} other {Intentó escribir un plugin {count} veces}}",
   "2450a6722d95b646": "{status, select, inProgress {Leyendo los plugins} completed {Leyó los plugins} failed {No se pudo leer los plugins} declined {Se rechazó leer los plugins} stopped {Se dejó de leer los plugins} other {Leyendo los plugins}}",
-  "3c08c0c95a3b07e2": "{status, select, inProgress {Escribiendo un plugin} completed {Escribió un plugin} failed {No se pudo escribir el plugin} declined {Se rechazó escribir el plugin} stopped {Se dejó de escribir el plugin} other {Escribiendo un plugin}}"
+  "3c08c0c95a3b07e2": "{status, select, inProgress {Escribiendo un plugin} completed {Escribió un plugin} failed {No se pudo escribir el plugin} declined {Se rechazó escribir el plugin} stopped {Se dejó de escribir el plugin} other {Escribiendo un plugin}}",
+  "a5674b575d6d99df": "Worker no aprobado",
+  "82f3d9cc4cea06f0": "No se pudo aprobar el worker del plugin.",
+  "6c16b4c17ecab0a9": "Ejecuta código en segundo plano en este equipo",
+  "cdf18d4e4d0c8881": [
+    "Lee y escribe en ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "00b6273413aabfaa": [
+    "Lee ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "78c2f44e9cfef6ac": "Usa la red",
+  "b0706ba59c01e9db": [
+    "Se ejecuta cada ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " minutos"
+  ],
+  "45699bdf9626f085": "El acceso a la red no está bloqueado en este entorno de ejecución de T3.",
+  "f1e5c1be1ac92361": "Aprobar",
+  "b8f5061ac22fe1c5": "No se pudo cargar el registro del worker",
+  "df145ba72d106163": "No se pudo leer la salida del worker.",
+  "187b5b8c526d01ef": "El worker ya se está ejecutando",
+  "9b235fef931d3126": "Espera a que termine la ejecución actual antes de iniciar otra.",
+  "cf6ab17c77b64f62": "Error al ejecutar el worker",
+  "4973e5d94efffc97": "No se pudo ejecutar el worker del plugin.",
+  "e496d3a463663574": "Carpeta no guardada",
+  "5b4676e5cf89030a": "No se pudo guardar la ruta de la carpeta del worker.",
+  "244eb1e6fff0620c": "Ruta de carpeta en el servidor",
+  "622a159ad0eabdcb": "En ejecución",
+  "c92657bb7f2293ff": "Requiere aprobación",
+  "235ebe93ce52d03f": "Requiere carpeta",
+  "cb9b588441a36855": "Con errores",
+  "7cda14a9e8aaefb0": "Detenido",
+  "5298bbd2d64b83a6": [
+    "Última ejecución: ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "138e6abcbea0678c": "Lee y escribe",
+  "44875bc1115247fa": "Lee",
+  "1f8a6c7c0b4a3567": "Registro",
+  "9ed792fb64e9cf0b": "Cargando registro…",
+  "fc6012fd5e61997a": "Todavía no hay salida.",
+  "33483e00b6a8033c": "Mostrando los últimos 32 KB de la salida del worker.",
+  "4c6fd1c0c731161f": "El código del plugin se ejecuta con los límites de carpetas y red anteriores. Activa solo los plugins en los que confíes."
 }

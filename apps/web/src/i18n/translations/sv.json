@@ -12768,5 +12768,65 @@
   "ac10cafdeea93121": "{count, plural, one {Skrev en plugin {count} gång} other {Skrev en plugin {count} gånger}}",
   "52b987ceaa1e9498": "{count, plural, one {Försökte skriva en plugin {count} gång} other {Försökte skriva en plugin {count} gånger}}",
   "2450a6722d95b646": "{status, select, inProgress {Läser pluginer} completed {Läste pluginer} failed {Kunde inte läsa pluginer} declined {Avböjde att läsa pluginer} stopped {Slutade läsa pluginer} other {Läser pluginer}}",
-  "3c08c0c95a3b07e2": "{status, select, inProgress {Skriver en plugin} completed {Skrev en plugin} failed {Kunde inte skriva pluginen} declined {Avböjde att skriva pluginen} stopped {Slutade skriva pluginen} other {Skriver en plugin}}"
+  "3c08c0c95a3b07e2": "{status, select, inProgress {Skriver en plugin} completed {Skrev en plugin} failed {Kunde inte skriva pluginen} declined {Avböjde att skriva pluginen} stopped {Slutade skriva pluginen} other {Skriver en plugin}}",
+  "a5674b575d6d99df": "Worker inte godkänd",
+  "82f3d9cc4cea06f0": "Det gick inte att godkänna plugin-workern.",
+  "6c16b4c17ecab0a9": "Kör bakgrundskod på den här datorn",
+  "cdf18d4e4d0c8881": [
+    "Läser och skriver ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "00b6273413aabfaa": [
+    "Läser ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "78c2f44e9cfef6ac": "Använder nätverket",
+  "b0706ba59c01e9db": [
+    "Körs var ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ":e minut"
+  ],
+  "45699bdf9626f085": "Nätverksåtkomst blockeras inte i den här T3-körtidsmiljön.",
+  "f1e5c1be1ac92361": "Godkänn",
+  "b8f5061ac22fe1c5": "Det gick inte att läsa in worker-loggen",
+  "df145ba72d106163": "Det gick inte att läsa worker-utdata.",
+  "187b5b8c526d01ef": "Workern körs redan",
+  "9b235fef931d3126": "Vänta tills den aktuella körningen är klar innan du startar en till.",
+  "cf6ab17c77b64f62": "Worker-körningen misslyckades",
+  "4973e5d94efffc97": "Det gick inte att köra plugin-workern.",
+  "e496d3a463663574": "Mappen sparades inte",
+  "5b4676e5cf89030a": "Det gick inte att spara worker-mappens sökväg.",
+  "244eb1e6fff0620c": "Serverns mappsökväg",
+  "622a159ad0eabdcb": "Körs",
+  "c92657bb7f2293ff": "Kräver godkännande",
+  "235ebe93ce52d03f": "Kräver mapp",
+  "cb9b588441a36855": "Kraschad",
+  "7cda14a9e8aaefb0": "Stoppad",
+  "5298bbd2d64b83a6": [
+    "Senaste körning: ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "138e6abcbea0678c": "Läser och skriver",
+  "44875bc1115247fa": "Läser",
+  "1f8a6c7c0b4a3567": "Logg",
+  "9ed792fb64e9cf0b": "Läser in logg…",
+  "fc6012fd5e61997a": "Ingen utdata än.",
+  "33483e00b6a8033c": "Visar de senaste 32 KB av worker-utdata.",
+  "4c6fd1c0c731161f": "Pluginkod körs med mapp- och nätverksgränserna ovan. Aktivera bara plugins som du litar på."
 }

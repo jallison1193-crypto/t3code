@@ -7,6 +7,7 @@ import {
   AuthAccessWriteScope,
   DEFAULT_SERVER_SETTINGS,
   EnvironmentId,
+  PluginId,
   ProviderDriverKind,
   ProviderInstanceId,
   ProjectId,
@@ -481,62 +482,101 @@ describe("settings mutation authorization", () => {
     }),
   );
 
-  it.effect("requires the settings grant to toggle, uninstall, or restore plugins", () =>
-    Effect.gen(function* () {
-      const methods = [
-        WS_METHODS.serverSetPluginEnabled,
-        WS_METHODS.serverUninstallPlugin,
-        WS_METHODS.serverRestorePluginRevision,
-      ] as const;
-      const group = WsRpcGroup.omit(
-        ...[...WsRpcGroup.requests.keys()].filter(
-          (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, (typeof methods)[number]> =>
-            !methods.includes(tag as (typeof methods)[number]),
-        ),
-      );
-      const handlers = Layer.mergeAll(
-        group.toLayerHandler(WS_METHODS.serverSetPluginEnabled, () =>
-          Effect.succeed({
-            plugin: { id: "demo", enabled: true, contributes: ["css" as const] },
-          }),
-        ),
-        group.toLayerHandler(WS_METHODS.serverUninstallPlugin, () =>
-          Effect.succeed({ id: "demo", archivedTo: "/archive/demo" }),
-        ),
-        group.toLayerHandler(WS_METHODS.serverRestorePluginRevision, () =>
-          Effect.succeed({
-            plugin: { id: "demo", enabled: true, contributes: ["css" as const] },
-          }),
-        ),
-      );
-      const reader = yield* RpcTest.makeClient(group).pipe(
-        Effect.provide(Layer.merge(handlers, RpcAuthorization.layer([AuthOrchestrationReadScope]))),
-      );
-      expect(
-        yield* reader[WS_METHODS.serverSetPluginEnabled]({ id: "demo", enabled: true }).pipe(
-          Effect.flip,
-        ),
-      ).toMatchObject({ requiredPermission: AuthSettingsWriteScope });
-      expect(
-        yield* reader[WS_METHODS.serverUninstallPlugin]({ id: "demo" }).pipe(Effect.flip),
-      ).toMatchObject({ requiredPermission: AuthSettingsWriteScope });
-      expect(
-        yield* reader[WS_METHODS.serverRestorePluginRevision]({
+  it.effect(
+    "requires the settings grant to toggle, uninstall, restore, or manage plugin workers",
+    () =>
+      Effect.gen(function* () {
+        const methods = [
+          WS_METHODS.serverSetPluginEnabled,
+          WS_METHODS.serverUninstallPlugin,
+          WS_METHODS.serverRestorePluginRevision,
+          WS_METHODS.serverApprovePluginWorker,
+          WS_METHODS.serverSetPluginWorkerFolder,
+          WS_METHODS.serverRunPluginWorker,
+          WS_METHODS.serverGetPluginWorkerLog,
+        ] as const;
+        const group = WsRpcGroup.omit(
+          ...[...WsRpcGroup.requests.keys()].filter(
+            (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, (typeof methods)[number]> =>
+              !methods.includes(tag as (typeof methods)[number]),
+          ),
+        );
+        const demoPlugin = { id: "demo", enabled: true, contributes: ["css" as const] };
+        const handlers = Layer.mergeAll(
+          group.toLayerHandler(WS_METHODS.serverSetPluginEnabled, () =>
+            Effect.succeed({ plugin: demoPlugin }),
+          ),
+          group.toLayerHandler(WS_METHODS.serverUninstallPlugin, () =>
+            Effect.succeed({ id: "demo", archivedTo: "/archive/demo" }),
+          ),
+          group.toLayerHandler(WS_METHODS.serverRestorePluginRevision, () =>
+            Effect.succeed({ plugin: demoPlugin }),
+          ),
+          group.toLayerHandler(WS_METHODS.serverApprovePluginWorker, () =>
+            Effect.succeed({ plugin: demoPlugin }),
+          ),
+          group.toLayerHandler(WS_METHODS.serverSetPluginWorkerFolder, () =>
+            Effect.succeed({ plugin: demoPlugin }),
+          ),
+          group.toLayerHandler(WS_METHODS.serverRunPluginWorker, () =>
+            Effect.succeed({ plugin: demoPlugin, skipped: false }),
+          ),
+          group.toLayerHandler(WS_METHODS.serverGetPluginWorkerLog, () =>
+            Effect.succeed({ log: "", truncated: false }),
+          ),
+        );
+        const reader = yield* RpcTest.makeClient(group).pipe(
+          Effect.provide(
+            Layer.merge(handlers, RpcAuthorization.layer([AuthOrchestrationReadScope])),
+          ),
+        );
+        expect(
+          yield* reader[WS_METHODS.serverSetPluginEnabled]({ id: "demo", enabled: true }).pipe(
+            Effect.flip,
+          ),
+        ).toMatchObject({ requiredPermission: AuthSettingsWriteScope });
+        expect(
+          yield* reader[WS_METHODS.serverUninstallPlugin]({ id: "demo" }).pipe(Effect.flip),
+        ).toMatchObject({ requiredPermission: AuthSettingsWriteScope });
+        expect(
+          yield* reader[WS_METHODS.serverRestorePluginRevision]({
+            id: "demo",
+            revision: "0123456789ab",
+          }).pipe(Effect.flip),
+        ).toMatchObject({ requiredPermission: AuthSettingsWriteScope });
+        expect(
+          yield* reader[WS_METHODS.serverApprovePluginWorker]({ id: "demo" }).pipe(Effect.flip),
+        ).toMatchObject({ requiredPermission: AuthSettingsWriteScope });
+        expect(
+          yield* reader[WS_METHODS.serverSetPluginWorkerFolder]({
+            id: "demo",
+            folderId: PluginId.make("vault"),
+            path: "/vault",
+          }).pipe(Effect.flip),
+        ).toMatchObject({ requiredPermission: AuthSettingsWriteScope });
+        expect(
+          yield* reader[WS_METHODS.serverRunPluginWorker]({ id: "demo" }).pipe(Effect.flip),
+        ).toMatchObject({ requiredPermission: AuthSettingsWriteScope });
+        // Reading worker logs only needs orchestration:read.
+        yield* reader[WS_METHODS.serverGetPluginWorkerLog]({ id: "demo" });
+
+        const writer = yield* RpcTest.makeClient(group).pipe(
+          Effect.provide(Layer.merge(handlers, RpcAuthorization.layer([AuthSettingsWriteScope]))),
+        );
+        yield* writer[WS_METHODS.serverSetPluginEnabled]({ id: "demo", enabled: true });
+        yield* writer[WS_METHODS.serverUninstallPlugin]({ id: "demo" });
+        yield* writer[WS_METHODS.serverRestorePluginRevision]({
           id: "demo",
           revision: "0123456789ab",
-        }).pipe(Effect.flip),
-      ).toMatchObject({ requiredPermission: AuthSettingsWriteScope });
-
-      const writer = yield* RpcTest.makeClient(group).pipe(
-        Effect.provide(Layer.merge(handlers, RpcAuthorization.layer([AuthSettingsWriteScope]))),
-      );
-      yield* writer[WS_METHODS.serverSetPluginEnabled]({ id: "demo", enabled: true });
-      yield* writer[WS_METHODS.serverUninstallPlugin]({ id: "demo" });
-      yield* writer[WS_METHODS.serverRestorePluginRevision]({
-        id: "demo",
-        revision: "0123456789ab",
-      });
-    }),
+        });
+        yield* writer[WS_METHODS.serverApprovePluginWorker]({ id: "demo" });
+        yield* writer[WS_METHODS.serverSetPluginWorkerFolder]({
+          id: "demo",
+          folderId: PluginId.make("vault"),
+          path: "/vault",
+        });
+        yield* writer[WS_METHODS.serverRunPluginWorker]({ id: "demo" });
+      }),
   );
 
   const group = WsRpcGroup.omit(

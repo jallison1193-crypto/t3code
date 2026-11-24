@@ -12772,5 +12772,65 @@
   "ac10cafdeea93121": "{count, plural, one {Wrote a plugin {count} time} other {Wrote a plugin {count} times}}",
   "52b987ceaa1e9498": "{count, plural, one {Tried to write a plugin {count} time} other {Tried to write a plugin {count} times}}",
   "2450a6722d95b646": "{status, select, inProgress {Reading plugins} completed {Read plugins} failed {Failed to read plugins} declined {Declined to read plugins} stopped {Stopped reading plugins} other {Reading plugins}}",
-  "3c08c0c95a3b07e2": "{status, select, inProgress {Writing a plugin} completed {Wrote a plugin} failed {Failed to write a plugin} declined {Declined to write a plugin} stopped {Stopped writing a plugin} other {Writing a plugin}}"
+  "3c08c0c95a3b07e2": "{status, select, inProgress {Writing a plugin} completed {Wrote a plugin} failed {Failed to write a plugin} declined {Declined to write a plugin} stopped {Stopped writing a plugin} other {Writing a plugin}}",
+  "a5674b575d6d99df": "Worker not approved",
+  "82f3d9cc4cea06f0": "Could not approve plugin worker.",
+  "6c16b4c17ecab0a9": "Runs background code on this computer",
+  "cdf18d4e4d0c8881": [
+    "Reads and writes ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "00b6273413aabfaa": [
+    "Reads ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "78c2f44e9cfef6ac": "Uses the network",
+  "b0706ba59c01e9db": [
+    "Runs every ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " minutes"
+  ],
+  "45699bdf9626f085": "Network access is not blocked on this T3 runtime.",
+  "f1e5c1be1ac92361": "Approve",
+  "b8f5061ac22fe1c5": "Could not load worker log",
+  "df145ba72d106163": "Could not read worker output.",
+  "187b5b8c526d01ef": "Worker already running",
+  "9b235fef931d3126": "Wait for the current run to finish before starting another.",
+  "cf6ab17c77b64f62": "Worker run failed",
+  "4973e5d94efffc97": "Could not run plugin worker.",
+  "e496d3a463663574": "Folder not saved",
+  "5b4676e5cf89030a": "Could not save worker folder path.",
+  "244eb1e6fff0620c": "Server folder path",
+  "622a159ad0eabdcb": "Running",
+  "c92657bb7f2293ff": "Needs approval",
+  "235ebe93ce52d03f": "Needs folder",
+  "cb9b588441a36855": "Crashed",
+  "7cda14a9e8aaefb0": "Stopped",
+  "5298bbd2d64b83a6": [
+    "Last run: ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "138e6abcbea0678c": "Reads and writes",
+  "44875bc1115247fa": "Reads",
+  "1f8a6c7c0b4a3567": "Log",
+  "9ed792fb64e9cf0b": "Loading log…",
+  "fc6012fd5e61997a": "No output yet.",
+  "33483e00b6a8033c": "Showing the last 32 KB of worker output.",
+  "4c6fd1c0c731161f": "Plugin code runs with the folder and network limits above. Only turn on plugins you trust."
 }

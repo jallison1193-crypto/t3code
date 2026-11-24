@@ -42,7 +42,7 @@ import {
   ProviderOptionSelections,
 } from "./model.ts";
 import { ModelSelection } from "./modelSelection.ts";
-import { PluginId, PluginSettingEntry } from "./plugin.ts";
+import { PluginId, PluginSettingEntry, PluginSettingEntryPatch } from "./plugin.ts";
 import { ProjectScript, type ProjectMutation } from "./project.ts";
 import { DEFAULT_RUNTIME_MODE, RuntimeMode } from "./providerPolicy.ts";
 import { BrowserProfile, BrowserProfileId, DEFAULT_BROWSER_PROFILE_ID } from "./browserProfile.ts";
@@ -2036,7 +2036,7 @@ export const ServerSettingsPatch = Schema.Struct({
   htmlLibraryEntries: Schema.optionalKey(
     Schema.Record(TrimmedNonEmptyString, Schema.NullOr(HtmlLibraryEntryOverride)),
   ),
-  plugins: Schema.optionalKey(Schema.Record(PluginId, Schema.NullOr(PluginSettingEntry))),
+  plugins: Schema.optionalKey(Schema.Record(PluginId, Schema.NullOr(PluginSettingEntryPatch))),
   guestSharingEnabled: Schema.optionalKey(Schema.Boolean),
   linkedEnvironmentsEnabled: Schema.optionalKey(Schema.Boolean),
   promptSuggestionsEnabled: Schema.optionalKey(Schema.Boolean),

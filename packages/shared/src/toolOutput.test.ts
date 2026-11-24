@@ -113,11 +113,29 @@ describe("compactDynamicToolOutput", () => {
       applied: true,
       next: "Live now; the user can Undo from the card.",
     };
+    const workerCreated = {
+      pluginId: "vault-sync",
+      created: true,
+      after: "112233445566",
+      contributes: ["worker"] as const,
+      worker: {
+        everyMinutes: 15,
+        folders: [{ id: "vault", label: "Obsidian vault", access: "write" as const }],
+        network: false,
+      },
+    };
     for (const [toolName, output, expected] of [
       ["mcp__t3-code__t3_plugin_write", { structuredContent: rawCreated, content: [] }, created],
       ["t3_plugin_write", [{ type: "text", text: JSON.stringify(rawEdited) }], edited],
       ["t3_plugin_write", compactDynamicToolOutput(rawEdited), edited],
       ["execute", JSON.stringify(rawCreated), created],
+      [
+        "mcp__t3-code__t3_plugin_write",
+        {
+          structuredContent: { ...workerCreated, enabled: false, applied: false, next: "Install" },
+        },
+        workerCreated,
+      ],
     ] as const) {
       expect(pluginChangeFromToolItem({ toolName, output })).toEqual(expected);
     }

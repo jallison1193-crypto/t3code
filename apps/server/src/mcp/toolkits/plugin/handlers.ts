@@ -2,6 +2,8 @@ import {
   OrchestratorMcpFailure,
   PLUGIN_PANEL_HTML_MAX_CHARS,
   PLUGIN_PANEL_TITLE_MAX_LENGTH,
+  PLUGIN_WORKER_CODE_MAX_CHARS,
+  PLUGIN_WORKER_MAX_FOLDERS,
   type PluginOperationError,
 } from "@t3tools/contracts";
 import { THEME_GUIDE } from "@t3tools/shared/themeCss";
@@ -15,7 +17,7 @@ import { unavailable } from "../../threadAccess.ts";
 import { PluginToolkit } from "./tools.ts";
 
 const PLUGIN_GUIDE = [
-  "Plugins add custom CSS (layered after the active theme) and/or right panel tabs on web and desktop. A new plugin starts off until the user installs it from the card in the chat; edits to an existing plugin save immediately (and apply live if it is already enabled) with Undo on the card.",
+  "Plugins add custom CSS (layered after the active theme), right panel tabs on web and desktop, and/or background server workers. A new plugin starts off until the user installs it from the card in the chat; edits to an existing plugin save immediately (and apply live if it is already enabled) with Undo on the card.",
   "",
   'Panels: pass `panels: [{ id, title, html }]` (1 to 4 self-contained HTML pages, up to 200,000 characters each). Each panel runs sandboxed with no network access and should style itself with the theme CSS variables delivered in `hostContext.styles.variables` (such as `--color-background-primary`, `--color-text-primary`, and `--color-border-primary`). Communicate with T3 using JSON-RPC 2.0 over `window.parent.postMessage`: send `ui/initialize`, wait for its result, then send `ui/notifications/initialized`. Read and save JSON (up to 64 KB) with `tools/call` `t3_plugin_state_get` and `t3_plugin_state_set` (`scope`: `"global"` or `"project"`), and listen for live `t3/notifications/state-changed` notifications (`{ scope, value }`). Keep time-based state as timestamps rather than counters so it survives reloads and tab switches.',
   "",
@@ -40,6 +42,23 @@ const PLUGIN_GUIDE = [
   "</script>",
   "```",
   "",
+  'Workers: pass `worker: { code, everyMinutes?, folders?, network? }` (`code` is ESM up to 200,000 characters; `everyMinutes` 5-1440; `folders` 0-4 items `{ id, label, access: "read" | "write" }`; `network` defaults to false). The agent cannot choose folder paths; the user picks server-machine paths in Settings > Plugins. The worker starts after Install (or Approve when powers widen) and once all declared folders are set. Your default export receives `t3` with `t3.folders`, `t3.log(...args)` (and `console.*`), `t3.onRun(async ({ reason }) => ...)` (`"start" | "schedule" | "manual"`), `t3.state.get()/set(value)` (global 64 KB JSON), `t3.projects.list()`, and `t3.projects.readMemory(projectId)` (`{ memory, files: [{ name, text }] }`).',
+  "",
+  "Example (reads project memory, writes into the granted `out` folder, saves state, and logs):",
+  "",
+  "```js",
+  'import { writeFile } from "node:fs/promises";',
+  'import { join } from "node:path";',
+  "export default (t3) => t3.onRun(async ({ reason }) => {",
+  "  const prev = await t3.state.get();",
+  "  const projects = await t3.projects.list();",
+  "  const first = projects[0] ? await t3.projects.readMemory(projects[0].id) : null;",
+  '  if (first?.memory) await writeFile(join(t3.folders.out, "MEMORY.md"), first.memory);',
+  "  await t3.state.set({ reason, count: projects.length, prev });",
+  '  t3.log("Synced", projects.length, "projects");',
+  "});",
+  "```",
+  "",
   THEME_GUIDE,
 ].join("\n");
 
@@ -48,6 +67,8 @@ const mapPluginError = (error: PluginOperationError): OrchestratorMcpFailure => 
     case "invalid_id":
     case "invalid_css":
     case "invalid_panel":
+    case "invalid_worker":
+    case "invalid_folder":
     case "has_problem":
     case "not_found":
       return new OrchestratorMcpFailure({ code: "invalid_request", message: error.message });
@@ -68,12 +89,13 @@ export const layer = McpToolAccess.toLayer(PluginToolkit, {
       return {
         pluginsDir,
         plugins: plugins.map(
-          ({ id, displayName, enabled, contributes, panels, revision, problem }) => ({
+          ({ id, displayName, enabled, contributes, panels, worker, revision, problem }) => ({
             id,
             ...(displayName === undefined ? {} : { displayName }),
             enabled,
             contributes,
             ...(panels === undefined ? {} : { panels }),
+            ...(worker === undefined ? {} : { worker }),
             ...(revision === undefined ? {} : { revision }),
             ...(problem === undefined ? {} : { problem }),
           }),
@@ -84,12 +106,16 @@ export const layer = McpToolAccess.toLayer(PluginToolkit, {
     }),
   ),
   t3_plugin_write: McpToolAccess.writesEnvironment(
-    ({ pluginId, displayName, description, version, css, panels }, check) =>
+    ({ pluginId, displayName, description, version, css, panels, worker }, check) =>
       Effect.gen(function* () {
-        if (css === undefined && (panels === undefined || panels.length === 0)) {
+        if (
+          css === undefined &&
+          (panels === undefined || panels.length === 0) &&
+          worker === undefined
+        ) {
           return yield* new OrchestratorMcpFailure({
             code: "invalid_request",
-            message: "Provide css, panels, or both.",
+            message: "Provide css, panels, worker, or any combination.",
           });
         }
         if (panels !== undefined) {
@@ -109,6 +135,20 @@ export const layer = McpToolAccess.toLayer(PluginToolkit, {
             }
           }
         }
+        if (worker !== undefined) {
+          if (worker.code.length > PLUGIN_WORKER_CODE_MAX_CHARS) {
+            return yield* new OrchestratorMcpFailure({
+              code: "invalid_request",
+              message: `Worker code exceeds the ${PLUGIN_WORKER_CODE_MAX_CHARS} character limit.`,
+            });
+          }
+          if (worker.folders !== undefined && worker.folders.length > PLUGIN_WORKER_MAX_FOLDERS) {
+            return yield* new OrchestratorMcpFailure({
+              code: "invalid_request",
+              message: `Worker can declare at most ${PLUGIN_WORKER_MAX_FOLDERS} folders.`,
+            });
+          }
+        }
         const scope = yield* McpInvocationContext.McpInvocationContext;
         const executor = yield* ThreadCommandExecutor.ThreadCommandExecutor;
         const registry = yield* PluginRegistry.PluginRegistry;
@@ -123,22 +163,59 @@ export const layer = McpToolAccess.toLayer(PluginToolkit, {
               ...(version === undefined ? {} : { version }),
               ...(css === undefined ? {} : { css }),
               ...(panels === undefined ? {} : { panels }),
+              ...(worker === undefined ? {} : { worker }),
             })
             .pipe(Effect.mapError(mapPluginError));
           const applied = result.plugin.enabled && result.plugin.problem === undefined;
-          const next = result.created
-            ? applied
-              ? "Live now; the user can manage it from the card in the chat."
-              : "The user turns it on with Install on the card in the chat."
-            : applied
-              ? "Live now; the user can Undo from the card."
-              : "Saved; it is off, so turn it on in Settings > Plugins.";
+          const missingFolders =
+            result.plugin.worker?.folders.filter((folder) => folder.path === null) ?? [];
+          const hasMissingFolders = missingFolders.length > 0;
+          const workerSummary =
+            result.plugin.worker === undefined
+              ? undefined
+              : {
+                  ...(result.plugin.worker.everyMinutes === undefined
+                    ? {}
+                    : { everyMinutes: result.plugin.worker.everyMinutes }),
+                  folders: result.plugin.worker.folders.map(({ id, label, access }) => ({
+                    id,
+                    label,
+                    access,
+                  })),
+                  network: result.plugin.worker.network,
+                };
+          let next: string;
+          if (result.created) {
+            if (applied) {
+              next = "Live now; the user can manage it from the card in the chat.";
+            } else if (hasMissingFolders) {
+              next =
+                "The user turns it on with Install on the card in the chat, then picks its folder path(s) in Settings > Plugins before the worker can run.";
+            } else {
+              next = "The user turns it on with Install on the card in the chat.";
+            }
+          } else if (applied && result.plugin.worker?.status === "needs-approval") {
+            next = hasMissingFolders
+              ? "Saved; worker powers changed, so the user must click Approve on the card or in Settings > Plugins and pick its folder path(s) before it runs."
+              : "Saved; worker powers changed, so the user must click Approve on the card or in Settings > Plugins before it runs.";
+          } else if (applied && hasMissingFolders) {
+            next =
+              "Saved; the user still needs to pick its folder path(s) in Settings > Plugins before the worker can run.";
+          } else if (applied) {
+            next = "Live now; the user can Undo from the card.";
+          } else if (hasMissingFolders) {
+            next =
+              "Saved; it is off, so the user turns it on and picks its folder path(s) in Settings > Plugins.";
+          } else {
+            next = "Saved; it is off, so turn it on in Settings > Plugins.";
+          }
           return {
             pluginId,
             created: result.created,
             enabled: result.plugin.enabled,
             applied,
             contributes: result.plugin.contributes,
+            ...(workerSummary === undefined ? {} : { worker: workerSummary }),
             ...(result.before === undefined ? {} : { before: result.before }),
             after: result.after,
             next,

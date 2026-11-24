@@ -724,24 +724,50 @@ describe("serverSettings helpers", () => {
     expect(current.usagePriceOverrides["example-model"]?.cacheReadCostPerMillionTokens).toBe(0.5);
   });
 
-  it("upserts and removes plugins per entry with null deletion", () => {
+  it("upserts, merges, and removes plugins per entry while keeping folders and workerApproval on enabled toggles", () => {
     const first = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
-      plugins: { "compact-sidebar": { enabled: true } },
+      plugins: {
+        "vault-sync": {
+          enabled: true,
+          workerApproval: "0123456789ab",
+          folders: { vault: "/data/vault", ref: "/data/ref" },
+        },
+      },
     });
-    const second = applyServerSettingsPatch(first, {
-      plugins: { "bold-header": { enabled: false } },
+    const toggledOff = applyServerSettingsPatch(first, {
+      plugins: { "vault-sync": { enabled: false } },
     });
-    expect(second.plugins).toEqual({
-      "compact-sidebar": { enabled: true },
-      "bold-header": { enabled: false },
+    expect(toggledOff.plugins["vault-sync"]).toEqual({
+      enabled: false,
+      workerApproval: "0123456789ab",
+      folders: { vault: "/data/vault", ref: "/data/ref" },
     });
-    const removed = applyServerSettingsPatch(second, {
-      plugins: { "compact-sidebar": null },
+
+    const folderUpdated = applyServerSettingsPatch(toggledOff, {
+      plugins: {
+        "vault-sync": { folders: { vault: "/data/vault-2", ref: null } },
+        "bold-header": { enabled: true },
+      },
     });
-    expect(removed.plugins).toEqual({
-      "bold-header": { enabled: false },
+    expect(folderUpdated.plugins).toEqual({
+      "vault-sync": {
+        enabled: false,
+        workerApproval: "0123456789ab",
+        folders: { vault: "/data/vault-2" },
+      },
+      "bold-header": { enabled: true },
     });
-    expect(first.plugins).toEqual({ "compact-sidebar": { enabled: true } });
+
+    const clearedApproval = applyServerSettingsPatch(folderUpdated, {
+      plugins: { "vault-sync": { workerApproval: null, folders: { vault: null } } },
+    });
+    expect(clearedApproval.plugins["vault-sync"]).toEqual({ enabled: false });
+
+    const removed = applyServerSettingsPatch(clearedApproval, {
+      plugins: { "vault-sync": null },
+    });
+    expect(removed.plugins).toEqual({ "bold-header": { enabled: true } });
+    expect(first.plugins["vault-sync"]?.enabled).toBe(true);
   });
 
   it("stores background activity profiles as a versioned object and syncs legacy aliases", () => {

@@ -12761,5 +12761,65 @@
   "ac10cafdeea93121": "{count, plural, one {Escreveu um plugin {count} vez} other {Escreveu um plugin {count} vezes}}",
   "52b987ceaa1e9498": "{count, plural, one {Tentou escrever um plugin {count} vez} other {Tentou escrever um plugin {count} vezes}}",
   "2450a6722d95b646": "{status, select, inProgress {Lendo os plugins} completed {Leu os plugins} failed {Falha ao ler os plugins} declined {Recusou-se a ler os plugins} stopped {Parou de ler os plugins} other {Lendo os plugins}}",
-  "3c08c0c95a3b07e2": "{status, select, inProgress {Escrevendo um plugin} completed {Escreveu um plugin} failed {Falha ao escrever o plugin} declined {Recusou-se a escrever o plugin} stopped {Parou de escrever o plugin} other {Escrevendo um plugin}}"
+  "3c08c0c95a3b07e2": "{status, select, inProgress {Escrevendo um plugin} completed {Escreveu um plugin} failed {Falha ao escrever o plugin} declined {Recusou-se a escrever o plugin} stopped {Parou de escrever o plugin} other {Escrevendo um plugin}}",
+  "a5674b575d6d99df": "Worker não aprovado",
+  "82f3d9cc4cea06f0": "Não foi possível aprovar o worker do plugin.",
+  "6c16b4c17ecab0a9": "Executa código em segundo plano neste computador",
+  "cdf18d4e4d0c8881": [
+    "Lê e grava ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "00b6273413aabfaa": [
+    "Lê ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "78c2f44e9cfef6ac": "Usa a rede",
+  "b0706ba59c01e9db": [
+    "Executa a cada ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " minutos"
+  ],
+  "45699bdf9626f085": "O acesso à rede não é bloqueado neste runtime do T3.",
+  "f1e5c1be1ac92361": "Aprovar",
+  "b8f5061ac22fe1c5": "Não foi possível carregar o log do worker",
+  "df145ba72d106163": "Não foi possível ler a saída do worker.",
+  "187b5b8c526d01ef": "O worker já está em execução",
+  "9b235fef931d3126": "Aguarde a execução atual terminar antes de iniciar outra.",
+  "cf6ab17c77b64f62": "Falha ao executar o worker",
+  "4973e5d94efffc97": "Não foi possível executar o worker do plugin.",
+  "e496d3a463663574": "Pasta não salva",
+  "5b4676e5cf89030a": "Não foi possível salvar o caminho da pasta do worker.",
+  "244eb1e6fff0620c": "Caminho da pasta no servidor",
+  "622a159ad0eabdcb": "Em execução",
+  "c92657bb7f2293ff": "Precisa de aprovação",
+  "235ebe93ce52d03f": "Precisa de pasta",
+  "cb9b588441a36855": "Falhou",
+  "7cda14a9e8aaefb0": "Parado",
+  "5298bbd2d64b83a6": [
+    "Última execução: ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "138e6abcbea0678c": "Lê e grava",
+  "44875bc1115247fa": "Lê",
+  "1f8a6c7c0b4a3567": "Log",
+  "9ed792fb64e9cf0b": "Carregando log…",
+  "fc6012fd5e61997a": "Nenhuma saída ainda.",
+  "33483e00b6a8033c": "Mostrando os últimos 32 KB da saída do worker.",
+  "4c6fd1c0c731161f": "O código do plugin é executado com os limites de pasta e rede acima. Ative apenas plugins em que você confia."
 }

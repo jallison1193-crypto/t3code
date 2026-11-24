@@ -1,4 +1,4 @@
-import type { InstalledPlugin } from "@t3tools/contracts";
+import type { InstalledPlugin, PluginWorkerFolderAccess } from "@t3tools/contracts";
 import type { PluginChange } from "@t3tools/shared/toolOutput";
 
 export type PluginChangeCardStatus =
@@ -14,8 +14,23 @@ export type PluginChangeCardAction =
   | "cancel"
   | "turn-off"
   | "install-anyway"
+  | "approve"
   | "undo"
   | "restore";
+
+export type PluginChangeCardLine =
+  | { readonly kind: "css" }
+  | { readonly kind: "panel" }
+  | { readonly kind: "worker-runs" }
+  | {
+      readonly kind: "worker-folder";
+      readonly id: string;
+      readonly label: string;
+      readonly access: PluginWorkerFolderAccess;
+    }
+  | { readonly kind: "worker-network" }
+  | { readonly kind: "worker-schedule"; readonly everyMinutes: number }
+  | { readonly kind: "worker-network-unrestricted" };
 
 export interface PluginChangeCardState {
   readonly status: PluginChangeCardStatus;
@@ -23,27 +38,76 @@ export interface PluginChangeCardState {
   readonly actions: ReadonlyArray<PluginChangeCardAction>;
 }
 
+type LivePluginCardSnapshot = Pick<InstalledPlugin, "enabled" | "revision" | "worker">;
+
+export function resolvePluginChangeCardLines(
+  change: PluginChange,
+  livePlugin?: LivePluginCardSnapshot,
+): ReadonlyArray<PluginChangeCardLine> {
+  const lines: Array<PluginChangeCardLine> = [];
+  for (const contribution of change.contributes) {
+    if (contribution === "css") {
+      lines.push({ kind: "css" });
+    } else if (contribution === "panel") {
+      lines.push({ kind: "panel" });
+    } else if (contribution === "worker") {
+      lines.push({ kind: "worker-runs" });
+      const worker = change.worker ?? livePlugin?.worker;
+      if (worker !== undefined) {
+        for (const folder of worker.folders) {
+          lines.push({
+            kind: "worker-folder",
+            id: folder.id,
+            label: folder.label,
+            access: folder.access,
+          });
+        }
+        if (worker.network) {
+          lines.push({ kind: "worker-network" });
+        }
+        if (worker.everyMinutes !== undefined) {
+          lines.push({ kind: "worker-schedule", everyMinutes: worker.everyMinutes });
+        }
+      }
+      if (livePlugin?.worker?.networkRestricted === false) {
+        lines.push({ kind: "worker-network-unrestricted" });
+      }
+    }
+  }
+  return lines;
+}
+
 export function resolvePluginChangeCardState(
   change: PluginChange,
-  livePlugin: Pick<InstalledPlugin, "enabled" | "revision"> | undefined,
+  livePlugin: LivePluginCardSnapshot | undefined,
 ): PluginChangeCardState {
+  const needsApproval = livePlugin?.worker?.status === "needs-approval";
+
   if (change.created) {
     if (livePlugin === undefined) {
       return { status: "cancelled", muted: false, actions: ["install-anyway"] };
     }
     if (livePlugin.revision === change.after) {
       return livePlugin.enabled
-        ? { status: "installed", muted: false, actions: ["turn-off"] }
+        ? {
+            status: "installed",
+            muted: false,
+            actions: needsApproval ? ["approve", "turn-off"] : ["turn-off"],
+          }
         : { status: "new", muted: false, actions: ["install", "cancel"] };
     }
     return { status: "changed-since", muted: true, actions: [] };
   }
 
   if (livePlugin !== undefined && livePlugin.revision === change.after) {
+    const canUndo = change.before !== undefined && change.before !== change.after;
     return {
       status: "updated",
       muted: false,
-      actions: change.before !== undefined && change.before !== change.after ? ["undo"] : [],
+      actions: [
+        ...(needsApproval ? (["approve"] as const) : []),
+        ...(canUndo ? (["undo"] as const) : []),
+      ],
     };
   }
 
