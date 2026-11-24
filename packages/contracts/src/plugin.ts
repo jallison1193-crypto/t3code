@@ -5,7 +5,7 @@ import { ProjectId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 export const PLUGIN_MANIFEST_DIR = ".t3-plugin";
 export const PLUGIN_MANIFEST_FILE = "plugin.json";
 export const PLUGIN_MAX_PANELS = 4;
-const PLUGIN_PANEL_TITLE_MAX_LENGTH = 40;
+export const PLUGIN_PANEL_TITLE_MAX_LENGTH = 40;
 export const PLUGIN_PANEL_HTML_MAX_CHARS = 200_000;
 export const PLUGIN_STATE_MAX_BYTES = 64 * 1024;
 

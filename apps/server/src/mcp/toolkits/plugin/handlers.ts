@@ -1,6 +1,7 @@
 import {
   OrchestratorMcpFailure,
   PLUGIN_PANEL_HTML_MAX_CHARS,
+  PLUGIN_PANEL_TITLE_MAX_LENGTH,
   type PluginOperationError,
 } from "@t3tools/contracts";
 import { THEME_GUIDE } from "@t3tools/shared/themeCss";
@@ -93,6 +94,13 @@ export const layer = McpToolAccess.toLayer(PluginToolkit, {
         }
         if (panels !== undefined) {
           for (const panel of panels) {
+            const title = panel.title.trim();
+            if (title.length === 0 || title.length > PLUGIN_PANEL_TITLE_MAX_LENGTH) {
+              return yield* new OrchestratorMcpFailure({
+                code: "invalid_request",
+                message: `Panel "${panel.id}" title must be 1 to ${PLUGIN_PANEL_TITLE_MAX_LENGTH} characters.`,
+              });
+            }
             if (panel.html.length > PLUGIN_PANEL_HTML_MAX_CHARS) {
               return yield* new OrchestratorMcpFailure({
                 code: "invalid_request",

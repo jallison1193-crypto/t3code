@@ -5571,5 +5571,11 @@
   "f915c834c3a14d01": "Conecte esta máquina para visualizar e editar a memória do projeto.",
   "fe39082540865b5b": "Adicionar arquivos",
   "fef84993f801d339": "{name} excede o limite de tamanho de arquivo de {limit}.",
-  "ffc9498eb49bd8a4": "Carregando MEMORY.md..."
+  "ffc9498eb49bd8a4": "Carregando MEMORY.md...",
+  "3d9bceaffd6d9c8b": "{count, plural, one {Verificou os plugins {count} vez} other {Verificou os plugins {count} vezes}}",
+  "084cb8b942fd0404": "{count, plural, one {Tentou verificar os plugins {count} vez} other {Tentou verificar os plugins {count} vezes}}",
+  "ac10cafdeea93121": "{count, plural, one {Escreveu um plugin {count} vez} other {Escreveu um plugin {count} vezes}}",
+  "52b987ceaa1e9498": "{count, plural, one {Tentou escrever um plugin {count} vez} other {Tentou escrever um plugin {count} vezes}}",
+  "2450a6722d95b646": "{status, select, inProgress {Lendo os plugins} completed {Leu os plugins} failed {Falha ao ler os plugins} declined {Recusou-se a ler os plugins} stopped {Parou de ler os plugins} other {Lendo os plugins}}",
+  "3c08c0c95a3b07e2": "{status, select, inProgress {Escrevendo um plugin} completed {Escreveu um plugin} failed {Falha ao escrever o plugin} declined {Recusou-se a escrever o plugin} stopped {Parou de escrever o plugin} other {Escrevendo um plugin}}"
 }

@@ -464,6 +464,16 @@ it.effect("writes and reads panel plugins and rejects empty or oversized panel w
       ).toMatchObject({
         code: "invalid_request",
       });
+
+      expect(
+        yield* callWrite({
+          pluginId: "pomodoro",
+          panels: [{ id: "timer", title: "Pomodoro: 25 minute focus and 5 minute break", html }],
+        }),
+      ).toMatchObject({
+        code: "invalid_request",
+        message: 'Panel "timer" title must be 1 to 40 characters.',
+      });
     }).pipe(Effect.provide(layer));
   }),
 );

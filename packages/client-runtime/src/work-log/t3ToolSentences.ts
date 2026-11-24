@@ -770,6 +770,22 @@ const T3_TOOL_SENTENCES: ReadonlyMap<string, T3ToolSentence> = new Map<string, T
     },
   ],
   [
+    "Read\nReading\nRead\nplugins",
+    {
+      detail: msg(
+        "{status, select, inProgress {Reading plugins} completed {Read plugins} failed {Failed to read plugins} declined {Declined to read plugins} stopped {Stopped reading plugins} other {Reading plugins}}",
+      ),
+    },
+  ],
+  [
+    "Write\nWriting\nWrote\na plugin",
+    {
+      detail: msg(
+        "{status, select, inProgress {Writing a plugin} completed {Wrote a plugin} failed {Failed to write a plugin} declined {Declined to write a plugin} stopped {Stopped writing a plugin} other {Writing a plugin}}",
+      ),
+    },
+  ],
+  [
     "Launch\nLaunching\nLaunched\na project thread",
     {
       detail: msg(

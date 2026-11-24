@@ -5556,5 +5556,11 @@
   "f915c834c3a14d01": "프로젝트 메모리를 보고 편집하려면 이 컴퓨터에 연결하세요.",
   "fe39082540865b5b": "파일 추가",
   "fef84993f801d339": "{name} 파일이 {limit} 크기 제한을 초과합니다.",
-  "ffc9498eb49bd8a4": "MEMORY.md 불러오는 중..."
+  "ffc9498eb49bd8a4": "MEMORY.md 불러오는 중...",
+  "3d9bceaffd6d9c8b": "{count, plural, other {플러그인 {count}회 확인함}}",
+  "084cb8b942fd0404": "{count, plural, other {플러그인 확인 {count}회 시도함}}",
+  "ac10cafdeea93121": "{count, plural, other {플러그인 {count}회 작성함}}",
+  "52b987ceaa1e9498": "{count, plural, other {플러그인 작성 {count}회 시도함}}",
+  "2450a6722d95b646": "{status, select, inProgress {플러그인 읽기 중} completed {플러그인 읽기 완료} failed {플러그인 읽기 실패} declined {플러그인 읽기 거부됨} stopped {플러그인 읽기 중지됨} other {플러그인 읽기 중}}",
+  "3c08c0c95a3b07e2": "{status, select, inProgress {플러그인 작성 중} completed {플러그인 작성 완료} failed {플러그인 작성 실패} declined {플러그인 작성 거부됨} stopped {플러그인 작성 중지됨} other {플러그인 작성 중}}"
 }

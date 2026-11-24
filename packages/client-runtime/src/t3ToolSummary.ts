@@ -1156,6 +1156,40 @@ export function summarizeT3ToolCalls(
           );
       break;
     }
+    case "plugin-read": {
+      const count = selected.length;
+      label = done
+        ? resolve(
+            msg(
+              "{count, plural, one {Checked plugins {count} time} other {Checked plugins {count} times}}",
+              { count },
+            ),
+          )
+        : resolve(
+            msg(
+              "{count, plural, one {Tried to check plugins {count} time} other {Tried to check plugins {count} times}}",
+              { count },
+            ),
+          );
+      break;
+    }
+    case "plugin-write": {
+      const count = selected.length;
+      label = done
+        ? resolve(
+            msg(
+              "{count, plural, one {Wrote a plugin {count} time} other {Wrote a plugin {count} times}}",
+              { count },
+            ),
+          )
+        : resolve(
+            msg(
+              "{count, plural, one {Tried to write a plugin {count} time} other {Tried to write a plugin {count} times}}",
+              { count },
+            ),
+          );
+      break;
+    }
     case "environment-links": {
       const count = selected.length;
       label = done

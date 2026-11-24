@@ -5562,5 +5562,11 @@
   "f915c834c3a14d01": "连接此设备以查看和编辑项目记忆。",
   "fe39082540865b5b": "添加文件",
   "fef84993f801d339": "{name} 超过了 {limit} 的文件大小限制。",
-  "ffc9498eb49bd8a4": "正在加载 MEMORY.md..."
+  "ffc9498eb49bd8a4": "正在加载 MEMORY.md...",
+  "3d9bceaffd6d9c8b": "{count, plural, other {已检查插件 {count} 次}}",
+  "084cb8b942fd0404": "{count, plural, other {尝试检查插件 {count} 次}}",
+  "ac10cafdeea93121": "{count, plural, other {已写入插件 {count} 次}}",
+  "52b987ceaa1e9498": "{count, plural, other {尝试写入插件 {count} 次}}",
+  "2450a6722d95b646": "{status, select, inProgress {正在读取插件} completed {已读取插件} failed {读取插件失败} declined {已拒绝读取插件} stopped {已停止读取插件} other {正在读取插件}}",
+  "3c08c0c95a3b07e2": "{status, select, inProgress {正在写入插件} completed {已写入插件} failed {写入插件失败} declined {已拒绝写入插件} stopped {已停止写入插件} other {正在写入插件}}"
 }

@@ -5,6 +5,7 @@ import * as DateTime from "effect/DateTime";
 
 import {
   resolveWorkEntryToolPresentation,
+  summarizeToolGroup,
   toolItemForDisplay,
   type WorkLogPresentationEntry,
   workEntryIndicatesToolFailure,
@@ -202,5 +203,25 @@ describe("resolveWorkEntryToolPresentation", () => {
         toolData: { server: "another-server", tool: "preview_click" },
       }),
     ).toBeNull();
+  });
+});
+
+describe("summarizeToolGroup", () => {
+  it("summarizes plugin tools as plugin work, not theme changes", () => {
+    const call = (id: string, tool: string): WorkLogPresentationEntry => ({
+      id,
+      createdAt: "2026-11-23T00:00:00.000Z",
+      tone: "tool",
+      label: `T3-code.${tool}`,
+      toolLifecycleStatus: "completed",
+      itemType: "dynamic_tool",
+    });
+    expect(
+      summarizeToolGroup([
+        call("read", "t3_plugin_read"),
+        call("write-1", "t3_plugin_write"),
+        call("write-2", "t3_plugin_write"),
+      ]).summary,
+    ).toBe("Checked plugins 1 time and wrote a plugin 2 times");
   });
 });

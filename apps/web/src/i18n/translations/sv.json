@@ -12762,5 +12762,11 @@
       "k": "_gt_value_1",
       "v": "v"
     }
-  ]
+  ],
+  "3d9bceaffd6d9c8b": "{count, plural, one {Kontrollerade pluginer {count} gång} other {Kontrollerade pluginer {count} gånger}}",
+  "084cb8b942fd0404": "{count, plural, one {Försökte kontrollera pluginer {count} gång} other {Försökte kontrollera pluginer {count} gånger}}",
+  "ac10cafdeea93121": "{count, plural, one {Skrev en plugin {count} gång} other {Skrev en plugin {count} gånger}}",
+  "52b987ceaa1e9498": "{count, plural, one {Försökte skriva en plugin {count} gång} other {Försökte skriva en plugin {count} gånger}}",
+  "2450a6722d95b646": "{status, select, inProgress {Läser pluginer} completed {Läste pluginer} failed {Kunde inte läsa pluginer} declined {Avböjde att läsa pluginer} stopped {Slutade läsa pluginer} other {Läser pluginer}}",
+  "3c08c0c95a3b07e2": "{status, select, inProgress {Skriver en plugin} completed {Skrev en plugin} failed {Kunde inte skriva pluginen} declined {Avböjde att skriva pluginen} stopped {Slutade skriva pluginen} other {Skriver en plugin}}"
 }

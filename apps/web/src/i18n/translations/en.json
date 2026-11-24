@@ -12766,5 +12766,11 @@
       "v": "v"
     },
     " panel"
-  ]
+  ],
+  "3d9bceaffd6d9c8b": "{count, plural, one {Checked plugins {count} time} other {Checked plugins {count} times}}",
+  "084cb8b942fd0404": "{count, plural, one {Tried to check plugins {count} time} other {Tried to check plugins {count} times}}",
+  "ac10cafdeea93121": "{count, plural, one {Wrote a plugin {count} time} other {Wrote a plugin {count} times}}",
+  "52b987ceaa1e9498": "{count, plural, one {Tried to write a plugin {count} time} other {Tried to write a plugin {count} times}}",
+  "2450a6722d95b646": "{status, select, inProgress {Reading plugins} completed {Read plugins} failed {Failed to read plugins} declined {Declined to read plugins} stopped {Stopped reading plugins} other {Reading plugins}}",
+  "3c08c0c95a3b07e2": "{status, select, inProgress {Writing a plugin} completed {Wrote a plugin} failed {Failed to write a plugin} declined {Declined to write a plugin} stopped {Stopped writing a plugin} other {Writing a plugin}}"
 }

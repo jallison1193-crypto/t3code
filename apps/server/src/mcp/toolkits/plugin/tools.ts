@@ -2,6 +2,7 @@ import {
   InstalledPluginPanel,
   OrchestratorMcpFailure,
   PluginContribution,
+  PLUGIN_PANEL_TITLE_MAX_LENGTH,
   PluginId,
 } from "@t3tools/contracts";
 import { PLUGIN_WRITE_TOOL_NAME } from "@t3tools/shared/toolOutput";
@@ -26,7 +27,9 @@ const shared = {
 
 const PluginPanelContentSchema = Schema.Struct({
   id: PluginId,
-  title: Schema.String,
+  title: Schema.String.annotate({
+    description: `Tab title: one line, at most ${PLUGIN_PANEL_TITLE_MAX_LENGTH} characters.`,
+  }),
   html: Schema.String,
 });
 

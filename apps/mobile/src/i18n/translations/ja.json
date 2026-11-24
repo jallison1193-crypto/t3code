@@ -5552,5 +5552,11 @@
   "f915c834c3a14d01": "プロジェクトメモリを表示・編集するにはこのマシンに接続してください。",
   "fe39082540865b5b": "ファイルを追加",
   "fef84993f801d339": "{name} はファイルサイズの上限（{limit}）を超えています。",
-  "ffc9498eb49bd8a4": "MEMORY.md を読み込み中..."
+  "ffc9498eb49bd8a4": "MEMORY.md を読み込み中...",
+  "3d9bceaffd6d9c8b": "{count, plural, other {プラグインを {count} 回確認しました}}",
+  "084cb8b942fd0404": "{count, plural, other {プラグインを {count} 回確認しようとしました}}",
+  "ac10cafdeea93121": "{count, plural, other {プラグインを {count} 回書き込みました}}",
+  "52b987ceaa1e9498": "{count, plural, other {プラグインを {count} 回書き込もうとしました}}",
+  "2450a6722d95b646": "{status, select, inProgress {プラグインを読み取っています} completed {プラグインを読み取りました} failed {プラグインを読み取れませんでした} declined {プラグインの読み取りは拒否されました} stopped {プラグインの読み取りを中止しました} other {プラグインを読み取っています}}",
+  "3c08c0c95a3b07e2": "{status, select, inProgress {プラグインを書き込んでいます} completed {プラグインを書き込みました} failed {プラグインを書き込めませんでした} declined {プラグインの書き込みは拒否されました} stopped {プラグインの書き込みを中止しました} other {プラグインを書き込んでいます}}"
 }
