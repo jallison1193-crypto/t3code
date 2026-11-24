@@ -141,7 +141,7 @@ Target: always-on agents like Grok Bot, OpenAI dots and Claude Duet, but on the 
   - Bots run on the laptop first; a linked VPS home comes later.
   - Signed-in browser: each bot gets its own browser profile and asks Josh to sign in once when a site needs a login or 2FA; never his everyday browser.
 - Slices:
-  1. B1 bot core: named bot (goal, model, memory, schedule and webhook triggers), Bots sidebar tab, bot home with its runs.
+  1. B1 bot core: named bot (goal, model, memory, schedule and webhook triggers), Bots sidebar tab, bot home with its runs. A Settings switch turns Bots off: the Bots tab and every bot surface disappear and bot triggers stop; turning it back on restores them unchanged.
   2. B2 safety: T3 pauses a bot's send and delete tool calls for approval and blocks pay; per-bot usage limits.
   3. B3 daily summary and VPS home.
   4. B4 bot browser profiles with sign-in handoff.
