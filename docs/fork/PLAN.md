@@ -140,7 +140,7 @@ Target: always-on agents like Grok Bot, OpenAI dots and Claude Duet, but on the 
   - Send and delete wait for Josh (Needs you plus a phone alert) and fail closed while he is away. Paying is blocked in M6 and added in a later stage.
   - Bots run on the laptop first; a linked VPS home comes later.
   - Signed-in browser: each bot gets its own browser profile and asks Josh to sign in once when a site needs a login or 2FA; never his everyday browser.
-- Slices:
+- Slices (Josh 2026-11-24: when M6 starts, build only B1 and B2; B3 to B5 are later additions):
   1. B1 bot core: named bot (goal, model, memory, schedule and webhook triggers), Bots sidebar tab, bot home with its runs. A Settings switch turns Bots off: the Bots tab and every bot surface disappear and bot triggers stop; turning it back on restores them unchanged.
   2. B2 safety: T3 pauses a bot's send and delete tool calls for approval and blocks pay; per-bot usage limits.
   3. B3 daily summary and VPS home.
