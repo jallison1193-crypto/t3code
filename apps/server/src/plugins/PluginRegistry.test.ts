@@ -718,6 +718,8 @@ describe("PluginRegistry", () => {
           assert.deepEqual(first.plugin.contributes, ["panel"]);
           assert.deepEqual(first.plugin.panels, [{ id: "notes", title: "Notes" }]);
           yield* registry.setEnabled("notes-panel", true);
+          const unlistedPath = path.join(pluginsDir, "notes-panel", "readme.html");
+          yield* fs.writeFileString(unlistedPath, "<p>mine</p>");
 
           const seen = yield* Queue.unbounded<ReadonlyArray<EnvironmentPlugin>>();
           yield* Stream.runForEach(registry.streamChanges, (active) =>
@@ -737,6 +739,7 @@ describe("PluginRegistry", () => {
           assert.notStrictEqual(second.after, first.after);
           assert.isFalse(yield* fs.exists(path.join(pluginsDir, "notes-panel", "notes.html")));
           assert.isTrue(yield* fs.exists(path.join(pluginsDir, "notes-panel", "board.html")));
+          assert.isTrue(yield* fs.exists(unlistedPath));
           assert.deepEqual(yield* Queue.take(seen), [
             { id: "notes-panel", css: "", panels: [{ id: "board", title: "Board" }] },
           ]);
@@ -745,6 +748,7 @@ describe("PluginRegistry", () => {
           assert.strictEqual(restored.plugin.revision, first.after);
           assert.isTrue(yield* fs.exists(path.join(pluginsDir, "notes-panel", "notes.html")));
           assert.isFalse(yield* fs.exists(path.join(pluginsDir, "notes-panel", "board.html")));
+          assert.isTrue(yield* fs.exists(unlistedPath));
           const readBack = yield* registry.read("notes-panel");
           assert.deepEqual(readBack.panels, [
             { id: "notes", title: "Notes", html: "<html><body>v1</body></html>" },

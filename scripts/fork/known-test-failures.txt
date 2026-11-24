@@ -14,3 +14,5 @@ does not re-render thread rows when a quick Mod shortcut opens and focuses the t
 reads a fixed SQL turn-item window for long histories and repeated clients
 # Expects a POSIX prefix path; fails on Windows with a mixed-separator temp path.
 publishes proven install ownership only for manually updated servers
+# Windows NTFS mtime ticks ~15.6 ms, so a same-length rewrite within a tick keeps the same revision.
+moves an HTML preview's revision only for the page and the files it requested

@@ -351,28 +351,23 @@ const isExistingTargetSafe = (
 };
 
 // Untraced: called inside traced PluginRegistry write/restore spans.
+// Removes only files the previous manifest named; their copies are in the `before` revision.
 const cleanupStalePluginFiles = Effect.fnUntraced(function* (
   fs: FileSystem.FileSystem,
   folderPath: string,
+  previousPanelFileNames: ReadonlyArray<string>,
   keepPanelFileNames: ReadonlySet<string>,
   previousCssPath: string | null,
   nextCssPath: string | null,
 ) {
-  const entries = yield* fs
-    .readDirectory(folderPath)
-    .pipe(Effect.orElseSucceed((): Array<string> => []));
-  for (const entry of entries) {
-    if (!entry.endsWith(".html") || keepPanelFileNames.has(entry)) continue;
-    const candidate = NodePath.join(folderPath, entry);
+  const stale = previousPanelFileNames
+    .filter((fileName) => !keepPanelFileNames.has(fileName))
+    .map((fileName) => NodePath.join(folderPath, fileName));
+  if (previousCssPath !== null && previousCssPath !== nextCssPath) stale.push(previousCssPath);
+  for (const candidate of stale) {
     const stat = lstatOrNull(candidate);
     if (stat !== null && !stat.isSymbolicLink() && stat.isFile()) {
       yield* fs.remove(candidate, { force: true }).pipe(Effect.ignoreCause({ log: true }));
-    }
-  }
-  if (previousCssPath !== null && previousCssPath !== nextCssPath) {
-    const stat = lstatOrNull(previousCssPath);
-    if (stat !== null && !stat.isSymbolicLink() && stat.isFile()) {
-      yield* fs.remove(previousCssPath, { force: true }).pipe(Effect.ignoreCause({ log: true }));
     }
   }
 });
@@ -1068,9 +1063,11 @@ const make = Effect.gen(function* () {
           const created = folderStat === null;
           let before: string | undefined;
           let previousCssPath: string | null = null;
+          let previousPanelFileNames: ReadonlyArray<string> = [];
           if (!created) {
             const existing = inspectPluginFolder(pluginsDir, input.id, false);
             previousCssPath = existing?.cssPath ?? null;
+            previousPanelFileNames = (existing?.rawPanels ?? []).map((panel) => panel.fileName);
             if (existing?.rawManifest !== undefined) {
               before = yield* saveHistoryRevision(
                 fs,
@@ -1104,6 +1101,7 @@ const make = Effect.gen(function* () {
           yield* cleanupStalePluginFiles(
             fs,
             folderPath,
+            previousPanelFileNames,
             new Set(panelWrites.map((panel) => panel.fileName)),
             previousCssPath,
             cssPath,
@@ -1291,9 +1289,11 @@ const make = Effect.gen(function* () {
             });
           }
           let previousCssPath: string | null = null;
+          let previousPanelFileNames: ReadonlyArray<string> = [];
           if (lstatOrNull(folderPath) !== null) {
             const existing = inspectPluginFolder(pluginsDir, id, false);
             previousCssPath = existing?.cssPath ?? null;
+            previousPanelFileNames = (existing?.rawPanels ?? []).map((panel) => panel.fileName);
             if (existing?.rawManifest !== undefined) {
               yield* saveHistoryRevision(
                 fs,
@@ -1330,6 +1330,7 @@ const make = Effect.gen(function* () {
           yield* cleanupStalePluginFiles(
             fs,
             folderPath,
+            previousPanelFileNames,
             new Set(panelRestores.map((panel) => panel.fileName)),
             previousCssPath,
             targetCssPath,
