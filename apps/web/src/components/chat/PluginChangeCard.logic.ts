@@ -21,6 +21,12 @@ export type PluginChangeCardAction =
 export type PluginChangeCardLine =
   | { readonly kind: "css" }
   | { readonly kind: "panel" }
+  | { readonly kind: "command"; readonly name: string }
+  | { readonly kind: "command-generic" }
+  | { readonly kind: "skill"; readonly name: string }
+  | { readonly kind: "skill-generic" }
+  | { readonly kind: "instructions" }
+  | { readonly kind: "unsupported"; readonly parts: ReadonlyArray<string> }
   | { readonly kind: "worker-runs" }
   | {
       readonly kind: "worker-folder";
@@ -38,7 +44,10 @@ export interface PluginChangeCardState {
   readonly actions: ReadonlyArray<PluginChangeCardAction>;
 }
 
-type LivePluginCardSnapshot = Pick<InstalledPlugin, "enabled" | "revision" | "worker">;
+type LivePluginCardSnapshot = Pick<
+  InstalledPlugin,
+  "enabled" | "revision" | "worker" | "commands" | "skills" | "unsupported"
+>;
 
 export function resolvePluginChangeCardLines(
   change: PluginChange,
@@ -50,6 +59,26 @@ export function resolvePluginChangeCardLines(
       lines.push({ kind: "css" });
     } else if (contribution === "panel") {
       lines.push({ kind: "panel" });
+    } else if (contribution === "command") {
+      const commandNames = change.commands ?? livePlugin?.commands;
+      if (commandNames !== undefined && commandNames.length > 0) {
+        for (const name of commandNames) {
+          lines.push({ kind: "command", name });
+        }
+      } else {
+        lines.push({ kind: "command-generic" });
+      }
+    } else if (contribution === "skill") {
+      const skillNames = change.skills ?? livePlugin?.skills;
+      if (skillNames !== undefined && skillNames.length > 0) {
+        for (const name of skillNames) {
+          lines.push({ kind: "skill", name });
+        }
+      } else {
+        lines.push({ kind: "skill-generic" });
+      }
+    } else if (contribution === "instructions") {
+      lines.push({ kind: "instructions" });
     } else if (contribution === "worker") {
       lines.push({ kind: "worker-runs" });
       const worker = change.worker ?? livePlugin?.worker;
@@ -73,6 +102,10 @@ export function resolvePluginChangeCardLines(
         lines.push({ kind: "worker-network-unrestricted" });
       }
     }
+  }
+  const unsupported = change.unsupported ?? livePlugin?.unsupported;
+  if (unsupported !== undefined && unsupported.length > 0) {
+    lines.push({ kind: "unsupported", parts: unsupported });
   }
   return lines;
 }

@@ -41,12 +41,57 @@ function StatusLabel({ status }: { readonly status: PluginChangeCardStatus }) {
   }
 }
 
+function unsupportedPartLabel(part: string, gt: ReturnType<typeof useGT>): string {
+  switch (part) {
+    case "hooks":
+      return gt("hooks");
+    case "mcp":
+      return gt("MCP servers");
+    case "agents":
+      return gt("agents");
+    case "css":
+      return gt("CSS");
+    case "panels":
+      return gt("panels");
+    case "worker":
+      return gt("worker");
+    default:
+      return part;
+  }
+}
+
 function CardLine({ line }: { readonly line: PluginChangeCardLine }) {
+  const gt = useGT();
   switch (line.kind) {
     case "css":
       return <T>Restyles T3 with CSS</T>;
     case "panel":
       return <T>Adds a right panel tab</T>;
+    case "command":
+      return (
+        <T>
+          Adds /<Var>{line.name}</Var>
+        </T>
+      );
+    case "command-generic":
+      return <T>Adds slash commands</T>;
+    case "skill":
+      return (
+        <T>
+          Adds skill <Var>{line.name}</Var>
+        </T>
+      );
+    case "skill-generic":
+      return <T>Adds skills for agents</T>;
+    case "instructions":
+      return <T>Adds instructions for agents</T>;
+    case "unsupported":
+      return (
+        <T>
+          Not supported yet:{" "}
+          <Var>{line.parts.map((part) => unsupportedPartLabel(part, gt)).join(", ")}</Var>
+        </T>
+      );
     case "worker-runs":
       return <T>Runs background code on this computer</T>;
     case "worker-folder":
@@ -73,7 +118,18 @@ function CardLine({ line }: { readonly line: PluginChangeCardLine }) {
 }
 
 function cardLineKey(line: PluginChangeCardLine): string {
-  return line.kind === "worker-folder" ? `worker-folder:${line.id}` : line.kind;
+  switch (line.kind) {
+    case "worker-folder":
+      return `worker-folder:${line.id}`;
+    case "command":
+      return `command:${line.name}`;
+    case "skill":
+      return `skill:${line.name}`;
+    case "unsupported":
+      return `unsupported:${line.parts.join(",")}`;
+    default:
+      return line.kind;
+  }
 }
 
 export function PluginChangeCard({

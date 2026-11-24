@@ -1,7 +1,14 @@
 import {
+  CLAUDE_PLUGIN_MANIFEST_DIR,
   DEFAULT_SERVER_SETTINGS,
+  IsoDateTime,
+  PLUGIN_INSTRUCTIONS_MAX_BYTES,
   PLUGIN_MANIFEST_DIR,
   PLUGIN_MANIFEST_FILE,
+  PLUGIN_MAX_SKILLS,
+  PLUGIN_SKILL_MAX_BYTES,
+  PluginId,
+  ProjectId,
   THEME_CSS_MAX_LENGTH,
   type EnvironmentPlugin,
   type ServerSettings,
@@ -14,6 +21,7 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
@@ -21,13 +29,44 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 
 import * as ServerConfig from "../config.ts";
+import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import * as PluginRegistry from "./PluginRegistry.ts";
 
 interface PluginFixture {
   readonly manifest?: string | null;
+  readonly claudeManifest?: string | null;
   readonly files?: Readonly<Record<string, string>>;
 }
+
+interface RepoProjectFixture {
+  readonly projectId: ProjectId;
+  readonly title: string;
+  readonly plugins: Readonly<Record<string, PluginFixture>>;
+}
+
+const makeTestProjectRow = (
+  projectId: ProjectId,
+  title: string,
+  workspaceRoot: string,
+): ProjectStore.ProjectRow => ({
+  projectId,
+  title,
+  hasCustomTitle: false,
+  workspaceRoot,
+  defaultModelSelection: null,
+  defaultThreadEnvMode: null,
+  autoPull: false,
+  faviconPath: null,
+  projectIcon: null,
+  scripts: [],
+  trackedFolders: [],
+  pinnedAt: null,
+  archivedAt: null,
+  createdAt: IsoDateTime.make("2026-01-01T00:00:00.000Z"),
+  updatedAt: IsoDateTime.make("2026-01-01T00:00:00.000Z"),
+  deletedAt: null,
+});
 
 const withPluginRegistry = <A, E>(
   fixtures: Readonly<Record<string, PluginFixture>>,
@@ -42,6 +81,7 @@ const withPluginRegistry = <A, E>(
     | Scope.Scope
   >,
   initialSettings: ServerSettings = DEFAULT_SERVER_SETTINGS,
+  repoProjects: ReadonlyArray<RepoProjectFixture> = [],
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -50,19 +90,43 @@ const withPluginRegistry = <A, E>(
     const pluginsDir = path.join(baseDir, "userdata", "plugins");
     yield* fs.makeDirectory(pluginsDir, { recursive: true });
 
+    const populatePluginFolder = (rootDir: string, folderName: string, fixture: PluginFixture) =>
+      Effect.gen(function* () {
+        const pluginRoot = path.join(rootDir, folderName);
+        yield* fs.makeDirectory(pluginRoot, { recursive: true });
+        if (fixture.manifest !== undefined && fixture.manifest !== null) {
+          const manifestDir = path.join(pluginRoot, PLUGIN_MANIFEST_DIR);
+          yield* fs.makeDirectory(manifestDir, { recursive: true });
+          yield* fs.writeFileString(path.join(manifestDir, PLUGIN_MANIFEST_FILE), fixture.manifest);
+        }
+        if (fixture.claudeManifest !== undefined && fixture.claudeManifest !== null) {
+          const claudeDir = path.join(pluginRoot, CLAUDE_PLUGIN_MANIFEST_DIR);
+          yield* fs.makeDirectory(claudeDir, { recursive: true });
+          yield* fs.writeFileString(
+            path.join(claudeDir, PLUGIN_MANIFEST_FILE),
+            fixture.claudeManifest,
+          );
+        }
+        for (const [relativePath, content] of Object.entries(fixture.files ?? {})) {
+          const filePath = path.join(pluginRoot, relativePath);
+          yield* fs.makeDirectory(path.dirname(filePath), { recursive: true });
+          yield* fs.writeFileString(filePath, content);
+        }
+      });
+
     for (const [folderName, fixture] of Object.entries(fixtures)) {
-      const pluginRoot = path.join(pluginsDir, folderName);
-      yield* fs.makeDirectory(pluginRoot, { recursive: true });
-      if (fixture.manifest !== undefined && fixture.manifest !== null) {
-        const manifestDir = path.join(pluginRoot, PLUGIN_MANIFEST_DIR);
-        yield* fs.makeDirectory(manifestDir, { recursive: true });
-        yield* fs.writeFileString(path.join(manifestDir, PLUGIN_MANIFEST_FILE), fixture.manifest);
+      yield* populatePluginFolder(pluginsDir, folderName, fixture);
+    }
+
+    const projectRows: Array<ProjectStore.ProjectRow> = [];
+    for (const repoProject of repoProjects) {
+      const workspaceRoot = path.join(baseDir, "projects", repoProject.projectId);
+      const repoPluginsDir = path.join(workspaceRoot, ".t3", "plugins");
+      yield* fs.makeDirectory(repoPluginsDir, { recursive: true });
+      for (const [folderName, fixture] of Object.entries(repoProject.plugins)) {
+        yield* populatePluginFolder(repoPluginsDir, folderName, fixture);
       }
-      for (const [relativePath, content] of Object.entries(fixture.files ?? {})) {
-        const filePath = path.join(pluginRoot, relativePath);
-        yield* fs.makeDirectory(path.dirname(filePath), { recursive: true });
-        yield* fs.writeFileString(filePath, content);
-      }
+      projectRows.push(makeTestProjectRow(repoProject.projectId, repoProject.title, workspaceRoot));
     }
 
     const settingsRef = yield* Ref.make(initialSettings);
@@ -72,10 +136,26 @@ const withPluginRegistry = <A, E>(
         Ref.updateAndGet(settingsRef, (current) => applyServerSettingsPatch(current, patch)),
       streamChanges: Stream.empty,
     });
+    const projectStoreLayer = Layer.mock(ProjectStore.ProjectStoreV2)({
+      get: (projectId) =>
+        Effect.succeed(
+          Option.fromUndefinedOr(projectRows.find((row) => row.projectId === projectId)),
+        ),
+      list: (options) =>
+        Effect.succeed(
+          options?.projectIds === undefined
+            ? projectRows
+            : projectRows.filter((row) => options.projectIds!.includes(row.projectId)),
+        ),
+    });
 
+    const basePluginLayer =
+      projectRows.length > 0
+        ? PluginRegistry.layer.pipe(Layer.provide(projectStoreLayer))
+        : PluginRegistry.layer;
     return yield* body.pipe(
       Effect.provide(
-        PluginRegistry.layer.pipe(
+        basePluginLayer.pipe(
           Layer.provideMerge(ServerConfig.layerTest(process.cwd(), baseDir)),
           Layer.provideMerge(settingsLayer),
         ),
@@ -883,5 +963,424 @@ describe("PluginRegistry", () => {
           );
         }),
       ),
+  );
+
+  it.effect(
+    "loads .claude-plugin fallback, parses skills/commands/AGENTS.md with collision and unsupported reporting, and prefers .t3-plugin",
+    () =>
+      withPluginRegistry(
+        {
+          "claude-pack": {
+            claudeManifest: JSON.stringify({
+              name: "claude-pack",
+              description: "Claude Code plugin pack.",
+              author: { name: "Upstream" },
+              hooks: "./hooks/hooks.json",
+              mcpServers: { docs: { command: "npx" } },
+            }),
+            files: {
+              "AGENTS.md": "Always cite line numbers.",
+              "skills/standup/SKILL.md": [
+                "---",
+                "name: standup",
+                "description: Daily standup summary",
+                'argument-hint: "[focus]"',
+                "disable-model-invocation: true",
+                "---",
+                "",
+                "Write standup for $ARGUMENTS.",
+              ].join("\n"),
+              "skills/review/SKILL.md": [
+                "---",
+                "description: Deep code review",
+                "user-invocable: false",
+                "---",
+                "",
+                "Review carefully.",
+              ].join("\n"),
+              // Collides with skills/standup: skill must win.
+              "commands/standup.md": "Shadowed legacy command",
+              "commands/release.md": "Prepare release $0",
+              // Nested folder inside commands/ must be ignored.
+              "commands/nested/ignored.md": "Nested ignored",
+              "hooks/hooks.json": "{}",
+              ".mcp.json": "{}",
+              "agents/reviewer.md": "# Reviewer",
+            },
+          },
+          "both-manifests": {
+            manifest: JSON.stringify({
+              name: "both-manifests",
+              displayName: "T3 Wins",
+            }),
+            claudeManifest: JSON.stringify({
+              name: "both-manifests",
+              displayName: "Claude Loses",
+            }),
+            files: {
+              "AGENTS.md": "Rule from both-manifests.",
+            },
+          },
+        },
+        Effect.gen(function* () {
+          const registry = yield* PluginRegistry.PluginRegistry;
+          const listed = yield* registry.list;
+          const byId = new Map(listed.plugins.map((plugin) => [plugin.id, plugin]));
+
+          const claudePack = byId.get("claude-pack");
+          assert.isDefined(claudePack);
+          assert.isUndefined(claudePack?.problem);
+          assert.deepEqual(claudePack?.contributes, ["command", "skill", "instructions"]);
+          assert.deepEqual(claudePack?.commands, ["standup", "release"]);
+          assert.deepEqual(claudePack?.skills, ["review", "release"]);
+          assert.deepEqual(claudePack?.unsupported, ["hooks", "mcp", "agents"]);
+
+          assert.strictEqual(byId.get("both-manifests")?.displayName, "T3 Wins");
+
+          const detail = yield* registry.read("claude-pack");
+          assert.strictEqual(detail.instructions, "Always cite line numbers.");
+          assert.deepEqual(
+            detail.skills?.map((skill) => ({
+              name: skill.name,
+              userInvocable: skill.userInvocable,
+              modelInvocable: skill.modelInvocable,
+              body: skill.body,
+            })),
+            [
+              {
+                name: "review",
+                userInvocable: false,
+                modelInvocable: true,
+                body: "Review carefully.",
+              },
+              {
+                name: "standup",
+                userInvocable: true,
+                modelInvocable: false,
+                body: "Write standup for $ARGUMENTS.",
+              },
+              {
+                name: "release",
+                userInvocable: true,
+                modelInvocable: true,
+                body: "Prepare release $0",
+              },
+            ],
+          );
+
+          yield* registry.setEnabled("claude-pack", true);
+          const turnCtx = yield* registry.getTurnContext(ProjectId.make("proj-1"));
+          assert.strictEqual(turnCtx.contextPlugins.length, 1);
+          assert.strictEqual(turnCtx.contextPlugins[0]?.instructions, "Always cite line numbers.");
+          assert.deepEqual(
+            turnCtx.contextPlugins[0]?.skills?.map((skill) => skill.name),
+            ["review", "release"],
+          );
+          assert.deepEqual(
+            turnCtx.commands.map((command) => command.name),
+            ["standup", "release"],
+          );
+          assert.strictEqual(turnCtx.commands[0]?.body, "Write standup for $ARGUMENTS.");
+        }),
+      ),
+  );
+
+  it.effect(
+    "reports problems for oversized skills, oversized AGENTS.md, bad skill names, and >32 skills",
+    () => {
+      const tooManySkills: Record<string, string> = {};
+      for (let i = 0; i <= PLUGIN_MAX_SKILLS; i += 1) {
+        tooManySkills[`skills/skill-${i}/SKILL.md`] = `Skill ${i}`;
+      }
+      return withPluginRegistry(
+        {
+          "bad-skill-name": {
+            manifest: JSON.stringify({ name: "bad-skill-name" }),
+            files: { "skills/Bad_Name/SKILL.md": "Body" },
+          },
+          "oversized-skill": {
+            manifest: JSON.stringify({ name: "oversized-skill" }),
+            files: { "skills/huge/SKILL.md": "a".repeat(PLUGIN_SKILL_MAX_BYTES + 1) },
+          },
+          "oversized-instructions": {
+            manifest: JSON.stringify({ name: "oversized-instructions" }),
+            files: { "AGENTS.md": "b".repeat(PLUGIN_INSTRUCTIONS_MAX_BYTES + 1) },
+          },
+          "too-many-skills": {
+            manifest: JSON.stringify({ name: "too-many-skills" }),
+            files: tooManySkills,
+          },
+        },
+        Effect.gen(function* () {
+          const registry = yield* PluginRegistry.PluginRegistry;
+          const { plugins } = yield* registry.list;
+          const byId = new Map(plugins.map((plugin) => [plugin.id, plugin]));
+
+          assert.match(byId.get("bad-skill-name")?.problem ?? "", /valid plugin id/i);
+          assert.match(byId.get("oversized-skill")?.problem ?? "", /32 KB/i);
+          assert.match(byId.get("oversized-instructions")?.problem ?? "", /8 KB/i);
+          assert.match(byId.get("too-many-skills")?.problem ?? "", /32/);
+        }),
+      );
+    },
+  );
+
+  it.effect(
+    "write and restore track skills and AGENTS.md revisions, keep omitted parts unchanged, and delete AGENTS.md on empty string",
+    () =>
+      withPluginRegistry(
+        {},
+        Effect.gen(function* () {
+          const registry = yield* PluginRegistry.PluginRegistry;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const { pluginsDir } = yield* ServerConfig.ServerConfig;
+
+          const first = yield* registry.write({
+            id: "daily",
+            displayName: "Daily",
+            instructions: "Keep answers short.",
+            skills: [
+              {
+                name: PluginId.make("standup"),
+                description: "Daily standup",
+                argumentHint: "[focus]",
+                userInvocable: true,
+                modelInvocable: false,
+                body: "Summarize commits for $ARGUMENTS.",
+              },
+            ],
+          });
+          assert.deepEqual(first.plugin.contributes, ["command", "instructions"]);
+          assert.deepEqual(first.plugin.commands, ["standup"]);
+          assert.isUndefined(first.plugin.skills);
+          yield* registry.setEnabled("daily", true);
+
+          // Omitting skills keeps them unchanged; empty instructions removes AGENTS.md.
+          const second = yield* registry.write({
+            id: "daily",
+            instructions: "",
+          });
+          assert.notStrictEqual(second.after, first.after);
+          assert.strictEqual(second.before, first.after);
+          assert.isFalse(yield* fs.exists(path.join(pluginsDir, "daily", "AGENTS.md")));
+          assert.deepEqual(second.plugin.contributes, ["command"]);
+          assert.deepEqual(second.plugin.commands, ["standup"]);
+
+          // Replacing skills removes the old skill file and changes revision.
+          const third = yield* registry.write({
+            id: "daily",
+            skills: [
+              {
+                name: PluginId.make("retro"),
+                description: "Sprint retro",
+                userInvocable: true,
+                modelInvocable: true,
+                body: "List wins and gaps.",
+              },
+            ],
+          });
+          assert.notStrictEqual(third.after, second.after);
+          assert.isFalse(
+            yield* fs.exists(path.join(pluginsDir, "daily", "skills", "standup", "SKILL.md")),
+          );
+          assert.isTrue(
+            yield* fs.exists(path.join(pluginsDir, "daily", "skills", "retro", "SKILL.md")),
+          );
+
+          // Undo to first revision restores AGENTS.md and standup, removes retro.
+          const restored = yield* registry.restore("daily", first.after);
+          assert.strictEqual(restored.plugin.revision, first.after);
+          assert.isTrue(yield* fs.exists(path.join(pluginsDir, "daily", "AGENTS.md")));
+          assert.isTrue(
+            yield* fs.exists(path.join(pluginsDir, "daily", "skills", "standup", "SKILL.md")),
+          );
+          assert.isFalse(
+            yield* fs.exists(path.join(pluginsDir, "daily", "skills", "retro", "SKILL.md")),
+          );
+          const readBack = yield* registry.read("daily");
+          assert.strictEqual(readBack.instructions, "Keep answers short.");
+          assert.deepEqual(
+            readBack.skills?.map((skill) => skill.name),
+            ["standup"],
+          );
+        }),
+      ),
+  );
+
+  it.effect(
+    "repo plugins start off, require matching revision to enable, stop applying after edit, ignore css/panels/worker, and refuse uninstall/restore",
+    () => {
+      const projectA = ProjectId.make("project-a");
+      const projectB = ProjectId.make("project-b");
+      return withPluginRegistry(
+        {},
+        Effect.gen(function* () {
+          const registry = yield* PluginRegistry.PluginRegistry;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const { stateDir } = yield* ServerConfig.ServerConfig;
+          const baseDir = path.dirname(stateDir);
+
+          // Starts off, ignores CSS/panels/worker and reports them unsupported.
+          const listed1 = yield* registry.list;
+          assert.strictEqual(listed1.repoPlugins?.length, 1);
+          const initialRepo = listed1.repoPlugins![0]!;
+          assert.strictEqual(initialRepo.id, "team-kit");
+          assert.strictEqual(initialRepo.projectId, projectA);
+          assert.strictEqual(initialRepo.enabled, false);
+          assert.strictEqual(initialRepo.repoStatus, "off");
+          assert.deepEqual(initialRepo.contributes, ["command", "instructions"]);
+          assert.deepEqual(initialRepo.commands, ["deploy"]);
+          assert.deepEqual(initialRepo.unsupported, ["hooks", "css", "panels", "worker"]);
+          assert.isUndefined(initialRepo.panels);
+          assert.isUndefined(initialRepo.worker);
+
+          // Off repo plugin is NOT delivered to turns.
+          const ctxOff = yield* registry.getTurnContext(projectA);
+          assert.deepEqual(ctxOff.contextPlugins, []);
+          assert.deepEqual(ctxOff.commands, []);
+
+          // Enabling without revision or with stale revision fails with "changed".
+          const missingRev = yield* registry
+            .setEnabled("team-kit", true, { projectId: projectA })
+            .pipe(Effect.flip);
+          assert.strictEqual(missingRev.reason, "changed");
+          const staleRev = yield* registry
+            .setEnabled("team-kit", true, { projectId: projectA, revision: "000000000000" })
+            .pipe(Effect.flip);
+          assert.strictEqual(staleRev.reason, "changed");
+
+          // Enabling with current revision activates for projectA only.
+          assert.isString(initialRepo.revision);
+          const initialRevision = initialRepo.revision!;
+          const enabledRes = yield* registry.setEnabled("team-kit", true, {
+            projectId: projectA,
+            revision: initialRevision,
+          });
+          assert.strictEqual(enabledRes.plugin.enabled, true);
+          assert.strictEqual(enabledRes.plugin.repoStatus, "on");
+
+          const ctxOnA = yield* registry.getTurnContext(projectA);
+          assert.strictEqual(ctxOnA.contextPlugins.length, 1);
+          assert.strictEqual(ctxOnA.contextPlugins[0]?.instructions, "Follow repo release rules.");
+          assert.deepEqual(
+            ctxOnA.commands.map((cmd) => cmd.name),
+            ["deploy"],
+          );
+          const ctxOnB = yield* registry.getTurnContext(projectB);
+          assert.deepEqual(ctxOnB.contextPlugins, []);
+          assert.deepEqual(ctxOnB.commands, []);
+
+          // Active repo plugin emits its commands on streamChanges with projectId and empty CSS.
+          const activeSnap = yield* registry.streamChanges.pipe(Stream.take(1), Stream.runCollect);
+          assert.deepEqual(Array.from(activeSnap), [
+            [
+              {
+                id: "team-kit",
+                displayName: "Team Kit",
+                css: "",
+                commands: [{ name: "deploy", description: "Deploy app" }],
+                projectId: projectA,
+              },
+            ],
+          ]);
+
+          // Editing a file in the repo plugin moves it to "changed" and stops applying it.
+          const agentsPath = path.join(
+            baseDir,
+            "projects",
+            projectA,
+            ".t3",
+            "plugins",
+            "team-kit",
+            "AGENTS.md",
+          );
+          yield* fs.writeFileString(agentsPath, "Tampered instructions.");
+
+          const listedChanged = yield* registry.list;
+          const changedRepo = listedChanged.repoPlugins![0]!;
+          assert.strictEqual(changedRepo.repoStatus, "changed");
+          assert.strictEqual(changedRepo.enabled, false);
+          assert.notStrictEqual(changedRepo.revision, initialRepo.revision);
+
+          const ctxChanged = yield* registry.getTurnContext(projectA);
+          assert.deepEqual(ctxChanged.contextPlugins, []);
+          assert.deepEqual(ctxChanged.commands, []);
+
+          // Old revision fails; new revision re-enables.
+          assert.isString(changedRepo.revision);
+          const changedRevision = changedRepo.revision!;
+          const oldFail = yield* registry
+            .setEnabled("team-kit", true, { projectId: projectA, revision: initialRevision })
+            .pipe(Effect.flip);
+          assert.strictEqual(oldFail.reason, "changed");
+
+          const reEnabled = yield* registry.setEnabled("team-kit", true, {
+            projectId: projectA,
+            revision: changedRevision,
+          });
+          assert.strictEqual(reEnabled.plugin.repoStatus, "on");
+          assert.strictEqual(
+            (yield* registry.getTurnContext(projectA)).contextPlugins[0]?.instructions,
+            "Tampered instructions.",
+          );
+
+          // Turning off clears approval back to "off".
+          const turnedOff = yield* registry.setEnabled("team-kit", false, { projectId: projectA });
+          assert.strictEqual(turnedOff.plugin.repoStatus, "off");
+          assert.strictEqual(turnedOff.plugin.enabled, false);
+
+          // Uninstall and restore on repo plugins fail clearly.
+          const uninstallErr = yield* registry.uninstall("team-kit", projectA).pipe(Effect.flip);
+          assert.strictEqual(uninstallErr.reason, "repo_plugin_readonly");
+          const uninstallNoProjErr = yield* registry.uninstall("team-kit").pipe(Effect.flip);
+          assert.strictEqual(uninstallNoProjErr.reason, "repo_plugin_readonly");
+          const restoreErr = yield* registry
+            .restore("team-kit", initialRepo.revision!, false, { projectId: projectA })
+            .pipe(Effect.flip);
+          assert.strictEqual(restoreErr.reason, "repo_plugin_readonly");
+        }),
+        DEFAULT_SERVER_SETTINGS,
+        [
+          {
+            projectId: projectA,
+            title: "Project A",
+            plugins: {
+              "team-kit": {
+                manifest: JSON.stringify({
+                  name: "team-kit",
+                  displayName: "Team Kit",
+                  css: "./plugin.css",
+                  panels: [{ id: "tab", title: "Tab", entry: "./tab.html" }],
+                  worker: { entry: "./worker.mjs" },
+                }),
+                files: {
+                  "plugin.css": "body { color: red; }",
+                  "tab.html": "<html></html>",
+                  "worker.mjs": "export default () => {};",
+                  "hooks/hooks.json": "{}",
+                  "AGENTS.md": "Follow repo release rules.",
+                  "skills/deploy/SKILL.md": [
+                    "---",
+                    "name: deploy",
+                    "description: Deploy app",
+                    "disable-model-invocation: true",
+                    "---",
+                    "",
+                    "Deploy $ARGUMENTS.",
+                  ].join("\n"),
+                },
+              },
+            },
+          },
+          {
+            projectId: projectB,
+            title: "Project B",
+            plugins: {},
+          },
+        ],
+      );
+    },
   );
 });

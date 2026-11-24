@@ -295,6 +295,35 @@ function mergePluginSettingsPatch(
   return Object.fromEntries(next);
 }
 
+function mergeRepoPluginSettingsPatch(
+  current: Readonly<Record<string, Readonly<Record<string, string>>>>,
+  patch: Readonly<Record<string, Readonly<Record<string, string | null>> | null>>,
+): Record<string, Record<string, string>> {
+  const next = new Map<string, Record<string, string>>(
+    Object.entries(current).map(([projectId, entries]) => [projectId, { ...entries }]),
+  );
+  for (const [projectId, projectPatch] of Object.entries(patch)) {
+    if (projectPatch === null) {
+      next.delete(projectId);
+      continue;
+    }
+    const merged = { ...next.get(projectId) };
+    for (const [pluginId, revision] of Object.entries(projectPatch)) {
+      if (revision === null) {
+        delete merged[pluginId];
+      } else {
+        merged[pluginId] = revision;
+      }
+    }
+    if (Object.keys(merged).length === 0) {
+      next.delete(projectId);
+    } else {
+      next.set(projectId, merged);
+    }
+  }
+  return Object.fromEntries(next);
+}
+
 // Secret persistence keys tokens by trimmed, lowercased host, so merge on the same key.
 const byHost = (tokens: unknown) =>
   Object.fromEntries(
@@ -450,6 +479,7 @@ export function applyServerSettingsPatch(
     renameThreadSection,
     htmlLibraryEntries: htmlLibraryEntriesPatch,
     plugins: pluginsPatch,
+    repoPlugins: repoPluginsPatch,
     usageLimitSources: usageLimitSourcesPatch,
     textGenerators: textGeneratorsPatch,
     secretProviders: secretProvidersPatch,
@@ -693,6 +723,11 @@ export function applyServerSettingsPatch(
     ...(pluginsPatch !== undefined
       ? {
           plugins: mergePluginSettingsPatch(current.plugins, pluginsPatch),
+        }
+      : {}),
+    ...(repoPluginsPatch !== undefined
+      ? {
+          repoPlugins: mergeRepoPluginSettingsPatch(current.repoPlugins, repoPluginsPatch),
         }
       : {}),
     ...(usageLimitSourcesPatch !== undefined

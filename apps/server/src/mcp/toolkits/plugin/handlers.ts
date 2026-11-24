@@ -1,7 +1,10 @@
 import {
   OrchestratorMcpFailure,
+  PLUGIN_INSTRUCTIONS_MAX_BYTES,
+  PLUGIN_MAX_SKILLS,
   PLUGIN_PANEL_HTML_MAX_CHARS,
   PLUGIN_PANEL_TITLE_MAX_LENGTH,
+  PLUGIN_SKILL_MAX_BYTES,
   PLUGIN_WORKER_CODE_MAX_CHARS,
   PLUGIN_WORKER_MAX_FOLDERS,
   type PluginOperationError,
@@ -17,7 +20,11 @@ import { unavailable } from "../../threadAccess.ts";
 import { PluginToolkit } from "./tools.ts";
 
 const PLUGIN_GUIDE = [
-  "Plugins add custom CSS (layered after the active theme), right panel tabs on web and desktop, and/or background server workers. A new plugin starts off until the user installs it from the card in the chat; edits to an existing plugin save immediately (and apply live if it is already enabled) with Undo on the card.",
+  "Plugins add custom CSS (layered after the active theme), right panel tabs on web and desktop, background server workers, slash commands, agent skills, and agent instructions (AGENTS.md). A new plugin starts off until the user installs it from the card in the chat; edits to an existing plugin save immediately (and apply live if it is already enabled) with Undo on the card. Omitted parts stay unchanged on edit.",
+  "",
+  "Skills and slash commands: pass `skills: [{ name, description, argumentHint?, userInvocable?, modelInvocable?, body }]` (up to 32 entries, 32 KB each), written as `skills/<name>/SKILL.md` in Claude Code format and delivered by T3 to every provider. To make a slash command like `/standup`, pass `userInvocable: true` (default) and `modelInvocable: false` (writes `disable-model-invocation: true`, so only the user triggers it). Leave `modelInvocable: true` (default) for skills the model can discover and read on demand; set `userInvocable: false` to hide an entry from the `/` menu. Command bodies support `$ARGUMENTS`, `$ARGUMENTS[N]`, `$N` (0-based), `${CLAUDE_PLUGIN_ROOT}`, `${T3_PLUGIN_ROOT}`, and `${CLAUDE_SKILL_DIR}`. If the body omits `$ARGUMENTS` and the user passes arguments, T3 appends `ARGUMENTS: <args>`.",
+  "",
+  'Instructions: pass `instructions` (up to 8 KB, written to `AGENTS.md` at the plugin root; pass an empty string `""` to remove it). Use `instructions` for short rules that should apply on every turn across all providers; use skills for longer, on-demand procedures.',
   "",
   'Panels: pass `panels: [{ id, title, html }]` (1 to 4 self-contained HTML pages, up to 200,000 characters each). Each panel runs sandboxed with no network access and should style itself with the theme CSS variables delivered in `hostContext.styles.variables` (such as `--color-background-primary`, `--color-text-primary`, and `--color-border-primary`). Communicate with T3 using JSON-RPC 2.0 over `window.parent.postMessage`: send `ui/initialize`, wait for its result, then send `ui/notifications/initialized`. Read and save JSON (up to 64 KB) with `tools/call` `t3_plugin_state_get` and `t3_plugin_state_set` (`scope`: `"global"` or `"project"`), and listen for live `t3/notifications/state-changed` notifications (`{ scope, value }`). Keep time-based state as timestamps rather than counters so it survives reloads and tab switches.',
   "",
@@ -68,7 +75,10 @@ const mapPluginError = (error: PluginOperationError): OrchestratorMcpFailure => 
     case "invalid_css":
     case "invalid_panel":
     case "invalid_worker":
+    case "invalid_skill":
+    case "invalid_instructions":
     case "invalid_folder":
+    case "repo_plugin_readonly":
     case "has_problem":
     case "not_found":
       return new OrchestratorMcpFailure({ code: "invalid_request", message: error.message });
@@ -89,13 +99,28 @@ export const layer = McpToolAccess.toLayer(PluginToolkit, {
       return {
         pluginsDir,
         plugins: plugins.map(
-          ({ id, displayName, enabled, contributes, panels, worker, revision, problem }) => ({
+          ({
+            id,
+            displayName,
+            enabled,
+            contributes,
+            panels,
+            worker,
+            commands,
+            skills,
+            unsupported,
+            revision,
+            problem,
+          }) => ({
             id,
             ...(displayName === undefined ? {} : { displayName }),
             enabled,
             contributes,
             ...(panels === undefined ? {} : { panels }),
             ...(worker === undefined ? {} : { worker }),
+            ...(commands === undefined ? {} : { commands }),
+            ...(skills === undefined ? {} : { skills }),
+            ...(unsupported === undefined ? {} : { unsupported }),
             ...(revision === undefined ? {} : { revision }),
             ...(problem === undefined ? {} : { problem }),
           }),
@@ -106,16 +131,21 @@ export const layer = McpToolAccess.toLayer(PluginToolkit, {
     }),
   ),
   t3_plugin_write: McpToolAccess.writesEnvironment(
-    ({ pluginId, displayName, description, version, css, panels, worker }, check) =>
+    (
+      { pluginId, displayName, description, version, css, panels, worker, skills, instructions },
+      check,
+    ) =>
       Effect.gen(function* () {
         if (
           css === undefined &&
           (panels === undefined || panels.length === 0) &&
-          worker === undefined
+          worker === undefined &&
+          skills === undefined &&
+          instructions === undefined
         ) {
           return yield* new OrchestratorMcpFailure({
             code: "invalid_request",
-            message: "Provide css, panels, worker, or any combination.",
+            message: "Provide css, panels, worker, skills, instructions, or any combination.",
           });
         }
         if (panels !== undefined) {
@@ -149,6 +179,31 @@ export const layer = McpToolAccess.toLayer(PluginToolkit, {
             });
           }
         }
+        if (skills !== undefined) {
+          if (skills.length > PLUGIN_MAX_SKILLS) {
+            return yield* new OrchestratorMcpFailure({
+              code: "invalid_request",
+              message: `Plugin can define at most ${PLUGIN_MAX_SKILLS} skills and commands.`,
+            });
+          }
+          for (const skill of skills) {
+            if (Buffer.byteLength(skill.body, "utf8") > PLUGIN_SKILL_MAX_BYTES) {
+              return yield* new OrchestratorMcpFailure({
+                code: "invalid_request",
+                message: `Skill "${skill.name}" exceeds the 32 KB limit.`,
+              });
+            }
+          }
+        }
+        if (
+          instructions !== undefined &&
+          Buffer.byteLength(instructions, "utf8") > PLUGIN_INSTRUCTIONS_MAX_BYTES
+        ) {
+          return yield* new OrchestratorMcpFailure({
+            code: "invalid_request",
+            message: "Instructions (AGENTS.md) exceed the 8 KB limit.",
+          });
+        }
         const scope = yield* McpInvocationContext.McpInvocationContext;
         const executor = yield* ThreadCommandExecutor.ThreadCommandExecutor;
         const registry = yield* PluginRegistry.PluginRegistry;
@@ -164,6 +219,8 @@ export const layer = McpToolAccess.toLayer(PluginToolkit, {
               ...(css === undefined ? {} : { css }),
               ...(panels === undefined ? {} : { panels }),
               ...(worker === undefined ? {} : { worker }),
+              ...(skills === undefined ? {} : { skills }),
+              ...(instructions === undefined ? {} : { instructions }),
             })
             .pipe(Effect.mapError(mapPluginError));
           const applied = result.plugin.enabled && result.plugin.problem === undefined;
@@ -216,6 +273,11 @@ export const layer = McpToolAccess.toLayer(PluginToolkit, {
             applied,
             contributes: result.plugin.contributes,
             ...(workerSummary === undefined ? {} : { worker: workerSummary }),
+            ...(result.plugin.commands === undefined ? {} : { commands: result.plugin.commands }),
+            ...(result.plugin.skills === undefined ? {} : { skills: result.plugin.skills }),
+            ...(result.plugin.unsupported === undefined
+              ? {}
+              : { unsupported: result.plugin.unsupported }),
             ...(result.before === undefined ? {} : { before: result.before }),
             after: result.after,
             next,

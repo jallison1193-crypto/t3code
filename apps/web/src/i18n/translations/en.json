@@ -12832,5 +12832,78 @@
   "9ed792fb64e9cf0b": "Loading log…",
   "fc6012fd5e61997a": "No output yet.",
   "33483e00b6a8033c": "Showing the last 32 KB of worker output.",
-  "4c6fd1c0c731161f": "Plugin code runs with the folder and network limits above. Only turn on plugins you trust."
+  "4c6fd1c0c731161f": "Plugin code runs with the folder and network limits above. Only turn on plugins you trust.",
+  "c1dd62c97eefa3a9": "hooks",
+  "724baefb1716842b": "MCP servers",
+  "7761b75ab158452c": "agents",
+  "78dcccfaa55bbcdf": "CSS",
+  "e01858542f9f210b": "panels",
+  "c3cd1fede003458a": "worker",
+  "2002569015ba4c9c": [
+    "Adds /",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "d4431efa2d091a92": "Adds slash commands",
+  "bc6e7ac6a2f9b825": [
+    "Adds skill ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "d87efe64059a553e": "Adds skills for agents",
+  "ac7f46dcd51a8f72": "Adds instructions for agents",
+  "8eb505e4edb02c3d": [
+    "Not supported yet:",
+    " ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "950a084c44982330": "Repo plugins",
+  "d498c94f29d2ab78": [
+    "Commands:",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "a43d67c19efe4d8a": [
+    "Skills:",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "8d38fbe856f09741": [
+    "Not supported in repo plugins:",
+    " ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "d5b680b57724f530": "Changed",
+  "aeea775659127285": "Changed since you turned it on",
+  "f96b011498a483b2": "Turn on again"
 }

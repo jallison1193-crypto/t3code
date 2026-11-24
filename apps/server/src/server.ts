@@ -775,16 +775,16 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   Layer.provideMerge(layerOrchestrationApplication),
   Layer.provideMerge(layerTaskFolders),
   Layer.provideMerge(RuntimeLayer.layerEventInfrastructure),
-  Layer.provideMerge(Layer.merge(ProjectStore.layer, ThreadSearch.layer)),
+  Layer.provideMerge(ThreadSearch.layer),
   Layer.provideMerge(SecretCheck.layer),
   Layer.provideMerge(SecretResolver.layer),
-  // Above the settings they read and write.
+  // Above the settings and project store they read and write.
   Layer.provideMerge(
     PluginStateStore.layer.pipe(
       Layer.provideMerge(Layer.merge(EnvironmentTheme.layer, PluginRegistry.layer)),
     ),
   ),
-  Layer.provideMerge(ProjectMemoryStore.layer),
+  Layer.provideMerge(Layer.merge(ProjectStore.layer, ProjectMemoryStore.layer)),
   Layer.provideMerge(layerServerSettings),
   Layer.provideMerge(layerSourceControlProviderRegistry),
   Layer.provideMerge(layerGit),

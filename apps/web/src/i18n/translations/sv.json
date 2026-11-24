@@ -12828,5 +12828,78 @@
   "9ed792fb64e9cf0b": "Läser in logg…",
   "fc6012fd5e61997a": "Ingen utdata än.",
   "33483e00b6a8033c": "Visar de senaste 32 KB av worker-utdata.",
-  "4c6fd1c0c731161f": "Pluginkod körs med mapp- och nätverksgränserna ovan. Aktivera bara plugins som du litar på."
+  "4c6fd1c0c731161f": "Pluginkod körs med mapp- och nätverksgränserna ovan. Aktivera bara plugins som du litar på.",
+  "c1dd62c97eefa3a9": "hooks",
+  "724baefb1716842b": "MCP-servrar",
+  "7761b75ab158452c": "agenter",
+  "78dcccfaa55bbcdf": "CSS",
+  "e01858542f9f210b": "paneler",
+  "c3cd1fede003458a": "worker",
+  "2002569015ba4c9c": [
+    "Lägger till /",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "d4431efa2d091a92": "Lägger till snedstreckskommandon",
+  "bc6e7ac6a2f9b825": [
+    "Lägger till färdigheten ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "d87efe64059a553e": "Lägger till färdigheter för agenter",
+  "ac7f46dcd51a8f72": "Lägger till instruktioner för agenter",
+  "8eb505e4edb02c3d": [
+    "Stöds inte ännu:",
+    " ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "950a084c44982330": "Repo-plugins",
+  "d498c94f29d2ab78": [
+    "Kommandon:",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "a43d67c19efe4d8a": [
+    "Färdigheter:",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "8d38fbe856f09741": [
+    "Stöds inte i repo-plugins:",
+    " ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "d5b680b57724f530": "Ändrad",
+  "aeea775659127285": "Ändrad sedan du aktiverade den",
+  "f96b011498a483b2": "Aktivera igen"
 }

@@ -52,6 +52,8 @@ import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter"
 import { PROVIDER_STOP_REASON_SIGNAL } from "@t3tools/provider-core/server/subagentProjection";
 import { formatProjectContext } from "@t3tools/provider-core/server/projectInstructions";
 import * as ProjectMemoryStore from "../projectMemory/ProjectMemoryStore.ts";
+import * as PluginRegistry from "../plugins/PluginRegistry.ts";
+import { expandPluginSlashCommand } from "../plugins/pluginSlashCommand.ts";
 import * as ProviderEventIngestor from "./ProviderEventIngestor.ts";
 import * as ProviderUsageAnalytics from "../telemetry/ProviderUsageAnalytics.ts";
 import type { ProjectionStoreV2Error } from "./ProjectionStore.ts";
@@ -732,6 +734,7 @@ export const layer: Layer.Layer<
     const turnAnalytics = yield* ProviderUsageAnalytics.ProviderTurnAnalytics;
     const threadCommands = yield* ThreadCommandExecutor.ThreadCommandExecutor;
     const projectMemoryStore = yield* Effect.serviceOption(ProjectMemoryStore.ProjectMemoryStore);
+    const pluginRegistry = yield* Effect.serviceOption(PluginRegistry.PluginRegistry);
 
     const writeFinalRunEvents = Effect.fn("RunExecutionService.writeFinalRunEvents")(
       function* (input: {
@@ -2314,12 +2317,42 @@ export const layer: Layer.Layer<
               ),
             )
           : undefined;
+        const pluginContext = Option.isSome(pluginRegistry)
+          ? yield* pluginRegistry.value
+              .getTurnContext(input.appThread.projectId)
+              .pipe(
+                Effect.catchCause((cause) =>
+                  Cause.hasInterruptsOnly(cause)
+                    ? Effect.interrupt
+                    : Effect.logWarning("Failed to read plugin turn context.", { cause }).pipe(
+                        Effect.as({ contextPlugins: [], commands: [] }),
+                      ),
+                ),
+              )
+          : undefined;
         const projectInstructions = formatProjectContext({
           instructions: instructionSettings.instructions,
           coordinator: instructionSettings.coordinator,
           memoryHead,
           knowledgeFiles,
+          ...(pluginContext !== undefined && pluginContext.contextPlugins.length > 0
+            ? { plugins: pluginContext.contextPlugins }
+            : {}),
         });
+        const compact =
+          input.message.attachments.length === 0 &&
+          input.message.text.trim().toLowerCase() === "/compact";
+        const expandedMessageText =
+          !compact &&
+          input.resume !== true &&
+          pluginContext !== undefined &&
+          pluginContext.commands.length > 0
+            ? expandPluginSlashCommand(input.message.text, pluginContext.commands)
+            : input.message.text;
+        const providerMessage =
+          expandedMessageText === input.message.text
+            ? input.message
+            : { ...input.message, text: expandedMessageText };
         const turnInput = {
           appThread: input.appThread,
           threadId: input.run.threadId,
@@ -2337,7 +2370,7 @@ export const layer: Layer.Layer<
           attemptId: input.attemptId,
           rootNodeId: input.rootNode.id,
           providerThread: input.providerThread,
-          message: input.message,
+          message: providerMessage,
           modelSelection: input.modelSelection,
           runtimePolicy: input.runtimePolicy,
           ...(appContext.length === 0 ? {} : { appContext }),
@@ -2354,9 +2387,6 @@ export const layer: Layer.Layer<
           return;
         }
 
-        const compact =
-          input.message.attachments.length === 0 &&
-          input.message.text.trim().toLowerCase() === "/compact";
         const { message: _message, ...resumeInput } = turnInput;
         const startTurn =
           input.resume === true

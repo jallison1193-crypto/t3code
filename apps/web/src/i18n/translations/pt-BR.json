@@ -12821,5 +12821,78 @@
   "9ed792fb64e9cf0b": "Carregando log…",
   "fc6012fd5e61997a": "Nenhuma saída ainda.",
   "33483e00b6a8033c": "Mostrando os últimos 32 KB da saída do worker.",
-  "4c6fd1c0c731161f": "O código do plugin é executado com os limites de pasta e rede acima. Ative apenas plugins em que você confia."
+  "4c6fd1c0c731161f": "O código do plugin é executado com os limites de pasta e rede acima. Ative apenas plugins em que você confia.",
+  "c1dd62c97eefa3a9": "hooks",
+  "724baefb1716842b": "servidores MCP",
+  "7761b75ab158452c": "agentes",
+  "78dcccfaa55bbcdf": "CSS",
+  "e01858542f9f210b": "painéis",
+  "c3cd1fede003458a": "worker",
+  "2002569015ba4c9c": [
+    "Adiciona /",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "d4431efa2d091a92": "Adiciona comandos com barra",
+  "bc6e7ac6a2f9b825": [
+    "Adiciona a skill ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "d87efe64059a553e": "Adiciona skills para agentes",
+  "ac7f46dcd51a8f72": "Adiciona instruções para agentes",
+  "8eb505e4edb02c3d": [
+    "Ainda não suportado:",
+    " ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "950a084c44982330": "Plugins do repositório",
+  "d498c94f29d2ab78": [
+    "Comandos:",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "a43d67c19efe4d8a": [
+    "Skills:",
+    " ",
+    {
+      "t": "span",
+      "i": 1,
+      "c": {
+        "i": 2,
+        "k": "_gt_value_2",
+        "v": "v"
+      }
+    }
+  ],
+  "8d38fbe856f09741": [
+    "Não suportado em plugins do repositório:",
+    " ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "d5b680b57724f530": "Alterado",
+  "aeea775659127285": "Alterado desde que você o ativou",
+  "f96b011498a483b2": "Ativar novamente"
 }

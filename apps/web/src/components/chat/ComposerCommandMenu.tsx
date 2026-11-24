@@ -7,6 +7,7 @@ import {
 import {
   type EnvironmentId,
   type EnvironmentMachineKind,
+  type PluginId,
   type ProjectEntry,
   type ProviderDriverKind,
   type ProviderInstanceId,
@@ -60,6 +61,17 @@ export type ComposerCommandItem =
       type: "provider-slash-command";
       provider: ProviderDriverKind;
       command: ServerProviderSlashCommand;
+      label: string;
+      description: string;
+    }
+  | {
+      id: string;
+      type: "plugin-slash-command";
+      pluginId: PluginId;
+      pluginName: string;
+      commandName: PluginId;
+      invocation: string;
+      argumentHint?: string | undefined;
       label: string;
       description: string;
     }
@@ -275,6 +287,11 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
               <span className="text-secondary-label">/skill:</span>
               {formatProviderSkillDisplayName(isSlashSkill)}
             </>
+          ) : props.item.type === "plugin-slash-command" && props.item.argumentHint ? (
+            <>
+              {props.item.label}{" "}
+              <span className="font-normal text-secondary-label">{props.item.argumentHint}</span>
+            </>
           ) : (
             props.item.label
           )}
@@ -293,6 +310,11 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
           </TooltipTrigger>
           <TooltipPopup>{props.item.description}</TooltipPopup>
         </Tooltip>
+        {props.item.type === "plugin-slash-command" ? (
+          <span className="ms-auto shrink-0 text-xs text-secondary-label">
+            {props.item.pluginName}
+          </span>
+        ) : null}
         {skillSourceKind ? (
           <SkillSourceBadge
             kind={skillSourceKind}
