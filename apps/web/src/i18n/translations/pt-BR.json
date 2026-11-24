@@ -12961,5 +12961,7 @@
   "9df67bcc43a70f4a": "Remover aprovação",
   "c85b10dde0506e4a": "A lista de ferramentas atingiu o limite; apenas as primeiras ferramentas estão expostas.",
   "19f418961c74cfa4": "Hooks (somente threads do Claude)",
-  "ae00a86c28b0a06a": "Servidores MCP e hooks são executados fora do sandbox. Hooks e agentes funcionam em threads do Claude. Aprove apenas plugins em que você confia."
+  "ae00a86c28b0a06a": "Servidores MCP e hooks são executados fora do sandbox. Hooks e agentes funcionam em threads do Claude. Aprove apenas plugins em que você confia.",
+  "fa0c7bb06b656de9": "Plugin: {plugin}: /{invocation}",
+  "f3b5eb7020154056": "Plugin: {plugin}: Abrir {panel}"
 }

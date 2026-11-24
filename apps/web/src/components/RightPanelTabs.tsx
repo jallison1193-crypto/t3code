@@ -75,7 +75,12 @@ import type { RightPanelSurface } from "~/rightPanelStore";
 import { cn } from "~/lib/utils";
 import { issueStatePresentation } from "~/components/issue/issuePresentation";
 import { issueEnvironment } from "~/state/issues";
-import { resolveShortcutCommand, type ShortcutMatchContext } from "~/keybindings";
+import {
+  resolveShortcutCommand,
+  shortcutLabelForCommand,
+  type ShortcutMatchContext,
+} from "~/keybindings";
+import { commandForPluginPanel } from "~/pluginKeybindings";
 import { readLocalApi } from "~/localApi";
 import { useStableCallback } from "~/hooks/useStableCallback";
 import { Button } from "~/components/ui/button";
@@ -359,6 +364,7 @@ function RightPanelEmptyState(props: {
   onAddSideChat?: (() => void) | undefined;
   onAddPluginPanel?: ((pluginId: string, panelId: string) => void) | undefined;
   pluginPanels: readonly PluginPanelLauncherItem[];
+  keybindings: ResolvedKeybindingsConfig;
   browserAvailable: boolean;
   showTerminal?: boolean;
   terminalAvailable: boolean;
@@ -614,19 +620,27 @@ function RightPanelEmptyState(props: {
           {props.onAddPluginPanel && props.pluginPanels.length > 0 ? (
             <>
               <div className="my-1.5 h-px bg-border/60" />
-              {props.pluginPanels.map((panel) => (
-                <button
-                  key={panel.id}
-                  type="button"
-                  onClick={() => props.onAddPluginPanel?.(panel.pluginId, panel.panelId)}
-                  className="flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-(--control-radius) px-2.5 text-left text-sm transition-colors hover:bg-accent/60"
-                >
-                  <span className="relative inline-flex shrink-0">
-                    <Puzzle className="size-4" />
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{panel.title}</span>
-                </button>
-              ))}
+              {props.pluginPanels.map((panel) => {
+                const shortcutLabel = shortcutLabelForCommand(
+                  props.keybindings,
+                  commandForPluginPanel(panel.pluginId, panel.panelId),
+                );
+                return (
+                  <button
+                    key={panel.id}
+                    type="button"
+                    aria-keyshortcuts={shortcutLabel ?? undefined}
+                    onClick={() => props.onAddPluginPanel?.(panel.pluginId, panel.panelId)}
+                    className="flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-(--control-radius) px-2.5 text-left text-sm transition-colors hover:bg-accent/60"
+                  >
+                    <span className="relative inline-flex shrink-0">
+                      <Puzzle className="size-4" />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{panel.title}</span>
+                    {shortcutLabel ? <Kbd>{shortcutLabel}</Kbd> : null}
+                  </button>
+                );
+              })}
             </>
           ) : null}
         </div>
@@ -1187,6 +1201,9 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
   );
   const installedPlugins = pluginsQuery.data?.plugins ?? null;
   const pluginPanels = props.onAddPluginPanel ? pluginPanelLauncherItems(installedPlugins) : [];
+  const pluginKeybindings =
+    (props.environmentId !== null ? configs.get(props.environmentId)?.keybindings : undefined) ??
+    props.keybindings;
   const tabListRef = useRef<HTMLDivElement>(null);
   const addSurfaceTriggerRef = useRef<HTMLButtonElement>(null);
   const [renamingDevice, setRenamingDevice] = useState<string | null>(null);
@@ -1690,15 +1707,23 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                   {props.onAddPluginPanel && pluginPanels.length > 0 ? (
                     <>
                       <MenuSeparator />
-                      {pluginPanels.map((panel) => (
-                        <MenuItem
-                          key={panel.id}
-                          onClick={() => props.onAddPluginPanel?.(panel.pluginId, panel.panelId)}
-                        >
-                          <Puzzle />
-                          <span className="min-w-0 truncate">{panel.title}</span>
-                        </MenuItem>
-                      ))}
+                      {pluginPanels.map((panel) => {
+                        const shortcutLabel = shortcutLabelForCommand(
+                          pluginKeybindings,
+                          commandForPluginPanel(panel.pluginId, panel.panelId),
+                        );
+                        return (
+                          <MenuItem
+                            key={panel.id}
+                            aria-keyshortcuts={shortcutLabel ?? undefined}
+                            onClick={() => props.onAddPluginPanel?.(panel.pluginId, panel.panelId)}
+                          >
+                            <Puzzle />
+                            <span className="min-w-0 truncate">{panel.title}</span>
+                            {shortcutLabel ? <MenuShortcut>{shortcutLabel}</MenuShortcut> : null}
+                          </MenuItem>
+                        );
+                      })}
                     </>
                   ) : null}
                 </MenuPopup>
@@ -1780,6 +1805,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddSideChat={props.onAddSideChat}
             onAddPluginPanel={props.onAddPluginPanel}
             pluginPanels={pluginPanels}
+            keybindings={pluginKeybindings}
             browserAvailable={props.browserAvailable}
             showTerminal={showTerminal}
             terminalAvailable={props.terminalAvailable}

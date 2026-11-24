@@ -124,6 +124,10 @@ A plugin with `panels` in `.t3-plugin/plugin.json` adds tabs you can open in the
 - **Turning off a plugin:** If you disable or uninstall a plugin while its tab is open, the tab shows a message linking to **Settings → Plugins** instead of running the page, and can still be closed.
 - **Building panels with agents:** You can ask an agent to build or edit a panel plugin (for example, a Pomodoro timer or checklist) and install it from the card in chat.
 
+## Keyboard shortcuts
+
+Plugins do not declare default shortcuts. To assign a key to an active plugin's slash command or right-panel tab, open **Settings → Keybindings**, click **Add keybinding**, and pick the plugin command or panel (repo plugin commands appear when scoped to that project). Pressing a command shortcut in a thread inserts `/<command> ` into the composer and focuses it at the end without sending; pressing a panel shortcut opens or focuses that panel tab. Assigned shortcuts also appear as hints in the composer `/` menu and the right-panel launcher. If a plugin is turned off or uninstalled, its bindings stay in `keybindings.json` inactive until the plugin is enabled again, or you can remove them in **Settings → Keybindings**.
+
 ## Workers
 
 A plugin with `worker` in `.t3-plugin/plugin.json` runs background ES module code on the server in its own Node child process locked to the plugin folder and the server-machine folders you grant:

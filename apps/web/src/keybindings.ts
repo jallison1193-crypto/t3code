@@ -20,6 +20,7 @@ import {
 } from "@t3tools/shared/keybindings";
 import { isElectron } from "./env";
 import { isEditableFocused } from "./lib/editableFocus";
+import { isPluginKeybindingCommand } from "./pluginKeybindings";
 import { projectScriptIdFromCommand } from "./projectScripts";
 
 export type { ShortcutModifierStateLike } from "@t3tools/shared/keybindings";
@@ -200,6 +201,10 @@ export function resolveShortcutCommand(
   return null;
 }
 
+function isEnvironmentScopedChatCommand(command: KeybindingCommand): boolean {
+  return projectScriptIdFromCommand(command) !== null || isPluginKeybindingCommand(command);
+}
+
 export function resolveChatShortcutCommand(
   event: ShortcutEventLike,
   primaryKeybindings: ResolvedKeybindingsConfig,
@@ -207,12 +212,12 @@ export function resolveChatShortcutCommand(
   options?: ShortcutMatchOptions,
 ): KeybindingCommand | null {
   const primaryCommand = resolveShortcutCommand(event, primaryKeybindings, options);
-  if (primaryCommand !== null && projectScriptIdFromCommand(primaryCommand) === null) {
+  if (primaryCommand !== null && !isEnvironmentScopedChatCommand(primaryCommand)) {
     return primaryCommand;
   }
 
   const activeCommand = resolveShortcutCommand(event, activeKeybindings, options);
-  return activeCommand !== null && projectScriptIdFromCommand(activeCommand) !== null
+  return activeCommand !== null && isEnvironmentScopedChatCommand(activeCommand)
     ? activeCommand
     : null;
 }

@@ -82,6 +82,7 @@ import {
   type ResponseContextRecord,
   type ChatFileAttachment,
   type EnvironmentId,
+  type EnvironmentPlugin,
   type MessageId,
   type ModelSelection,
   type PreviewAnnotationPayload,
@@ -301,6 +302,11 @@ import {
 } from "../state/entities";
 import { useEnvironmentShellHasSnapshot } from "../state/shell";
 import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
+import {
+  applicableEnvironmentPlugins,
+  resolvePluginSlashCommands,
+} from "./chat/pluginSlashCommands.logic";
+import { pluginCommandFromKeybinding, pluginPanelFromKeybinding } from "../pluginKeybindings";
 import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
 import { ExpandedImageDialogHost, openExpandedImagePreview } from "./chat/ExpandedImageDialog";
 import {
@@ -457,6 +463,7 @@ type ChatViewProps =
     };
 
 const DismissedFallbackWindowSchema = Schema.NullOr(Schema.String);
+const EMPTY_ENVIRONMENT_PLUGINS: ReadonlyArray<EnvironmentPlugin> = [];
 
 const ignoreComposerFocus = () => {};
 
@@ -1781,9 +1788,10 @@ export default function ChatView(props: ChatViewProps) {
   };
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const backgroundThread = use(BackgroundThreadContext);
-  const scriptKeybindings =
-    useAtomValue(serverEnvironment.configValueAtom(environmentId))?.keybindings ??
-    DEFAULT_RESOLVED_KEYBINDINGS;
+  const activeEnvironmentConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
+  const scriptKeybindings = activeEnvironmentConfig?.keybindings ?? DEFAULT_RESOLVED_KEYBINDINGS;
+  const environmentPlugins =
+    activeEnvironmentConfig?.environmentPlugins ?? EMPTY_ENVIRONMENT_PLUGINS;
   const openInEnvironmentId = activeThread?.environmentId ?? environmentId;
   const availableEditors =
     useAtomValue(serverEnvironment.configValueAtom(openInEnvironmentId))?.availableEditors ?? [];
@@ -2995,9 +3003,47 @@ export default function ChatView(props: ChatViewProps) {
     },
     fallback: (command) => {
       const scriptId = projectScriptIdFromCommand(command);
-      if (!scriptId || !activeProject || !canOperateTerminal) return undefined;
-      const script = activeProjectScripts.find((entry) => entry.id === scriptId);
-      return script ? () => void runProjectScriptStable(script) : undefined;
+      if (scriptId) {
+        if (!activeProject || !canOperateTerminal) return undefined;
+        const script = activeProjectScripts.find((entry) => entry.id === scriptId);
+        return script ? () => void runProjectScriptStable(script) : undefined;
+      }
+      const pluginCommand = pluginCommandFromKeybinding(command);
+      if (pluginCommand) {
+        if (!activeThreadRef) return undefined;
+        const resolved = resolvePluginSlashCommands(
+          environmentPlugins,
+          activeProject?.id ?? null,
+        ).find(
+          (entry) =>
+            entry.pluginId === pluginCommand.pluginId &&
+            entry.commandName === pluginCommand.commandName,
+        );
+        if (!resolved) return undefined;
+        return ({ event }) => {
+          if (event.repeat) return;
+          return composerRef.current?.applyPluginCommand(resolved.invocation) ?? false;
+        };
+      }
+      const pluginPanel = pluginPanelFromKeybinding(command);
+      if (pluginPanel) {
+        if (!activeThreadRef) return undefined;
+        const hasPanel = applicableEnvironmentPlugins(
+          environmentPlugins,
+          activeProject?.id ?? null,
+        ).some(
+          (plugin) =>
+            plugin.id === pluginPanel.pluginId &&
+            plugin.panels?.some((panel) => panel.id === pluginPanel.panelId) === true,
+        );
+        if (!hasPanel) return undefined;
+        return ({ event }) => {
+          if (!event.repeat) {
+            openPluginPanelSurfaceStable(pluginPanel.pluginId, pluginPanel.panelId);
+          }
+        };
+      }
+      return undefined;
     },
     isCommandBlocked: showCodingChrome ? undefined : isHiddenChatShortcutInWorkMode,
   });

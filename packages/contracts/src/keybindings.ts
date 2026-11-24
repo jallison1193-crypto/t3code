@@ -127,9 +127,32 @@ export const SCRIPT_RUN_COMMAND_PATTERN = Schema.TemplateLiteral([
   Schema.Literal(".run"),
 ]);
 
+const MAX_PLUGIN_KEYBINDING_SEGMENT_LENGTH = 64;
+
+const PLUGIN_KEYBINDING_SEGMENT = Schema.NonEmptyString.check(
+  Schema.isMaxLength(MAX_PLUGIN_KEYBINDING_SEGMENT_LENGTH),
+  Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+);
+
+export const PLUGIN_COMMAND_PATTERN = Schema.TemplateLiteral([
+  Schema.Literal("plugin."),
+  PLUGIN_KEYBINDING_SEGMENT,
+  Schema.Literal(".command."),
+  PLUGIN_KEYBINDING_SEGMENT,
+]);
+
+export const PLUGIN_PANEL_COMMAND_PATTERN = Schema.TemplateLiteral([
+  Schema.Literal("plugin."),
+  PLUGIN_KEYBINDING_SEGMENT,
+  Schema.Literal(".panel."),
+  PLUGIN_KEYBINDING_SEGMENT,
+]);
+
 export const KeybindingCommand = Schema.Union([
   Schema.Literals(STATIC_KEYBINDING_COMMANDS),
   SCRIPT_RUN_COMMAND_PATTERN,
+  PLUGIN_COMMAND_PATTERN,
+  PLUGIN_PANEL_COMMAND_PATTERN,
 ]);
 export type KeybindingCommand = typeof KeybindingCommand.Type;
 
