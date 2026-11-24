@@ -42,7 +42,7 @@ const PLUGIN_GUIDE = [
   "</script>",
   "```",
   "",
-  'Workers: pass `worker: { code, everyMinutes?, folders?, network? }` (`code` is ESM up to 200,000 characters; `everyMinutes` 5-1440; `folders` 0-4 items `{ id, label, access: "read" | "write" }`; `network` defaults to false). The agent cannot choose folder paths; the user picks server-machine paths in Settings > Plugins. The worker starts after Install (or Approve when powers change) and once all declared folders are set. Your default export receives `t3` with `t3.folders`, `t3.log(...args)` (and `console.*`), `t3.onRun(async ({ reason }) => ...)` (`"start" | "schedule" | "manual"`), `t3.state.get()/set(value)` (global 64 KB JSON), `t3.projects.list()`, and `t3.projects.readMemory(projectId)` (`{ memory, files: [{ name, text }] }`).',
+  'Workers: pass `worker: { code, everyMinutes?, folders?, network? }` (`code` is ESM up to 200,000 characters; `everyMinutes` 5-1440; `folders` 0-4 items `{ id, label, access: "read" | "write" }`; `network` defaults to false). The agent cannot choose folder paths; the user picks server-machine paths in Settings > Plugins. The worker starts after Install (or Approve when powers change) and once all declared folders are set. Your default export receives `t3` with `t3.folders`, `t3.log(...args)` (and `console.*`), `t3.onRun(async ({ reason }) => ...)` (`"start" | "schedule" | "manual"`), `t3.state.get()/set(value)` (global 64 KB JSON), `t3.projects.list()` (`[{ id, title }]`), and `t3.projects.readMemory(projectId)` (`{ memory, files: [{ name, text }] }`, where `files` are the project knowledge files).',
   "",
   "Example (reads project memory, writes into the granted `out` folder, saves state, and logs):",
   "",
