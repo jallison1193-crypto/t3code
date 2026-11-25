@@ -1008,7 +1008,12 @@ export function GeneralSettingsPanel() {
         />
         <SettingsRow
           {...setting("work-mode")}
-          description={<T>Start new threads in Work mode instead of Code mode.</T>}
+          description={
+            <T>
+              Start new threads as Work threads, hide branch, diff, commit, checkpoint, and terminal
+              controls, and open the app home on your most recent project&apos;s home page.
+            </T>
+          }
           resetAction={
             settings.appMode !== DEFAULT_UNIFIED_SETTINGS.appMode ? (
               <SettingResetButton

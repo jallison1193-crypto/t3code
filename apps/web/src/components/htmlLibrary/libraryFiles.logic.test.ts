@@ -148,3 +148,57 @@ it("merges file pages across environments, dedupes older duplicates, and tracks 
   ]);
   expect(libraryFilesView(page2).hasMore).toBe(false);
 });
+
+it("advances past sparse empty file pages until it finds matches or exhausts the stream", async () => {
+  const emptyRead = vi.fn<Parameters<typeof loadLibraryFiles>[2]>();
+  emptyRead
+    .mockResolvedValueOnce({ entries: [], nextCursor: candidate(20, "c1") })
+    .mockResolvedValueOnce({ entries: [], nextCursor: candidate(19, "c2") })
+    .mockResolvedValueOnce({ entries: [], nextCursor: null });
+
+  const exhausted = await loadLibraryFiles(
+    startLibraryFiles([{ environmentId: first }]),
+    "work",
+    emptyRead,
+  );
+  expect(emptyRead).toHaveBeenCalledTimes(3);
+  expect(libraryFilesView(exhausted)).toEqual({
+    entries: [],
+    hasMore: false,
+    unavailable: [],
+  });
+
+  const matchingRead = vi.fn<Parameters<typeof loadLibraryFiles>[2]>();
+  matchingRead
+    .mockResolvedValueOnce({ entries: [], nextCursor: candidate(20, "c1") })
+    .mockResolvedValueOnce({
+      entries: [fileEntry(18, "later", "/work/report.md")],
+      nextCursor: candidate(17, "c2"),
+    });
+
+  const found = await loadLibraryFiles(
+    startLibraryFiles([{ environmentId: first }]),
+    "work",
+    matchingRead,
+  );
+  expect(matchingRead).toHaveBeenCalledTimes(2);
+  expect(libraryFilesView(found)).toMatchObject({
+    entries: [{ fileName: "report.md", environmentId: first }],
+    hasMore: true,
+    unavailable: [],
+  });
+
+  // A stalled cursor terminates instead of looping forever.
+  const stuckCursor = candidate(15, "stuck");
+  const stuckRead = vi.fn<Parameters<typeof loadLibraryFiles>[2]>().mockResolvedValue({
+    entries: [],
+    nextCursor: stuckCursor,
+  });
+  const stuck = await loadLibraryFiles(
+    startLibraryFiles([{ environmentId: first }]),
+    "work",
+    stuckRead,
+  );
+  expect(stuckRead).toHaveBeenCalledTimes(2);
+  expect(libraryFilesView(stuck).hasMore).toBe(false);
+});

@@ -151,7 +151,7 @@ describe("buildProjectsSidebarSections", () => {
     ]);
   });
 
-  it("skips archived and scratch groups in Projects, keeps only working/waiting under projects, and computes collapsed review/waiting badge", () => {
+  it("skips archived and scratch groups in Projects, keeps waiting/review/working under projects so the badge agrees with the expanded list", () => {
     const groups = [
       makeGroup("proj-a", "Alpha", {
         memberProjects: [
@@ -160,6 +160,7 @@ describe("buildProjectsSidebarSections", () => {
         ],
       }),
       makeGroup("proj-review", "ReviewOnly"),
+      makeGroup("proj-idle", "IdleOnly"),
       makeGroup("proj-archived", "ArchivedProject", { archived: true }),
       makeGroup("proj-scratch", "No project", {
         isScratch: true,
@@ -202,6 +203,9 @@ describe("buildProjectsSidebarSections", () => {
         lastVisitedAt: null,
         latestRun: completedRun("2026-04-01T03:00:00.000Z"),
       }),
+      makeThread("i-idle", {
+        projectId: ProjectId.make("proj-idle"),
+      }),
       makeThread("archived-proj-thread", {
         projectId: ProjectId.make("proj-archived"),
       }),
@@ -216,17 +220,28 @@ describe("buildProjectsSidebarSections", () => {
       getServerSettings: emptyServerSettings,
     });
 
-    expect(sections.projects.map((p) => p.group.projectKey)).toEqual(["proj-a", "proj-review"]);
+    expect(sections.projects.map((p) => p.group.projectKey)).toEqual([
+      "proj-a",
+      "proj-review",
+      "proj-idle",
+    ]);
     expect(sections.projects[0]?.activeThreads.map((t) => t.id)).toEqual([
       ThreadId.make("a-waiting"),
+      ThreadId.make("a-review"),
       ThreadId.make("a-working"),
     ]);
     expect(sections.projects[0]?.attentionCount).toBe(2);
     expect(sections.projects[0]?.attentionTone).toBe("waiting");
 
-    expect(sections.projects[1]?.activeThreads).toEqual([]);
+    expect(sections.projects[1]?.activeThreads.map((t) => t.id)).toEqual([
+      ThreadId.make("r-review"),
+    ]);
     expect(sections.projects[1]?.attentionCount).toBe(1);
     expect(sections.projects[1]?.attentionTone).toBe("review");
+
+    expect(sections.projects[2]?.activeThreads).toEqual([]);
+    expect(sections.projects[2]?.attentionCount).toBe(0);
+    expect(sections.projects[2]?.attentionTone).toBeNull();
 
     expect(sections.otherThreads.map((t) => t.id)).toEqual([ThreadId.make("scratch-thread")]);
   });
@@ -375,5 +390,97 @@ describe("buildProjectsSidebarSections mode filtering", () => {
     expect(codeSections.projects[0]?.attentionTone).toBe("waiting");
     expect(codeSections.pinned).toEqual([]);
     expect(codeSections.otherThreads).toEqual([]);
+  });
+
+  it("hides projects with no matching threads under Work and Code except the current route's project, while All shows everything", () => {
+    const groups = [
+      makeGroup("proj-code", "CodeOnly"),
+      makeGroup("proj-work", "WorkOnly"),
+      makeGroup("proj-empty", "Empty"),
+      makeGroup("proj-both", "Both"),
+    ];
+    const threads: ProjectsSidebarThread[] = [
+      makeThread("code-idle", {
+        projectId: ProjectId.make("proj-code"),
+      }),
+      makeThread("work-done", {
+        projectId: ProjectId.make("proj-work"),
+        settledOverride: "settled",
+        tags: ["mode:work"],
+      }),
+      makeThread("both-code", {
+        projectId: ProjectId.make("proj-both"),
+      }),
+      makeThread("both-work", {
+        projectId: ProjectId.make("proj-both"),
+        tags: ["mode:work"],
+      }),
+    ];
+
+    const allSections = buildProjectsSidebarSections({
+      projectGroups: groups,
+      threads,
+      getServerSettings: emptyServerSettings,
+      modeFilter: "all",
+    });
+    expect(allSections.projects.map((p) => p.group.projectKey)).toEqual([
+      "proj-code",
+      "proj-work",
+      "proj-empty",
+      "proj-both",
+    ]);
+
+    const workSections = buildProjectsSidebarSections({
+      projectGroups: groups,
+      threads,
+      getServerSettings: emptyServerSettings,
+      modeFilter: "work",
+    });
+    expect(workSections.projects.map((p) => p.group.projectKey)).toEqual([
+      "proj-work",
+      "proj-both",
+    ]);
+
+    const codeSections = buildProjectsSidebarSections({
+      projectGroups: groups,
+      threads,
+      getServerSettings: emptyServerSettings,
+      modeFilter: "code",
+    });
+    expect(codeSections.projects.map((p) => p.group.projectKey)).toEqual([
+      "proj-code",
+      "proj-both",
+    ]);
+
+    // Current project route stays visible even with no matching threads.
+    const workOnEmptyRoute = buildProjectsSidebarSections({
+      projectGroups: groups,
+      threads,
+      getServerSettings: emptyServerSettings,
+      modeFilter: "work",
+      activeProjectKey: "proj-empty",
+    });
+    expect(workOnEmptyRoute.projects.map((p) => p.group.projectKey)).toEqual([
+      "proj-work",
+      "proj-empty",
+      "proj-both",
+    ]);
+
+    // Current thread route's project also stays visible under an otherwise empty mode filter.
+    const codeOnWorkThread = buildProjectsSidebarSections({
+      projectGroups: groups,
+      threads,
+      getServerSettings: emptyServerSettings,
+      modeFilter: "code",
+      activeThreadProject: {
+        environmentId: ENV_LOCAL,
+        projectId: ProjectId.make("proj-work"),
+      },
+    });
+    expect(codeOnWorkThread.projects.map((p) => p.group.projectKey)).toEqual([
+      "proj-code",
+      "proj-work",
+      "proj-both",
+    ]);
   });
 });

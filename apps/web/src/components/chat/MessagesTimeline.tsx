@@ -18,6 +18,7 @@ import {
   type MessageId,
   type OrchestrationV2TurnItem,
   type RunAttemptId,
+  type ScopedThreadRef,
   type ServerProviderSkill,
   type RunId,
   ThreadId,
@@ -27,6 +28,8 @@ import { resolveWorkGroupScrollAnchor } from "@t3tools/client-runtime/work-log/s
 import type { WorkflowOpening } from "@t3tools/client-runtime/state/subagentRuntime";
 import { observeResize } from "~/lib/observeResize";
 import { useStableCallback } from "~/hooks/useStableCallback";
+import { useQuietThreadShell } from "../../state/entities";
+import { useIsProjectCoordinator } from "../projectHome/CoordinatorHeaderTabs";
 
 const NOOP_USE_ARTIFACT_TEMPLATE = () => {};
 const EMPTY_PENDING_APPROVALS: ReadonlyArray<PendingApproval> = [];
@@ -336,6 +339,50 @@ interface MessagesTimelineProps {
   findQuery?: string;
   activeFindMatch?: ThreadFindMatch | null;
   findNavigationId?: number;
+}
+
+function DefaultEmptyTimelinePlaceholder() {
+  return (
+    <p className="text-sm text-muted-foreground">
+      <T>Send a message to start the conversation.</T>
+    </p>
+  );
+}
+
+function ServerThreadEmptyTimelinePlaceholder({
+  threadRef,
+}: {
+  readonly threadRef: ScopedThreadRef;
+}) {
+  const thread = useQuietThreadShell(threadRef);
+  const isCoordinator = useIsProjectCoordinator(
+    threadRef.environmentId,
+    thread?.projectId,
+    threadRef.threadId,
+  );
+  if (!isCoordinator) {
+    return <DefaultEmptyTimelinePlaceholder />;
+  }
+  return (
+    <div className="max-w-md space-y-1.5 px-4 text-center">
+      <p className="text-sm font-medium text-foreground">
+        <T>Project coordinator</T>
+      </p>
+      <p className="text-sm text-muted-foreground">
+        <T>
+          Describe what you want to work on. The coordinator keeps the plan in project memory, hands
+          tasks to separate threads, and reviews their results as they finish.
+        </T>
+      </p>
+    </div>
+  );
+}
+
+function EmptyTimelinePlaceholder({ threadRef }: { readonly threadRef: ScopedThreadRef | null }) {
+  if (threadRef === null) {
+    return <DefaultEmptyTimelinePlaceholder />;
+  }
+  return <ServerThreadEmptyTimelinePlaceholder threadRef={threadRef} />;
 }
 
 export function MessagesTimeline(props: MessagesTimelineProps) {
@@ -1434,9 +1481,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
           className="flex h-full items-center justify-center ps-(--chat-lane-inset-start) pe-(--chat-lane-inset-end)"
           style={{ paddingBottom: emptyPlaceholderInset }}
         >
-          <p className="text-sm text-muted-foreground">
-            <T>Send a message to start the conversation.</T>
-          </p>
+          <EmptyTimelinePlaceholder threadRef={citationThreadRef} />
         </div>
       </>
     );

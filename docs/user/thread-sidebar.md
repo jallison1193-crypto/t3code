@@ -167,8 +167,9 @@ section is off. Each device keeps its own choice.
 
 Turn on **Settings → General → Projects sidebar** (or run **Switch to projects sidebar** in the
 command palette) to list projects first, with a **Needs you** section at the top for threads
-waiting on approvals or input, expandable active threads under each project, **Pinned**, and up
-to 10 **Other threads** outside your project groups. Each device keeps its own choice.
+waiting on approvals or input, expandable working, waiting, and ready-for-review threads under each
+project (and an **Open Threads** link when a project has none), **Pinned**, and up to 10 **Other
+threads** outside your project groups. Each device keeps its own choice.
 
 Use **New thread folder** beside **Thread folders** to group conversations across projects and
 connected servers. In a thread’s menu or in the command palette, choose **Change thread folder**.
@@ -188,22 +189,24 @@ Threads are either **Code** threads (the default) or **Work** threads. Turn on
 **Settings → General → Work mode** (or run **Switch to Work mode** / **Switch to Code mode** in
 the command palette) so new threads start as Work threads. Existing threads keep their tags.
 
-While Work mode is active, the chat hides coding controls (diffs, terminal drawers and terminal
-tabs, branch and worktree controls, and checkpoint restore or diff actions, along with their
-keyboard shortcuts) regardless of the sidebar filter or the opened thread's tag. Switching back
-to Code mode restores those controls with your running terminals, checkpoints, drafts, and saved
-panel tabs intact. Noncoding panels, including threads opened beside a coordinator, stay available
-in both modes.
+While Work mode is active, the sidebar header shows a **Work mode** indicator with a one-click
+**Switch to Code** button, and the chat hides coding controls (diffs, terminal drawers and terminal
+tabs, branch, worktree, and commit controls, and checkpoint restore or diff actions, along with
+their keyboard shortcuts) regardless of the sidebar filter or the opened thread's tag. Switching
+back to Code mode restores those controls with your running terminals, checkpoints, drafts, and
+saved panel tabs intact. Noncoding panels, including threads opened beside a coordinator, stay
+available in both modes.
 
 Opening the app home in Work mode switches to the Projects sidebar and opens your most recent
 active project's home (including non-Git folders), leaving the sidebar's **All / Code / Work**
 filter unchanged. Direct links to a thread, project, or Settings stay where you opened them, and
 switching between Work mode and Code mode keeps your current thread and draft open.
 
-In the Projects sidebar, use the **All / Code / Work** filter below Search to show all threads,
-only Code threads, or only Work threads in **Thread folders**, **Projects**, **Pinned**, and
-**Other threads**.
-**Needs you** always shows every waiting thread regardless of the filter.
+In both sidebars, use the **All / Code / Work** filter (plus **Bots** when Bots are enabled) below
+Search to show all threads, only Code threads, only Work threads, or your Bots. In the Projects
+sidebar, **Code** and **Work** hide projects that have no threads in that mode, except the project
+you currently have open, while **Needs you** always shows every waiting thread regardless of the
+filter.
 
 To reclassify an existing thread, open its menu and choose **Move to Work** or **Move to Code**.
 

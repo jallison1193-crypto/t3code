@@ -11,7 +11,11 @@ import { memo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
 import { useAtomValue } from "@effect/atom-react";
-import { useClientSettings, useEnvironmentIdentificationMode } from "../../hooks/useSettings";
+import {
+  persistClientSettingsPatch,
+  useClientSettings,
+  useEnvironmentIdentificationMode,
+} from "../../hooks/useSettings";
 import { shortcutLabelForCommand } from "../../keybindings";
 import {
   navigateHistory,
@@ -105,10 +109,41 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
           ) : null}
         </div>
       </div>
+      <WorkModeIndicator />
       <WorkLibraryLink />
     </>
   );
 });
+
+function WorkModeIndicator() {
+  const gt = useGT();
+  const workMode = useClientSettings((settings) => settings.appMode === "work");
+  if (!workMode) return null;
+  return (
+    <div
+      data-testid="work-mode-indicator"
+      className="mx-(--sidebar-content-inset) mb-1 flex shrink-0 items-center justify-between gap-2 rounded-(--control-radius) border border-sidebar-border/80 bg-sidebar-control-surface px-2 py-1 text-xs"
+    >
+      <span className="truncate font-medium text-sidebar-foreground">
+        <T>Work mode</T>
+      </span>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              size="micro"
+              variant="ghost-muted"
+              onClick={() => void persistClientSettingsPatch({ appMode: "code" })}
+            >
+              <T>Switch to Code</T>
+            </Button>
+          }
+        />
+        <TooltipPopup side="right">{gt("Switch to Code mode")}</TooltipPopup>
+      </Tooltip>
+    </div>
+  );
+}
 
 function WorkLibraryLink() {
   const workMode = useClientSettings((settings) => settings.appMode === "work");
@@ -128,7 +163,7 @@ function WorkLibraryLink() {
           >
             <LibraryIcon />
             <span>
-              <T>HTML Library</T>
+              <T>Library</T>
             </span>
           </SidebarMenuButton>
         </SidebarMenuItem>
@@ -357,7 +392,7 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
       {!workMode ? (
         <SidebarUtilityItem
           icon={<LibraryIcon />}
-          label={gt("HTML Library")}
+          label={gt("Library")}
           onClick={() => {
             closeMobileSidebar();
             void navigate({ to: "/library" });

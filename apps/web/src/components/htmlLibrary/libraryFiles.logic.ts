@@ -129,7 +129,14 @@ export function libraryFilesView(pages: LibraryFilesPages) {
   };
 }
 
-export async function loadLibraryFiles(
+const MAX_EMPTY_FILE_SEARCH_BATCHES = 5;
+
+function sameCursor(a: Cursor | null | undefined, b: Cursor | null | undefined): boolean {
+  if (a == null || b == null) return a === b;
+  return a.updatedAt === b.updatedAt && a.itemId === b.itemId;
+}
+
+async function loadLibraryFilesBatch(
   pages: LibraryFilesPages,
   mode: SidebarModeFilter,
   readPage: (
@@ -146,8 +153,9 @@ export async function loadLibraryFiles(
           ...(stream.projectIds === undefined ? {} : { projectIds: stream.projectIds }),
           ...(stream.cursor === undefined ? {} : { cursor: stream.cursor }),
         });
+        const nextCursor = sameCursor(stream.cursor, page.nextCursor) ? null : page.nextCursor;
         return {
-          stream: { ...stream, cursor: page.nextCursor },
+          stream: { ...stream, cursor: nextCursor },
           entries: page.entries.map((entry) => ({ ...entry, environmentId: stream.environmentId })),
         };
       } catch {
@@ -169,4 +177,28 @@ export async function loadLibraryFiles(
       return true;
     }),
   };
+}
+
+export async function loadLibraryFiles(
+  pages: LibraryFilesPages,
+  mode: SidebarModeFilter,
+  readPage: (
+    environmentId: EnvironmentId,
+    input: OrchestrationV2ListLibraryFilesInput,
+  ) => Promise<OrchestrationV2ListLibraryFilesResult>,
+  options?: {
+    readonly maxEmptyBatches?: number;
+    readonly signal?: AbortSignal;
+  },
+): Promise<LibraryFilesPages> {
+  const maxBatches = Math.max(1, options?.maxEmptyBatches ?? MAX_EMPTY_FILE_SEARCH_BATCHES);
+  const initialVisibleCount = libraryFilesView(pages).entries.length;
+  let current = pages;
+  for (let batch = 0; batch < maxBatches; batch++) {
+    if (options?.signal?.aborted) break;
+    current = await loadLibraryFilesBatch(current, mode, readPage);
+    const view = libraryFilesView(current);
+    if (view.entries.length > initialVisibleCount || !view.hasMore) break;
+  }
+  return current;
 }
