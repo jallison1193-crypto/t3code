@@ -74,6 +74,7 @@ import {
   MessageSquareDashedIcon,
   LinkIcon,
   MessageSquareIcon,
+  MousePointerClickIcon,
   PaletteIcon,
   RotateCcwIcon,
   SettingsIcon,
@@ -1574,6 +1575,20 @@ function OpenCommandPaletteDialog(props: {
       shortcutCommand: "thread.openCompanionWindow",
       run: async () => {
         openCompanionWindow(threadRef);
+      },
+    });
+  }
+
+  if (canOpenCompanionWindow(companionWindowEnabled)) {
+    actionItems.push({
+      kind: "action",
+      value: "action:toggle-companion-click-through",
+      searchTerms: ["companion", "click through", "ghost", "transparent", "computer use"],
+      title: gt("Toggle companion click-through"),
+      icon: <MousePointerClickIcon className={ITEM_ICON_CLASS} />,
+      shortcutCommand: "companionWindow.toggleClickThrough",
+      run: async () => {
+        await window.desktopBridge?.companion?.toggleClickThrough();
       },
     });
   }

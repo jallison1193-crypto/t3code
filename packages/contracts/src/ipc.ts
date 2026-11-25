@@ -11,7 +11,7 @@ import type {
 } from "./browserImport.ts";
 import { AuthAccessTokenResult, AuthSessionState } from "./auth.ts";
 import { AdvertisedEndpoint } from "./remoteAccess.ts";
-import { ExecutionEnvironmentDescriptor, type ScopedThreadRef } from "./environment.ts";
+import { ExecutionEnvironmentDescriptor, ScopedThreadRef } from "./environment.ts";
 import { type ClientSettings, type QuitConfirmationMode, SnapShotShortcut } from "./settings.ts";
 import type { EditorId } from "./editor.ts";
 import { KeybindingShortcut, type PreviewForwardedShortcut } from "./keybindings.ts";
@@ -1104,6 +1104,13 @@ export const DesktopAppleSpeechTranscribeInputSchema = Schema.Struct({
 export const SystemSettingsPaneSchema = Schema.Literals(["full-disk-access"]);
 export type SystemSettingsPane = typeof SystemSettingsPaneSchema.Type;
 
+export const DesktopCompanionComputerUse = Schema.Struct({
+  thread: ScopedThreadRef,
+  /** The thread has a request for the user, who has to be able to click. */
+  waitingOnUser: Schema.Boolean,
+});
+export type DesktopCompanionComputerUse = typeof DesktopCompanionComputerUse.Type;
+
 /** The small window that follows one thread. Absent on hosts without it. */
 export interface DesktopCompanionBridge {
   /** Opens the window on `thread`, or moves the open one to it. Does nothing when turned off. */
@@ -1113,6 +1120,10 @@ export interface DesktopCompanionBridge {
   /** Raises the main window on `thread`. */
   openInMain: (thread: ScopedThreadRef) => Promise<void>;
   onShowThread: (listener: (thread: ScopedThreadRef) => void) => () => void;
+  /** Which of this computer's threads is using the computer, or null when none is. */
+  setComputerUse: (computerUse: DesktopCompanionComputerUse | null) => Promise<void>;
+  /** Lets clicks pass through the window, or stops them, until the next computer use. */
+  toggleClickThrough: () => Promise<void>;
 }
 
 export interface DesktopBridge {

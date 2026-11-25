@@ -661,6 +661,11 @@ export const ClientSettingsSchema = Schema.Struct({
   companionWindowSize: CompanionWindowSize.pipe(
     Schema.withDecodingDefault(Effect.succeed("medium" as const)),
   ),
+  companionWindowAutoOpen: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  companionWindowAutoHide: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  companionWindowClickThrough: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(true)),
+  ),
   wordWrap: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   // Opt-in TeX typesetting in rendered Markdown. Off keeps math parsing and
   // KaTeX out of the render path entirely.
@@ -2308,6 +2313,9 @@ export const ClientSettingsPatch = Schema.Struct({
   companionWindowAlwaysOnTop: Schema.optionalKey(Schema.Boolean),
   companionWindowPosition: Schema.optionalKey(CompanionWindowPosition),
   companionWindowSize: Schema.optionalKey(CompanionWindowSize),
+  companionWindowAutoOpen: Schema.optionalKey(Schema.Boolean),
+  companionWindowAutoHide: Schema.optionalKey(Schema.Boolean),
+  companionWindowClickThrough: Schema.optionalKey(Schema.Boolean),
   wordWrap: Schema.optionalKey(Schema.Boolean),
   mathRenderingEnabled: Schema.optionalKey(Schema.Boolean),
 });

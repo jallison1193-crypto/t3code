@@ -34,6 +34,21 @@ export const COMPUTER_USE_TOOL_SOURCE = {
   kind: "computer",
 } as const;
 
+// `server.tool` is spelled `mcp__server__tool` (Claude, Cursor), `server.tool` (Codex, ACP) or
+// `server_tool` (OpenCode).
+const COMPUTER_USE_TOOL_NAME =
+  /^(?:computer$|(?:mcp__)?(?:computer[-_]use|cua_repl)(?:__|[._])|(?:mcp__)?remote-devices(?:__|[._])computer)/u;
+
+/** Whether a tool call drives the computer's screen, mouse or keyboard. */
+export function isComputerUseTool(activity: {
+  readonly toolName?: string | null | undefined;
+  readonly toolSource?: { readonly kind: string } | undefined;
+}): boolean {
+  return (
+    activity.toolSource?.kind === "computer" || COMPUTER_USE_TOOL_NAME.test(activity.toolName ?? "")
+  );
+}
+
 export function dynamicToolSurface(toolName: string | null | undefined, input: unknown) {
   if (toolName === "cua_repl.js") return "computer" as const;
   const code = asRecord(input)?.code;

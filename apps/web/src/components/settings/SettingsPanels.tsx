@@ -649,6 +649,16 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.companionWindowSize !== DEFAULT_UNIFIED_SETTINGS.companionWindowSize
       ? [gt("Window size")]
       : []),
+    ...(settings.companionWindowAutoOpen !== DEFAULT_UNIFIED_SETTINGS.companionWindowAutoOpen
+      ? [gt("Open during computer use")]
+      : []),
+    ...(settings.companionWindowAutoHide !== DEFAULT_UNIFIED_SETTINGS.companionWindowAutoHide
+      ? [gt("Hide after computer use")]
+      : []),
+    ...(settings.companionWindowClickThrough !==
+    DEFAULT_UNIFIED_SETTINGS.companionWindowClickThrough
+      ? [gt("Click-through during computer use")]
+      : []),
     ...(isTextGenerationModelDirty ? [gt("Text generation model")] : []),
     ...(settings.threadTitleInstructions !== DEFAULT_UNIFIED_SETTINGS.threadTitleInstructions
       ? [gt("Thread title instructions")]
@@ -771,6 +781,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       companionWindowAlwaysOnTop: DEFAULT_UNIFIED_SETTINGS.companionWindowAlwaysOnTop,
       companionWindowPosition: DEFAULT_UNIFIED_SETTINGS.companionWindowPosition,
       companionWindowSize: DEFAULT_UNIFIED_SETTINGS.companionWindowSize,
+      companionWindowAutoOpen: DEFAULT_UNIFIED_SETTINGS.companionWindowAutoOpen,
+      companionWindowAutoHide: DEFAULT_UNIFIED_SETTINGS.companionWindowAutoHide,
+      companionWindowClickThrough: DEFAULT_UNIFIED_SETTINGS.companionWindowClickThrough,
       textGenerationModelSelection: DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
       threadTitleInstructions: DEFAULT_UNIFIED_SETTINGS.threadTitleInstructions,
       fontFamilySans: DEFAULT_UNIFIED_SETTINGS.fontFamilySans,

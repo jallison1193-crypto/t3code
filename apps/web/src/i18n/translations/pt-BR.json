@@ -13106,5 +13106,22 @@
   "f5e072d714be38ce": "mini flutuante pequena seguir thread uso do computador",
   "0ca9f7f6995e6820": "janela complementar acima de outras janelas fixar flutuar",
   "e11f9eed554b0966": "janela complementar canto lado esquerda direita inferior",
-  "82ff774acc131b6e": "janela complementar pequena média grande bolha"
+  "82ff774acc131b6e": "janela complementar pequena média grande bolha",
+  "bf0e8c8648ca1c4b": "Alternar cliques através da janela complementar",
+  "9fe41a4ab51547a3": "Redefinir «abrir durante o uso do computador» para o padrão",
+  "d7cfe867a57690a8": "Abrir a janela complementar durante o uso do computador",
+  "9d57d7718ef1ca76": "Redefinir «ocultar após o uso do computador» para o padrão",
+  "56f39513476c0df4": "Ocultar a janela complementar após o uso do computador",
+  "ecaeeb39f13d5dfb": "Redefinir «cliques através durante o uso do computador» para o padrão",
+  "6a9987690209384c": "Clicar através da janela complementar durante o uso do computador",
+  "28e4f6483f3e2667": "Abre na thread cujo agente está usando este computador, sem tirar o foco.",
+  "d36cd4f56825ab1f": "Fecha alguns segundos depois que o agente para, se ela abriu sozinha.",
+  "56b261727a702a0d": "Os cliques passam por ela até o app de baixo enquanto um agente usa o computador.",
+  "d5ecb8014b3dd00a": "Janela complementar: alternar cliques através",
+  "45e7407f6f7fa909": "Abrir durante o uso do computador",
+  "328982d0828d5a38": "Ocultar após o uso do computador",
+  "21fa71719e873654": "Cliques através durante o uso do computador",
+  "031263628128f352": "janela complementar automática abrir mostrar uso do computador agente",
+  "79b504a21a34200d": "janela complementar automática ocultar fechar uso do computador agente",
+  "c511f3b80dd427b1": "janela complementar fantasma transparente cliques atravessam uso do computador"
 }

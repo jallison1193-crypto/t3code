@@ -13117,5 +13117,22 @@
   "f5e072d714be38ce": "mini floating small follow thread computer use",
   "0ca9f7f6995e6820": "companion window above other windows pin float",
   "e11f9eed554b0966": "companion window corner side left right bottom",
-  "82ff774acc131b6e": "companion window small medium large bubble"
+  "82ff774acc131b6e": "companion window small medium large bubble",
+  "bf0e8c8648ca1c4b": "Toggle companion click-through",
+  "9fe41a4ab51547a3": "Reset open during computer use to default",
+  "d7cfe867a57690a8": "Open the companion window during computer use",
+  "9d57d7718ef1ca76": "Reset hide after computer use to default",
+  "56f39513476c0df4": "Hide the companion window after computer use",
+  "ecaeeb39f13d5dfb": "Reset click-through during computer use to default",
+  "6a9987690209384c": "Click through the companion window during computer use",
+  "28e4f6483f3e2667": "Opens it on the thread whose agent is using this computer, without taking focus.",
+  "d36cd4f56825ab1f": "Closes it a few seconds after the agent stops, if it opened by itself.",
+  "56b261727a702a0d": "Clicks pass through it to the app underneath while an agent uses the computer.",
+  "d5ecb8014b3dd00a": "Companion Window: Toggle Click-Through",
+  "45e7407f6f7fa909": "Open during computer use",
+  "328982d0828d5a38": "Hide after computer use",
+  "21fa71719e873654": "Click-through during computer use",
+  "031263628128f352": "companion window automatic open show computer use agent",
+  "79b504a21a34200d": "companion window automatic hide close computer use agent",
+  "c511f3b80dd427b1": "companion window ghost transparent clicks pass through computer use"
 }

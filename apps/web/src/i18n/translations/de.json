@@ -13108,5 +13108,22 @@
   "f5e072d714be38ce": "mini schwebend klein folgen thread computersteuerung",
   "0ca9f7f6995e6820": "begleitfenster vordergrund über anderen fenstern anheften schweben",
   "e11f9eed554b0966": "begleitfenster ecke seite links rechts unten",
-  "82ff774acc131b6e": "begleitfenster klein mittel groß blase"
+  "82ff774acc131b6e": "begleitfenster klein mittel groß blase",
+  "bf0e8c8648ca1c4b": "Klickdurchlässigkeit des Begleitfensters umschalten",
+  "9fe41a4ab51547a3": "„Bei Computersteuerung öffnen“ auf Standard zurücksetzen",
+  "d7cfe867a57690a8": "Begleitfenster bei Computersteuerung öffnen",
+  "9d57d7718ef1ca76": "„Nach Computersteuerung ausblenden“ auf Standard zurücksetzen",
+  "56f39513476c0df4": "Begleitfenster nach Computersteuerung ausblenden",
+  "ecaeeb39f13d5dfb": "„Bei Computersteuerung durchklicken“ auf Standard zurücksetzen",
+  "6a9987690209384c": "Bei Computersteuerung durch das Begleitfenster klicken",
+  "28e4f6483f3e2667": "Öffnet es bei dem Thread, dessen Agent diesen Computer steuert, ohne den Fokus zu übernehmen.",
+  "d36cd4f56825ab1f": "Schließt es einige Sekunden nachdem der Agent fertig ist, wenn es sich selbst geöffnet hat.",
+  "56b261727a702a0d": "Klicks gehen durch das Fenster an die App darunter, während ein Agent den Computer steuert.",
+  "d5ecb8014b3dd00a": "Begleitfenster: Klickdurchlässigkeit umschalten",
+  "45e7407f6f7fa909": "Bei Computersteuerung öffnen",
+  "328982d0828d5a38": "Nach Computersteuerung ausblenden",
+  "21fa71719e873654": "Bei Computersteuerung durchklicken",
+  "031263628128f352": "Begleitfenster automatisch öffnen anzeigen Computersteuerung Agent",
+  "79b504a21a34200d": "Begleitfenster automatisch ausblenden schließen Computersteuerung Agent",
+  "c511f3b80dd427b1": "Begleitfenster Geist transparent Klicks durchlassen Computersteuerung"
 }

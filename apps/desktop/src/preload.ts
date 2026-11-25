@@ -197,6 +197,10 @@ contextBridge.exposeInMainWorld("desktopBridge", {
         ipcRenderer.removeListener(IpcChannels.COMPANION_SHOW_THREAD_CHANNEL, wrappedListener);
       };
     },
+    setComputerUse: (computerUse) =>
+      ipcRenderer.invoke(IpcChannels.COMPANION_COMPUTER_USE_CHANNEL, computerUse),
+    toggleClickThrough: () =>
+      ipcRenderer.invoke(IpcChannels.COMPANION_TOGGLE_CLICK_THROUGH_CHANNEL),
   },
   requestSnapShotPermissions: (includeAccessibility) =>
     ipcRenderer.invoke(IpcChannels.REQUEST_SNAP_SHOT_PERMISSIONS_CHANNEL, includeAccessibility),

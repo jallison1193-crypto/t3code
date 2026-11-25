@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { classifyToolActivity, dynamicToolSurface, mergeToolActivityData } from "./toolActivity.ts";
+import {
+  classifyToolActivity,
+  dynamicToolSurface,
+  isComputerUseTool,
+  mergeToolActivityData,
+} from "./toolActivity.ts";
 
 describe("toolActivity", () => {
   it("classifies from kind and toolName without sniffing titles", () => {
@@ -44,5 +49,28 @@ describe("toolActivity", () => {
       expect(dynamicToolSurface(name, { code: "await fs.readFile(path);" })).toBeUndefined();
     }
     expect(dynamicToolSurface("github.js", { code: "await sky.click(app);" })).toBeUndefined();
+  });
+
+  it.each([
+    [{ toolName: "mcp__computer-use__screenshot" }, true],
+    [{ toolName: "mcp__remote-devices__computer_batch" }, true],
+    [{ toolName: "computer" }, true],
+    [{ toolName: "cua_repl.js" }, true],
+    [{ toolName: "mcp__cua_repl__js" }, true],
+    [{ toolName: "computer-use.screenshot" }, true],
+    [{ toolName: "computer-use_screenshot" }, true],
+    [{ toolName: "computer_use.click" }, true],
+    [{ toolName: "remote-devices.computer_screenshot" }, true],
+    [{ toolName: "chrome.click", toolSource: { kind: "computer" } }, true],
+    [{ toolName: "mcp__remote-devices__list_devices" }, false],
+    [{ toolName: "mcp__github__computer_search" }, false],
+    [{ toolName: "computer_vision.describe" }, false],
+    [{ toolName: "computer-user.lookup" }, false],
+    [{ toolName: "mcp__playwright__browser_click", toolSource: { kind: "browser" } }, false],
+    [{ toolName: "Bash" }, false],
+    [{ toolName: null }, false],
+    [{}, false],
+  ])("reads %j as computer use: %s", (activity, expected) => {
+    expect(isComputerUseTool(activity)).toBe(expected);
   });
 });
