@@ -311,14 +311,21 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   return (
     <SidebarMenu className="flex-row items-center">
       {isOnUtilityPage ? (
-        <SidebarMenuItem className="min-w-0 flex-1">
-          <SidebarMenuButton onClick={handleBackClick}>
-            <ArrowLeftIcon />
-            <span>
-              <T>Back</T>
-            </span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
+        <>
+          <SidebarMenuItem className="min-w-0 flex-1">
+            <SidebarMenuButton onClick={handleBackClick}>
+              <ArrowLeftIcon />
+              <span>
+                <T>Back</T>
+              </span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarUtilityItem
+            icon={<SettingsIcon />}
+            label={gt("Settings")}
+            onClick={handleSettingsClick}
+          />
+        </>
       ) : (
         <>
           <SidebarUtilityItem
