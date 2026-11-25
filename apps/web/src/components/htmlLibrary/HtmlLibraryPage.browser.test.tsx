@@ -148,14 +148,9 @@ it("loads on opening, keeps partial results, and resolves the preview on its sou
   await expect
     .element(screen.getByRole("button", { name: "Work", exact: true }))
     .toHaveAttribute("aria-pressed", "true");
-  expect(getClientSettings()).toMatchObject({ appMode: "code", sidebarModeFilter: "work" });
-  await expect
-    .element(
-      screen.getByText(
-        "Nothing here yet in available environments. Ask an agent for a visual page, report, or file and it shows up here.",
-      ),
-    )
-    .toBeVisible();
+  // The Library's filter is its own: the sidebar's stays where it was.
+  expect(getClientSettings()).toMatchObject({ appMode: "code", sidebarModeFilter: "all" });
+  await expect.element(screen.getByText("Nothing matches this filter")).toBeVisible();
   expect(mocks.read.mock.calls.slice(5).map(([target]) => target.input)).toEqual([
     { mode: "work" },
     { mode: "work" },
@@ -267,7 +262,7 @@ it("pins and unpins a page into the Pinned section and hides it from the recent 
   expect(screen.getByRole("button", { name: /Architecture diagram/ }).elements()).toHaveLength(1);
 });
 
-it("switches to Files via URL search param, hides Open outside workspace, and opens workspace files in the source thread", async () => {
+it("switches to Files via URL search param and opens workspace files in the source thread", async () => {
   using _settings = setup();
   mocks.read.mockImplementation(async ({ environmentId }) => {
     if (environmentId !== remote) {
@@ -321,12 +316,11 @@ it("switches to Files via URL search param, hides Open outside workspace, and op
   await expect.element(screen.getByText("scratch.txt")).toBeVisible();
   expect(screen.router?.state.location.searchStr).toBe("?view=files");
 
-  expect(screen.getByRole("button", { name: "Open", exact: true }).elements()).toHaveLength(1);
-  const threadLinks = screen.getByRole("link", { name: "Show thread" }).elements();
+  const threadLinks = screen.getByRole("link", { name: "Open source thread" }).elements();
   expect(threadLinks).toHaveLength(2);
   expect(threadLinks[0]?.getAttribute("href")).toBe("/remote/thread-budget");
 
-  await userEvent.click(screen.getByRole("button", { name: "Open", exact: true }));
+  await userEvent.click(screen.getByRole("button", { name: /q4\.xlsx/ }));
   expect(openFileSpy).toHaveBeenCalledWith(
     { environmentId: remote, threadId: ThreadId.make("thread-budget") },
     "reports/q4.xlsx",

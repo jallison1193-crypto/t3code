@@ -93,5 +93,6 @@ describe("sidebarMode.logic", () => {
     expect(filterThreadSidebarThreads(threads, "code")).toEqual([codeThread, untaggedThread]);
     expect(filterThreadSidebarThreads(threads, "work")).toEqual([workThread]);
     expect(filterThreadSidebarThreads(threads, "bots")).toEqual([]);
+    expect(filterThreadSidebarThreads(threads, "bots", true)).toBe(threads);
   });
 });

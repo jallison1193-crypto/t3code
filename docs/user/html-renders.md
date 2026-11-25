@@ -16,7 +16,7 @@ On web and desktop, open **Library** from the sidebar to find pages across your 
 
 Select a page to open it full screen, or use **Open source thread** to return to the conversation. From a page's menu, you can pin it to the top of the library, rename it (leave the name blank to restore the original title), or choose **Ask for changes** (also available in the full-screen preview) to open its source thread with a draft prompt ready to edit. When the library shows **Load more**, it can still find pages further back. A notice lists environments it could not search. Agents can also list, pin, unpin, and rename pages in the library.
 
-Switch to **Files** to browse files threads wrote or edited, newest first, across the same mode and project filters. Use **Open** to view a workspace file in its source thread's file viewer, or **Show thread** to jump to the conversation.
+Switch to **Files** to browse files threads wrote or edited, newest first, across the same mode and project filters. Select a file to view it in its source thread's file viewer (a file outside the workspace opens the thread instead), or use **Open source thread** to jump to the conversation.
 
 ## MCP apps
 

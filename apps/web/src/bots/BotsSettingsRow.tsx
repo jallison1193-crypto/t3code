@@ -67,8 +67,8 @@ export function BotsSettingsRow() {
       {...setting("bots-enabled")}
       description={
         <T>
-          Show Bots in the sidebar and run their triggers. Turning this off pauses every bot trigger
-          without deleting bots.
+          Show Bots in the sidebar and run their triggers, on all connected environments. Turning
+          this off pauses every bot trigger without deleting bots.
         </T>
       }
       status={mixed ? gt("Mixed across connected environments") : undefined}

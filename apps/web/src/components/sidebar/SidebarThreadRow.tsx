@@ -42,7 +42,7 @@ import {
   AlarmClockIcon,
   AlarmClockOffIcon,
   ArrowRightLeftIcon,
-  BotIcon,
+  NetworkIcon,
   CheckIcon,
   CircleAlertIcon,
   CircleCheckIcon,
@@ -1271,7 +1271,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
           />
         }
       >
-        <BotIcon aria-hidden className="size-3 shrink-0" />
+        <NetworkIcon aria-hidden className="size-3 shrink-0" />
       </TooltipTrigger>
       <TooltipPopup>{gt("Project coordinator")}</TooltipPopup>
     </Tooltip>

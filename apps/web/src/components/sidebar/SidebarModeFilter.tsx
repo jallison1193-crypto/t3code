@@ -16,18 +16,15 @@ const BOTS_OPTION = { value: "bots", label: msg("Bots") } as const;
 
 export function SidebarModeFilter({
   label,
-  includeBots = true,
   activeMode,
   onModeSelect,
 }: {
   readonly label: string;
-  readonly includeBots?: boolean;
   readonly activeMode?: SidebarModeFilterValue;
   readonly onModeSelect?: (mode: SidebarModeFilterValue) => void;
 }) {
   const m = useMessages();
-  const botsEnabled = useAnyBotsEnabled();
-  const showBots = includeBots && botsEnabled;
+  const showBots = useAnyBotsEnabled();
   const options = showBots ? [...BASE_OPTIONS, BOTS_OPTION] : BASE_OPTIONS;
   const savedMode = useClientSettings((settings) => settings.sidebarModeFilter);
   const effectiveMode = resolveSidebarModeFilter(activeMode ?? savedMode, showBots);

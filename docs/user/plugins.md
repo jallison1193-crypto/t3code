@@ -139,7 +139,7 @@ A plugin with `worker` in `.t3-plugin/plugin.json` runs background ES module cod
 
 ## Enabling, editing, and uninstalling
 
-New plugins start **off**. Open **Settings → Plugins** to turn each plugin on or off, or use the **Plugins** switch at the top of **Settings → Plugins** to turn all user and repo plugins off or back on for that environment without uninstalling them.
+New plugins start **off**. Open **Settings → Plugins** to turn each plugin on or off, or use the **Run plugins** switch at the top of **Settings → Plugins** to turn all user and repo plugins off or back on for that environment without uninstalling them.
 
 - Turning **Plugins** off stops every active user and repo plugin on that environment (CSS, panels, slash commands, skills, instructions, workers, MCP servers, hooks, and agents) while keeping your installed plugins and their individual toggles intact. Turn **Plugins** back on to restore them.
 - Enabling or disabling a plugin applies live in every connected web and desktop client of that environment.

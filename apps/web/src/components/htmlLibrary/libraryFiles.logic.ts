@@ -15,6 +15,9 @@ import type { Source } from "./htmlLibraryPages";
 
 export type LibraryView = "pages" | "files";
 
+/** The Library's own All/Code/Work filter, kept in the URL so it never moves the sidebar's. */
+export type LibraryMode = "all" | "code" | "work";
+
 type Cursor = NonNullable<OrchestrationV2ListLibraryFilesInput["cursor"]>;
 
 export type LibraryFileEntry = OrchestrationV2ListLibraryFilesResult["entries"][number] & {
@@ -46,20 +49,45 @@ export function libraryViewFromSearch(search: string | Record<string, unknown>):
   return search.view === "files" ? "files" : "pages";
 }
 
+export function libraryModeFromSearch(search: string): LibraryMode {
+  const mode = new URLSearchParams(search).get("mode");
+  return mode === "code" || mode === "work" ? mode : "all";
+}
+
+// A null value removes the param, so each default keeps a clean URL.
+function libraryUrlWithParam(
+  pathname: string,
+  searchStr: string,
+  hash: string,
+  name: string,
+  value: string | null,
+): string {
+  const params = new URLSearchParams(searchStr);
+  if (value === null) {
+    params.delete(name);
+  } else {
+    params.set(name, value);
+  }
+  const query = params.toString();
+  return `${pathname}${query.length > 0 ? `?${query}` : ""}${hash}`;
+}
+
 export function libraryUrlWithView(
   pathname: string,
   searchStr: string,
   hash: string,
   view: LibraryView,
 ): string {
-  const params = new URLSearchParams(searchStr);
-  if (view === "files") {
-    params.set("view", "files");
-  } else {
-    params.delete("view");
-  }
-  const query = params.toString();
-  return `${pathname}${query.length > 0 ? `?${query}` : ""}${hash}`;
+  return libraryUrlWithParam(pathname, searchStr, hash, "view", view === "files" ? view : null);
+}
+
+export function libraryUrlWithMode(
+  pathname: string,
+  searchStr: string,
+  hash: string,
+  mode: LibraryMode,
+): string {
+  return libraryUrlWithParam(pathname, searchStr, hash, "mode", mode === "all" ? null : mode);
 }
 
 export function libraryFileEntryKey(

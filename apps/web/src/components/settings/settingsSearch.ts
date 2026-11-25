@@ -147,7 +147,6 @@ const ALL_SETTINGS_NAV_GROUPS: ReadonlyArray<SettingsNavGroup> = [
     paths: [
       "/settings/general",
       "/settings/appearance",
-      "/settings/plugins",
       "/settings/chat",
       "/settings/diffs",
       "/settings/keybindings",
@@ -159,6 +158,7 @@ const ALL_SETTINGS_NAV_GROUPS: ReadonlyArray<SettingsNavGroup> = [
     heading: msg("Agents"),
     paths: [
       "/settings/providers",
+      "/settings/plugins",
       "/settings/threads",
       "/settings/browser",
       "/settings/devices",

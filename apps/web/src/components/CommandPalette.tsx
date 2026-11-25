@@ -78,6 +78,7 @@ import {
   RotateCcwIcon,
   SettingsIcon,
   MonitorIcon,
+  NetworkIcon,
   PanelLeftIcon,
   PinIcon,
   PinOffIcon,
@@ -1885,7 +1886,7 @@ function OpenCommandPaletteDialog(props: {
       searchTerms: ["project", "home", "coordinator"],
       title: gt("Open project home"),
       description: contextualProjectGroup.displayName,
-      icon: <BotIcon className={ITEM_ICON_CLASS} />,
+      icon: <NetworkIcon className={ITEM_ICON_CLASS} />,
       run: async () => {
         await navigate({
           to: "/projects/$projectKey",
