@@ -147,6 +147,15 @@ Target: always-on agents like Grok Bot, OpenAI dots and Claude Duet, but on the 
   4. B4 bot browser profiles with sign-in handoff.
   5. B5 chat bridges (Telegram, Slack, iMessage) as plugins.
 
+## Finishing pass: usability review
+
+Asked for by Josh 2026-11-24, after B2 and before T3ther is called done. Walk every fork feature as a new user would, in the real app, and fix what is hidden or confusing.
+
+- Every optional mode (Bots, Work mode, plugins) has a clear on/off switch in Settings and is easy to find when on.
+- Nothing depends on a second hidden setting. Known gap: the All, Code, Work and Bots tabs only show with Settings > General > Projects sidebar on, so the Bots tab is hidden in the default thread sidebar.
+- Empty states say what to do next; labels use plain words; every action has a way back.
+- Each feature works end to end, including restart and a second client.
+
 ## Going public
 
 Asked for 2026-11-18; do it when the fork goes public, and ask Josh before the repo rename or making anything public.
