@@ -164,6 +164,20 @@ Walk done 2026-11-25 (Plugins not walked in the app: the sandbox had no plugins)
 
 Left as is: the Threads board's Idle and Done columns (finished runs show as Idle until settled, same as every project).
 
+3. F3 design consistency (asked for 2026-11-25). Upstream's design overhaul (PRs #24865 and #25778, the new design with no toggle since 2026-10-27) is already in the fork; its council never saw fork screens. Screenshot every fork surface with sandbox data next to the matching upstream screen and critique them (Opus plus a Sonnet reviewer for now; Codex and Neon when their quotas return). Keep T3 Code's fonts, icons, radii and tokens; change a fork screen only where it doesn't match the rest of the app. Don't tell reviewers a target score.
+
+## Milestone 7: Computer-use companion window (desktop)
+
+Asked for 2026-11-25. A native version of Josh's T3 Mini prototype (`C:\Users\jalli\dev\t3-mini`, read only): a small always-on-top window that follows a thread while its agent controls the computer, so the user can watch thinking and tool calls, send a message or stop it, without covering the screen the agent is using.
+
+- Desktop only (Electron). Web and mobile can't float a window over other apps; they keep the normal thread view.
+- Hidden from screenshots with `BrowserWindow.setContentProtection(true)` (on Windows this excludes the window from capture), so the agent never sees it. The user does.
+- Opens on its own when a thread in this environment starts a computer-use tool call, and hides a few seconds after computer use ends. It can also be opened and pinned by hand. Detection reads thread events the client already receives; no polling of the database.
+- Always on top by default, with a minimize button.
+- Settings > General (desktop only): on/off; position (right side, bottom right, bottom left, left side); size (small: an avatar-sized status bubble that expands on click; medium: a compact feed and composer; large: a full thread view); auto-open and auto-hide switches.
+- Content is the existing web app on a compact route (thread timeline, composer, Stop), so every provider works and nothing is duplicated.
+- Prior art: Claude Desktop shrinks its chat into a panel docked at the top right during computer use; the ChatGPT and Codex desktop apps float a small avatar.
+
 ## Going public
 
 Asked for 2026-11-18; do it when the fork goes public, and ask Josh before the repo rename or making anything public.
