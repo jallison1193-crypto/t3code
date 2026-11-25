@@ -7,6 +7,7 @@ import type {
   DesktopPreviewRecordingInputEvent,
   DesktopPreviewTabState,
   DesktopSnapShotEvent,
+  ScopedThreadRef,
 } from "@t3tools/contracts";
 import { exposeClerkBridge } from "@clerk/electron/preload";
 import { contextBridge, ipcRenderer, webFrame, webUtils } from "electron";
@@ -28,6 +29,17 @@ function isSnapShotEvent(value: unknown): value is DesktopSnapShotEvent {
     typeof type === "string" &&
     SNAP_SHOT_EVENT_TYPES.has(type) &&
     (id === undefined || typeof id === "string")
+  );
+}
+
+function isScopedThreadRef(value: unknown): value is ScopedThreadRef {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "environmentId" in value &&
+    typeof value.environmentId === "string" &&
+    "threadId" in value &&
+    typeof value.threadId === "string"
   );
 }
 
@@ -164,6 +176,28 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   getClientSettings: () => ipcRenderer.invoke(IpcChannels.GET_CLIENT_SETTINGS_CHANNEL),
   setClientSettings: (settings) =>
     ipcRenderer.invoke(IpcChannels.SET_CLIENT_SETTINGS_CHANNEL, settings),
+  onClientSettingsChange: (listener) => {
+    const wrappedListener = () => listener();
+    ipcRenderer.on(IpcChannels.CLIENT_SETTINGS_CHANGED_CHANNEL, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.CLIENT_SETTINGS_CHANGED_CHANNEL, wrappedListener);
+    };
+  },
+  companion: {
+    open: (thread) => ipcRenderer.invoke(IpcChannels.COMPANION_OPEN_CHANNEL, thread),
+    close: () => ipcRenderer.invoke(IpcChannels.COMPANION_CLOSE_CHANNEL),
+    minimize: () => ipcRenderer.invoke(IpcChannels.COMPANION_MINIMIZE_CHANNEL),
+    openInMain: (thread) => ipcRenderer.invoke(IpcChannels.COMPANION_OPEN_IN_MAIN_CHANNEL, thread),
+    onShowThread: (listener) => {
+      const wrappedListener = (_event: Electron.IpcRendererEvent, thread: unknown) => {
+        if (isScopedThreadRef(thread)) listener(thread);
+      };
+      ipcRenderer.on(IpcChannels.COMPANION_SHOW_THREAD_CHANNEL, wrappedListener);
+      return () => {
+        ipcRenderer.removeListener(IpcChannels.COMPANION_SHOW_THREAD_CHANNEL, wrappedListener);
+      };
+    },
+  },
   requestSnapShotPermissions: (includeAccessibility) =>
     ipcRenderer.invoke(IpcChannels.REQUEST_SNAP_SHOT_PERMISSIONS_CHANNEL, includeAccessibility),
   getSnapShotState: () => ipcRenderer.invoke(IpcChannels.GET_SNAP_SHOT_STATE_CHANNEL),

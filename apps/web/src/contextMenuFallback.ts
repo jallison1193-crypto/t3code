@@ -161,6 +161,10 @@ const ICON_PATHS: Record<string, ReadonlyArray<{ tag: string; attrs: Record<stri
     { tag: "path", attrs: { d: "M3 5a2 2 0 0 0 2 2h3" } },
     { tag: "path", attrs: { d: "M3 3v13a2 2 0 0 0 2 2h3" } },
   ],
+  "picture-in-picture-2": [
+    { tag: "path", attrs: { d: "M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h4" } },
+    { tag: "rect", attrs: { width: "10", height: "7", x: "12", y: "13", rx: "2" } },
+  ],
   "text-search": [
     { tag: "path", attrs: { d: "M21 5H3" } },
     { tag: "path", attrs: { d: "M10 12H3" } },

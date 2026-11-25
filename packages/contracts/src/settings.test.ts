@@ -435,6 +435,20 @@ describe("ClientSettings notifications", () => {
   });
 });
 
+describe("ClientSettings companion window", () => {
+  it("gives settings saved before it the defaults and keeps a chosen placement", () => {
+    expect(decodeClientSettings({})).toMatchObject({
+      companionWindowEnabled: true,
+      companionWindowAlwaysOnTop: true,
+      companionWindowPosition: "bottom-right",
+      companionWindowSize: "medium",
+    });
+    const patch = { companionWindowPosition: "left", companionWindowSize: "small" };
+    expect(decodeClientSettings(patch)).toMatchObject(patch);
+    expect(decodeClientSettingsPatch(patch)).toEqual(patch);
+  });
+});
+
 describe("ClientSettings quit confirmation", () => {
   it.each([
     [true, "hold"],

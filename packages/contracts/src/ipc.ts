@@ -11,7 +11,7 @@ import type {
 } from "./browserImport.ts";
 import { AuthAccessTokenResult, AuthSessionState } from "./auth.ts";
 import { AdvertisedEndpoint } from "./remoteAccess.ts";
-import { ExecutionEnvironmentDescriptor } from "./environment.ts";
+import { ExecutionEnvironmentDescriptor, type ScopedThreadRef } from "./environment.ts";
 import { type ClientSettings, type QuitConfirmationMode, SnapShotShortcut } from "./settings.ts";
 import type { EditorId } from "./editor.ts";
 import { KeybindingShortcut, type PreviewForwardedShortcut } from "./keybindings.ts";
@@ -1104,6 +1104,17 @@ export const DesktopAppleSpeechTranscribeInputSchema = Schema.Struct({
 export const SystemSettingsPaneSchema = Schema.Literals(["full-disk-access"]);
 export type SystemSettingsPane = typeof SystemSettingsPaneSchema.Type;
 
+/** The small window that follows one thread. Absent on hosts without it. */
+export interface DesktopCompanionBridge {
+  /** Opens the window on `thread`, or moves the open one to it. Does nothing when turned off. */
+  open: (thread: ScopedThreadRef) => Promise<void>;
+  close: () => Promise<void>;
+  minimize: () => Promise<void>;
+  /** Raises the main window on `thread`. */
+  openInMain: (thread: ScopedThreadRef) => Promise<void>;
+  onShowThread: (listener: (thread: ScopedThreadRef) => void) => () => void;
+}
+
 export interface DesktopBridge {
   getAppBranding: () => DesktopAppBranding | null;
   /** `null` until the desktop host has read the login shell's environment; ask again later. */
@@ -1139,6 +1150,9 @@ export interface DesktopBridge {
   getLocalEnvironmentBearerToken: () => Promise<string>;
   getClientSettings: () => Promise<ClientSettings | null>;
   setClientSettings: (settings: ClientSettings) => Promise<void>;
+  /** Fires when another app window saved the client settings. */
+  onClientSettingsChange?: (listener: () => void) => () => void;
+  companion?: DesktopCompanionBridge;
   getConnectionCatalog: () => Promise<string | null>;
   setConnectionCatalog: (catalog: string) => Promise<boolean>;
   discoverSshHosts: () => Promise<readonly DesktopDiscoveredSshHost[]>;

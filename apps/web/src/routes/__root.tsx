@@ -1,4 +1,4 @@
-import { type ServerLifecycleWelcomePayload } from "@t3tools/contracts";
+import { type ScopedThreadRef, type ServerLifecycleWelcomePayload } from "@t3tools/contracts";
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import {
   Outlet,
@@ -31,6 +31,7 @@ import { ConnectOnboardingDialog } from "../components/cloud/ConnectOnboardingDi
 import { RelayClientInstallDialog } from "../components/cloud/RelayClientInstallDialog";
 import { SshPasswordPromptDialog } from "../components/desktop/SshPasswordPromptDialog";
 import { SnapShotCoordinator } from "../components/desktop/SnapShotCoordinator";
+import { CompanionThreadCoordinator } from "../components/desktop/CompanionThreadCoordinator";
 import { DesktopAppActivationCoordinator } from "../components/desktop/DesktopAppActivationCoordinator";
 import { DesktopWebLinkCoordinator } from "../components/desktop/DesktopWebLinkCoordinator";
 import { RunningThreadKeepAlive } from "../components/desktop/RunningThreadKeepAlive";
@@ -44,6 +45,8 @@ import { Button } from "../components/ui/button";
 import { StandalonePage, StandalonePageHeader } from "../components/ui/standalone-page";
 import { AnchoredToastProvider, ToastProvider } from "../components/ui/toast";
 import { isElectron } from "../env";
+import { isCompanionWindow } from "../lib/companionWindow";
+import { buildThreadRouteParams, resolveThreadRouteTarget } from "../threadRoutes";
 import { useClientSettings } from "../hooks/useSettings";
 import {
   deriveLogicalProjectKeyFromSettings,
@@ -65,8 +68,23 @@ import { getDesktopSnapShotBridge } from "../lib/desktopSnapShot";
 import { isChunkLoadError } from "../lib/chunkReloadGuard";
 import { shouldResumeSnapShotSetupOnStartup } from "../lib/snapShotSetupResume";
 
+// The thread the desktop companion window is on.
+let companionThread: ScopedThreadRef | null = null;
+
 export const Route = createRootRoute({
-  beforeLoad: async ({ location }) => {
+  beforeLoad: async ({ location, params }) => {
+    if (isCompanionWindow) {
+      // It shows one thread: a navigation anywhere else is turned back to a thread.
+      const target = resolveThreadRouteTarget(params);
+      if (target?.kind === "server") companionThread = target.threadRef;
+      if (!location.pathname.startsWith("/companion/") && companionThread) {
+        throw redirect({
+          to: "/companion/$environmentId/$threadId",
+          params: buildThreadRouteParams(companionThread),
+          replace: true,
+        });
+      }
+    }
     // Guest links open on the owner's tunnel host in a browser with no T3 session, and must
     // not trigger pairing or an environment connection.
     if (location.pathname === GUEST_PAGE_PATH) {
@@ -100,6 +118,7 @@ export const Route = createRootRoute({
     }
     if (
       authGateState.status === "authenticated" &&
+      !isCompanionWindow &&
       getDesktopSnapShotBridge() &&
       shouldResumeSnapShotSetupOnStartup() &&
       location.pathname !== "/settings/snap-shot"
@@ -164,6 +183,20 @@ function RootRouteBranch() {
     authGateState.status === "hosted-static",
   );
 
+  // One thread view: no sidebar, command palette, onboarding or app-wide coordinators.
+  if (isCompanionWindow) {
+    return (
+      <>
+        <ConfirmDialogHost />
+        <CustomSnoozeDialogHost />
+        <ThreadFolderDialogHost />
+        <GuestShareDialogHost />
+        <UseInAnotherAppDialogHost />
+        <Outlet />
+      </>
+    );
+  }
+
   if (pathname === GUEST_PAGE_PATH) return <Outlet />;
 
   if (
@@ -196,6 +229,7 @@ function RootRouteBranch() {
         </>
       ) : null}
       {isElectron ? <RunningThreadKeepAlive /> : null}
+      {isElectron ? <CompanionThreadCoordinator /> : null}
       <RelayClientInstallDialog />
       <ConnectOnboardingDialog />
       <SshPasswordPromptDialog />

@@ -48,6 +48,7 @@ import {
 } from "./hooks/useSettings";
 import { syncBrowserChromeTheme } from "./hooks/useTheme";
 import { startThreadVisitedMigration } from "./hooks/useThreadVisitedMigration";
+import { isCompanionWindow } from "./lib/companionWindow";
 import { installDesktopPasteAsText } from "./lib/desktopPasteAsText";
 import {
   syncDocumentElectronPlatformClasses,
@@ -279,15 +280,6 @@ export function startAppServices(): AppRouter {
   startEnvironmentPluginCss();
   startThemeBackground();
   startBrowserChromeThemeSync(router);
-  startDefaultThemeAdoption();
-  startModelPreferencesMigration();
-  startAgentOpenedPreviews();
-  if (isElectron) startElectronBrowserHost();
-  startPreviewTitleRecording();
-  startBrowserProfileReporting();
-  installChatRouteCommands(router);
-  installCommandPaletteCommands(router);
-  registerOpenFavoriteEditorCommand();
   startThreadOverlayRetention(router);
   // Drafts promote as their server threads arrive, wherever the user is.
   subscribeDraftThreadPromotion({
@@ -302,6 +294,17 @@ export function startAppServices(): AppRouter {
     shellStateAtom: environmentShell.stateAtom,
     pendingThreadIdsAtom: threadEnvironment.pendingThreadIdsAtom,
   });
+  // The companion window follows one thread. What acts for the whole app stays in the main window.
+  if (isCompanionWindow) return router;
+  startDefaultThemeAdoption();
+  startModelPreferencesMigration();
+  startAgentOpenedPreviews();
+  if (isElectron) startElectronBrowserHost();
+  startPreviewTitleRecording();
+  startBrowserProfileReporting();
+  installChatRouteCommands(router);
+  installCommandPaletteCommands(router);
+  registerOpenFavoriteEditorCommand();
   startMainAppLocationTracking(router);
   startWorkspaceFocus(router);
   startBackgroundThreadAnnouncements(appAtomRegistry, router);

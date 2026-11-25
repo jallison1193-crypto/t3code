@@ -144,6 +144,7 @@ import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { registerSettleAndAdvance } from "../settleAndAdvance";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
 import { useClientSettings } from "../hooks/useSettings";
+import { canOpenCompanionWindow, openCompanionWindow } from "../lib/companionWindow";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { useNowMinute } from "../hooks/useNowMinute";
@@ -951,6 +952,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
   const timestampFormat = useClientSettings((s) => s.timestampFormat);
   const isWorkMode = useClientSettings((s) => s.appMode === "work");
+  const companionWindowEnabled = useClientSettings((s) => s.companionWindowEnabled);
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const {
     settleThread,
@@ -2756,6 +2758,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 canShareWithGuestAtom(threadRef.environmentId),
               ),
               canTurnIntoProject: canTurnThreadIntoProject(threadRef),
+              canOpenCompanionWindow: canOpenCompanionWindow(companionWindowEnabled),
               threadMode: threadModeOf(thread),
               canRename: !fromSearch,
               supports: {
@@ -2912,6 +2915,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             return;
           case "share-guest":
             openGuestShareDialog(threadRef);
+            return;
+          case "open-companion":
+            openCompanionWindow(threadRef);
             return;
           case "thread-folder":
             openThreadFolderDialog({ kind: "membership", thread: threadRef });

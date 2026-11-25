@@ -259,6 +259,16 @@ export const SnapShotShortcut = Schema.Union([
   SnapShotKeyChord,
 ]);
 export type SnapShotShortcut = typeof SnapShotShortcut.Type;
+export const CompanionWindowPosition = Schema.Literals([
+  "right",
+  "bottom-right",
+  "bottom-left",
+  "left",
+]);
+export type CompanionWindowPosition = typeof CompanionWindowPosition.Type;
+export const CompanionWindowSize = Schema.Literals(["small", "medium", "large"]);
+export type CompanionWindowSize = typeof CompanionWindowSize.Type;
+
 export const SnapShotSound = Schema.Literals(["soft-pop", "camera-shutter"]);
 export type SnapShotSound = typeof SnapShotSound.Type;
 const DEFAULT_SNAP_SHOT_SOUND: SnapShotSound = "soft-pop";
@@ -642,6 +652,15 @@ export const ClientSettingsSchema = Schema.Struct({
   ),
   snapShotFlash: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   snapShotAnimations: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  // Desktop only: the small always-visible window that follows one thread.
+  companionWindowEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  companionWindowAlwaysOnTop: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  companionWindowPosition: CompanionWindowPosition.pipe(
+    Schema.withDecodingDefault(Effect.succeed("bottom-right" as const)),
+  ),
+  companionWindowSize: CompanionWindowSize.pipe(
+    Schema.withDecodingDefault(Effect.succeed("medium" as const)),
+  ),
   wordWrap: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   // Opt-in TeX typesetting in rendered Markdown. Off keeps math parsing and
   // KaTeX out of the render path entirely.
@@ -2285,6 +2304,10 @@ export const ClientSettingsPatch = Schema.Struct({
   snapShotSound: Schema.optionalKey(SnapShotSound),
   snapShotFlash: Schema.optionalKey(Schema.Boolean),
   snapShotAnimations: Schema.optionalKey(Schema.Boolean),
+  companionWindowEnabled: Schema.optionalKey(Schema.Boolean),
+  companionWindowAlwaysOnTop: Schema.optionalKey(Schema.Boolean),
+  companionWindowPosition: Schema.optionalKey(CompanionWindowPosition),
+  companionWindowSize: Schema.optionalKey(CompanionWindowSize),
   wordWrap: Schema.optionalKey(Schema.Boolean),
   mathRenderingEnabled: Schema.optionalKey(Schema.Boolean),
 });

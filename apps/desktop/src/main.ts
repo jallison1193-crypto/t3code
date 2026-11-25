@@ -24,6 +24,7 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import * as DesktopIpc from "./ipc/DesktopIpc.ts";
 import * as ElectronApp from "./electron/ElectronApp.ts";
+import * as ElectronCompanionWindow from "./electron/ElectronCompanionWindow.ts";
 import * as ElectronDialog from "./electron/ElectronDialog.ts";
 import * as ElectronMenu from "./electron/ElectronMenu.ts";
 import * as ElectronPowerMonitor from "./electron/ElectronPowerMonitor.ts";
@@ -78,6 +79,7 @@ import * as LoopbackTunnel from "./preview/LoopbackTunnel.ts";
 import * as PreviewManager from "./preview/Manager.ts";
 import * as PreviewPasskeys from "./preview/Passkeys.ts";
 import * as DesktopWindow from "./window/DesktopWindow.ts";
+import * as DesktopCompanionWindow from "./window/DesktopCompanionWindow.ts";
 import * as DesktopWslBackend from "./wsl/DesktopWslBackend.ts";
 import * as DesktopWslEnvironment from "./wsl/DesktopWslEnvironment.ts";
 import * as DesktopWslServerTree from "./wsl/DesktopWslServerTree.ts";
@@ -141,7 +143,12 @@ const layerElectron = Layer.mergeAll(
   ElectronTheme.layer,
   ElectronUpdater.layer,
   ElectronWindow.layer,
-  DesktopIpc.layer(Electron.ipcMain).pipe(Layer.provide(ElectronWindow.layer)),
+  ElectronCompanionWindow.layer,
+  // Layers are shared by reference, so IPC trusts the very window that gets opened.
+  DesktopIpc.layer(Electron.ipcMain).pipe(
+    Layer.provide(ElectronWindow.layer),
+    Layer.provide(ElectronCompanionWindow.layer),
+  ),
 );
 
 const layerDesktopFoundation = Layer.mergeAll(
@@ -217,6 +224,7 @@ const layerDesktopApplication = Layer.mergeAll(
   DesktopApplicationMenu.layer,
   DesktopLinuxUrlHandler.layer,
   DesktopCliCommand.layer,
+  DesktopCompanionWindow.layer,
 ).pipe(
   Layer.provideMerge(layerDesktopSnapShot),
   Layer.provideMerge(

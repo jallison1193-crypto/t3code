@@ -40,6 +40,7 @@ import { APP_VERSION, HOSTED_APP_CHANNEL, HOSTED_APP_CHANNEL_LABEL } from "../..
 import { AboutVersionTitle } from "./AboutVersionTitle";
 import { BotsSettingsRow } from "../../bots/BotsSettingsRow";
 import { CliCommandSettingsRow } from "./CliCommandSettingsRow";
+import { CompanionWindowSettings } from "./CompanionWindowSettings";
 import { MobileAppSettingsRow } from "./MobileAppSettingsRow";
 import {
   canCheckForUpdate,
@@ -636,6 +637,18 @@ export function useSettingsRestore(onRestored?: () => void) {
       ? [gt("Delete confirmation")]
       : []),
     ...(settings.confirmQuit !== DEFAULT_UNIFIED_SETTINGS.confirmQuit ? [gt("Quit shortcut")] : []),
+    ...(settings.companionWindowEnabled !== DEFAULT_UNIFIED_SETTINGS.companionWindowEnabled
+      ? [gt("Companion window")]
+      : []),
+    ...(settings.companionWindowAlwaysOnTop !== DEFAULT_UNIFIED_SETTINGS.companionWindowAlwaysOnTop
+      ? [gt("Always on top")]
+      : []),
+    ...(settings.companionWindowPosition !== DEFAULT_UNIFIED_SETTINGS.companionWindowPosition
+      ? [gt("Window position")]
+      : []),
+    ...(settings.companionWindowSize !== DEFAULT_UNIFIED_SETTINGS.companionWindowSize
+      ? [gt("Window size")]
+      : []),
     ...(isTextGenerationModelDirty ? [gt("Text generation model")] : []),
     ...(settings.threadTitleInstructions !== DEFAULT_UNIFIED_SETTINGS.threadTitleInstructions
       ? [gt("Thread title instructions")]
@@ -754,6 +767,10 @@ export function useSettingsRestore(onRestored?: () => void) {
       confirmThreadDelete: DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete,
       confirmThreadUnpin: DEFAULT_UNIFIED_SETTINGS.confirmThreadUnpin,
       confirmQuit: DEFAULT_UNIFIED_SETTINGS.confirmQuit,
+      companionWindowEnabled: DEFAULT_UNIFIED_SETTINGS.companionWindowEnabled,
+      companionWindowAlwaysOnTop: DEFAULT_UNIFIED_SETTINGS.companionWindowAlwaysOnTop,
+      companionWindowPosition: DEFAULT_UNIFIED_SETTINGS.companionWindowPosition,
+      companionWindowSize: DEFAULT_UNIFIED_SETTINGS.companionWindowSize,
       textGenerationModelSelection: DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
       threadTitleInstructions: DEFAULT_UNIFIED_SETTINGS.threadTitleInstructions,
       fontFamilySans: DEFAULT_UNIFIED_SETTINGS.fontFamilySans,
@@ -1184,6 +1201,8 @@ export function GeneralSettingsPanel() {
           />
         ) : null}
       </SettingsSection>
+
+      {isElectron ? <CompanionWindowSettings /> : null}
 
       <SettingsSection id="display" title={gt("Display")}>
         <SettingsRow
