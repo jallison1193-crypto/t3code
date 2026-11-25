@@ -111,9 +111,21 @@ export function BotHomeView({
   const draftTokensPerDayText = currentDraft.tokensPerDayText ?? String(savedLimits.tokensPerDay);
   const parsedRunsPerDay = parseBotPositiveInt(draftRunsPerDayText);
   const parsedTokensPerDay = parseBotPositiveInt(draftTokensPerDayText);
-  const limitsValid =
-    draftLimitMode === "none" ||
-    (parsedRunsPerDay !== null && (draftLimitMode === "runs_only" || parsedTokensPerDay !== null));
+  const draftLimits: BotLimits | null =
+    draftLimitMode === "none"
+      ? { mode: "none" }
+      : parsedRunsPerDay === null
+        ? null
+        : draftLimitMode === "runs_only"
+          ? { mode: "runs_only", runsPerDay: parsedRunsPerDay }
+          : parsedTokensPerDay === null
+            ? null
+            : {
+                mode: "runs_and_tokens",
+                runsPerDay: parsedRunsPerDay,
+                tokensPerDay: parsedTokensPerDay,
+              };
+  const limitsValid = draftLimits !== null;
   const limitsDirty =
     draftLimitMode !== savedLimits.mode ||
     (draftLimitMode !== "none" && draftRunsPerDayText.trim() !== String(savedLimits.runsPerDay)) ||
@@ -188,20 +200,10 @@ export function BotHomeView({
       reportError(gt("Could not save bot"), gt("Bot name must be a non-empty single line."));
       return;
     }
-    if (!limitsValid) {
+    if (draftLimits === null) {
       reportError(gt("Could not save bot"), gt("Daily limits must be positive whole numbers."));
       return;
     }
-    const nextLimits: BotLimits =
-      draftLimitMode === "none"
-        ? { mode: "none" }
-        : draftLimitMode === "runs_only"
-          ? { mode: "runs_only", runsPerDay: parsedRunsPerDay! }
-          : {
-              mode: "runs_and_tokens",
-              runsPerDay: parsedRunsPerDay!,
-              tokensPerDay: parsedTokensPerDay!,
-            };
     setSaving(true);
     const result = await updateBot({
       environmentId,
@@ -210,7 +212,7 @@ export function BotHomeView({
         name: trimmedName,
         goal: draftGoal.trim(),
         modelSelection: draftModelSelection,
-        ...(limitsDirty ? { limits: nextLimits } : {}),
+        ...(limitsDirty ? { limits: draftLimits } : {}),
       },
     });
     setSaving(false);

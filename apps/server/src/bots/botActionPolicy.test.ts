@@ -313,6 +313,50 @@ describe("classifyBotAction", () => {
       request: { kind: "command", command: "git status && ls -la" },
       expected: { decision: "allow" },
     },
+    {
+      name: "asks before editing Claude settings in the bot folder",
+      request: {
+        kind: "file-change",
+        toolName: "Write",
+        fileChanges: [{ operation: "add", path: "C:\\bots\\mail\\.claude\\settings.local.json" }],
+      },
+      expected: { decision: "ask", category: "agent-settings" },
+    },
+    {
+      name: "asks before a command writes Codex or Claude config",
+      request: { kind: "command", command: "echo '{}' > ~/.codex/config.toml" },
+      expected: { decision: "ask", category: "agent-settings" },
+    },
+    {
+      name: "asks before writing an MCP config file",
+      request: { kind: "command", command: "cp servers.json .mcp.json" },
+      expected: { decision: "ask", category: "agent-settings" },
+    },
+    {
+      name: "agent settings outrank delete",
+      request: { kind: "command", command: "rm ~/.claude.json" },
+      expected: { decision: "ask", category: "agent-settings" },
+    },
+    {
+      name: "allows a path that only contains claude as a word",
+      request: { kind: "command", command: "cat notes/claude-ideas.md" },
+      expected: { decision: "allow" },
+    },
+    {
+      name: "asks when a command request carries no command or tool name",
+      request: { kind: "command" },
+      expected: { decision: "ask", category: "unknown" },
+    },
+    {
+      name: "asks when a permission request carries nothing to judge",
+      request: { kind: "permission" },
+      expected: { decision: "ask", category: "unknown" },
+    },
+    {
+      name: "asks when a file change carries no paths or description",
+      request: { kind: "file-change", toolName: "Edit" },
+      expected: { decision: "ask", category: "unknown" },
+    },
   ];
 
   it.each(cases)("$name", ({ request, expected }) => {
@@ -331,6 +375,7 @@ describe("classifyBotAction", () => {
     expect(tokenizeActionWords("sender_lookup")).toEqual(["sender", "lookup"]);
     expect(botHeldApprovalReason("send")).toBe("Bots ask before sending");
     expect(botHeldApprovalReason("delete")).toBe("Bots ask before deleting");
+    expect(botHeldApprovalReason("agent-settings")).toBe("Bots ask before changing agent settings");
   });
 
   it("fails closed on provider gate support across all 11 adapters", () => {

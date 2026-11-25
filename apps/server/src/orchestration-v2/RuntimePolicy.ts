@@ -68,7 +68,7 @@ export class RuntimePolicyBotProviderUnsupportedError extends Schema.TaggedError
     threadId: ThreadId,
     projectId: ProjectId,
     providerInstanceId: ProviderInstanceId,
-    driverKind: ProviderDriverKind,
+    driverKind: Schema.optionalKey(ProviderDriverKind),
   },
 ) {
   override get message(): string {
@@ -190,12 +190,12 @@ export const layerFromProjectStore: Layer.Layer<
         );
         const isBot = isBotProject(settings, input.thread.projectId);
         const instance = yield* providerInstances.getInstance(input.modelSelection.instanceId);
-        if (isBot && instance !== undefined && !providerSupportsBotGate(instance.driverKind)) {
+        if (isBot && (instance === undefined || !providerSupportsBotGate(instance.driverKind))) {
           return yield* new RuntimePolicyBotProviderUnsupportedError({
             threadId: input.thread.id,
             projectId: input.thread.projectId,
             providerInstanceId: input.modelSelection.instanceId,
-            driverKind: instance.driverKind,
+            ...(instance === undefined ? {} : { driverKind: instance.driverKind }),
           });
         }
         const supportedRuntimeModes =

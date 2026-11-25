@@ -5,11 +5,12 @@ import type {
 } from "@t3tools/contracts";
 
 export type BotActionDecision = "allow" | "ask" | "block";
-export type BotActionCategory = "send" | "delete" | "pay";
+export type BotHeldCategory = "send" | "delete" | "agent-settings" | "unknown";
+export type BotActionCategory = BotHeldCategory | "pay";
 
 export type BotActionClassification =
   | { readonly decision: "allow" }
-  | { readonly decision: "ask"; readonly category: "send" | "delete" }
+  | { readonly decision: "ask"; readonly category: BotHeldCategory }
   | { readonly decision: "block"; readonly category: "pay" };
 
 export const BOT_PAY_BLOCKED_FEEDBACK = "Paying is blocked for bots in T3ther.";
@@ -19,8 +20,15 @@ export const BOT_HELD_APPROVAL_OPTIONS: ReadonlyArray<ProviderApprovalOption> = 
   { decision: "accept", label: "Approve once" },
 ];
 
-export function botHeldApprovalReason(category: "send" | "delete"): string {
-  return category === "send" ? "Bots ask before sending" : "Bots ask before deleting";
+const BOT_HELD_APPROVAL_REASONS: Record<BotHeldCategory, string> = {
+  send: "Bots ask before sending",
+  delete: "Bots ask before deleting",
+  "agent-settings": "Bots ask before changing agent settings",
+  unknown: "Bots ask when T3 can't tell what an action does",
+};
+
+export function botHeldApprovalReason(category: BotHeldCategory): string {
+  return BOT_HELD_APPROVAL_REASONS[category];
 }
 
 export interface BotActionRequest {
@@ -170,11 +178,20 @@ const STRIPE_WRITE_ACTIONS = new Set(["create", "pay", "confirm", "capture", "fi
 const ALLOW: BotActionClassification = { decision: "allow" };
 const ASK_SEND: BotActionClassification = { decision: "ask", category: "send" };
 const ASK_DELETE: BotActionClassification = { decision: "ask", category: "delete" };
+const ASK_AGENT_SETTINGS: BotActionClassification = { decision: "ask", category: "agent-settings" };
+const ASK_UNKNOWN: BotActionClassification = { decision: "ask", category: "unknown" };
+
+const HELD_CATEGORY_RANK: Record<BotHeldCategory, number> = {
+  unknown: 1,
+  send: 2,
+  delete: 3,
+  "agent-settings": 4,
+};
 const BLOCK_PAY: BotActionClassification = { decision: "block", category: "pay" };
 
 function classificationRank(result: BotActionClassification): number {
-  if (result.decision === "block") return 3;
-  if (result.decision === "ask") return result.category === "delete" ? 2 : 1;
+  if (result.decision === "block") return 5;
+  if (result.decision === "ask") return HELD_CATEGORY_RANK[result.category];
   return 0;
 }
 
@@ -637,6 +654,16 @@ function isShellToolName(toolName: string | null | undefined): boolean {
   return SHELL_TOOL_NAMES.has(toolName.trim().toLowerCase());
 }
 
+// Claude and Codex settings can pre-approve tools or add hooks, which would switch this gate off.
+const AGENT_SETTINGS_PATH = /(?:^|[\\/\s"'=~])\.(?:claude|codex)(?:[\\/\s"'.]|$)|\.mcp\.json/i;
+
+function touchesAgentSettings(request: BotActionRequest): boolean {
+  if (request.fileChanges?.some((change) => AGENT_SETTINGS_PATH.test(change.path))) return true;
+  return [request.command, request.prompt].some(
+    (text) => text !== null && text !== undefined && AGENT_SETTINGS_PATH.test(text),
+  );
+}
+
 function hasDeletedFileChange(request: BotActionRequest): boolean {
   if (
     request.fileChanges?.some((change) =>
@@ -672,7 +699,14 @@ export function classifyBotAction(request: BotActionRequest): BotActionClassific
     return result;
   }
 
+  if (touchesAgentSettings(request)) {
+    return stricterClassification(result, ASK_AGENT_SETTINGS);
+  }
+
   if (request.kind === "file-change") {
+    if ((request.fileChanges?.length ?? 0) === 0 && !request.prompt?.trim()) {
+      return stricterClassification(result, ASK_UNKNOWN);
+    }
     if (hasDeletedFileChange(request)) {
       result = stricterClassification(result, ASK_DELETE);
     }
@@ -684,8 +718,19 @@ export function classifyBotAction(request: BotActionRequest): BotActionClassific
       request.command?.trim() || (isShellToolName(request.toolName) ? request.prompt?.trim() : "");
     if (commandText) {
       result = stricterClassification(result, classifyCommand(commandText));
+    } else if (!request.toolName?.trim()) {
+      result = stricterClassification(result, ASK_UNKNOWN);
     }
     return result;
+  }
+
+  if (
+    !request.toolName?.trim() &&
+    !request.command?.trim() &&
+    !request.appName?.trim() &&
+    !request.prompt?.trim()
+  ) {
+    return ASK_UNKNOWN;
   }
 
   // `permission` and `mcp-elicitation`: inspect command (if present), app name, and prompt text.

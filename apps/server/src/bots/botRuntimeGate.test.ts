@@ -268,6 +268,14 @@ describe("bot runtime mode clamp and provider gate", () => {
         });
         expect(ordinaryResolved.runtimeMode).toBe("full-access");
       }
+
+      const missing = yield* policy
+        .resolve({
+          thread: botThread,
+          modelSelection: { instanceId: ProviderInstanceId.make("removed"), model: "test-model" },
+        })
+        .pipe(Effect.flip);
+      expect(missing._tag).toBe("RuntimePolicyBotProviderUnsupportedError");
     }).pipe(Effect.scoped),
   );
 

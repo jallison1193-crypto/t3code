@@ -37,9 +37,15 @@ Go to **Settings -> General** and turn **Bots** off.
 
 Bot threads always run through T3 Code's approval gate, even if a trigger or thread is set to a more permissive mode. T3 Code inspects each action before allowing it:
 
-- **Allowed automatically:** Reads, ordinary edits inside the bot's folder, and read-only tools.
-- **Ask before sending or deleting:** Actions that send messages, emails, posts, comments, pull requests, or non-GET HTTP requests, as well as commands or edits that delete files, wait for your approval. Held approvals appear in **Needs you** and trigger phone alerts with only **Approve once** and **Decline** options.
+- **Allowed automatically:** Reads, file edits, read-only tools, and commands that don't look like sending or deleting.
+- **Ask before sending or deleting:** Actions that send messages, emails, posts, comments, pull requests, or non-GET HTTP requests, as well as commands or edits that delete files, wait for your approval.
+- **Ask before changing agent settings:** Edits or commands that touch Claude or Codex settings (`.claude`, `.codex`, `.mcp.json`) wait for your approval, because those files can pre-approve tools.
+- **Ask when unclear:** If T3 Code can't see what an action does, it waits for your approval.
 - **Paying is blocked:** Tools and commands for paying, purchasing, checkout, ordering, transferring money, subscribing, or tipping are declined automatically.
+
+Held approvals appear in **Needs you** and trigger phone alerts, with only **Approve once** and **Decline**.
+
+The gate judges each action by its tool name and command text. A script a bot writes and runs can still reach the network without asking, so give bots only the accounts and folders they need. Codex runs commands in an offline, read-only sandbox and asks before leaving it, which closes that gap for Codex bots.
 
 ## Supported models
 
