@@ -1820,7 +1820,12 @@ describe("PluginRegistry", () => {
           const repoPlugin = initialList.repoPlugins?.find((plugin) => plugin.id === "repo-cmd");
           assert.isDefined(userPlugin);
           assert.isDefined(repoPlugin);
-          if (!userPlugin || !repoPlugin || repoPlugin.revision === undefined) {
+          if (
+            !userPlugin ||
+            userPlugin.revision === undefined ||
+            !repoPlugin ||
+            repoPlugin.revision === undefined
+          ) {
             return assert.fail("Expected user and repo plugins to be discovered");
           }
 
