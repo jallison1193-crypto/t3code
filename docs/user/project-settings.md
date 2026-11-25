@@ -314,7 +314,7 @@ Opening a project's home (**Open project home** in the command palette) goes to 
 
 The coordinator's **Threads** tab shows every thread in the project by state: Ready for review (finished since you last looked), Waiting on you (needs your approval or input, or failed and you have not opened it), Working, Idle, and Done (settled). The count on the tab leaves out Done threads. Click a thread to open it beside the coordinator.
 
-When threads finish, fail, or need your input while you are away, a **Since you were away** strip appears above the board columns and a dot appears on the **Threads** tab. Click a thread in the strip to open it, or click **Mark all seen** to clear finished and failed threads while keeping threads that still need you.
+When threads finish, fail, or need your input while you are away, a **Since you were away** line above the board columns counts them, their cards get a status dot, and a dot appears on the **Threads** tab. Click **Mark all seen** to clear finished and failed threads while keeping threads that still need you.
 
 An agent can also suggest follow-up threads in the conversation without starting them. Suggested threads appear as a card with a **Start** button on each row; clicking **Start** opens a new thread draft in the same project with the suggested prompt filled in so you can edit it, choose a model, and send.
 

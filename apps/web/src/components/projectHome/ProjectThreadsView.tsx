@@ -8,6 +8,7 @@ import {
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { msg, T, useMessages, Var } from "gt-react";
 import { FolderIcon, ListTodoIcon } from "lucide-react";
+import { Fragment } from "react";
 
 import { useAcknowledgeThreadWoke } from "~/hooks/useThreadActions";
 import { cn } from "~/lib/utils";
@@ -15,11 +16,11 @@ import { useRightPanelStore } from "~/rightPanelStore";
 import { readEnvironment, useEnvironments } from "~/state/environments";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 import { resolveThreadStatusPill } from "../Sidebar.logic";
+import { ThreadStatusDot } from "../ThreadStatusDot";
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
 import { SidebarInset } from "../ui/sidebar";
 import { ProjectViewHeader } from "./ProjectViewHeader";
-import { sinceAwayDigestCount } from "./sinceAwayDigest.logic";
 import { useProjectThreadBoard } from "./useProjectThreadBoard";
 
 const COLUMN_PRESENTATION: Record<
@@ -33,12 +34,22 @@ const COLUMN_PRESENTATION: Record<
   done: { label: msg("Done"), dotClass: "bg-border" },
 };
 
-const SINCE_AWAY_LABEL = msg("Since you were away");
-
 const DIGEST_GROUP_PRESENTATION = [
-  { key: "needsYou", label: msg("Needs you"), dotClass: "bg-amber-500 dark:bg-amber-300/90" },
-  { key: "failed", label: msg("Failed"), dotClass: "bg-red-500 dark:bg-red-300/90" },
-  { key: "finished", label: msg("Finished"), dotClass: "bg-emerald-500 dark:bg-emerald-300/90" },
+  {
+    key: "needsYou",
+    countLabel: msg("{count, plural, one {{count} needs you} other {{count} need you}}"),
+    dotClass: "bg-amber-500 dark:bg-amber-300/90",
+  },
+  {
+    key: "failed",
+    countLabel: msg("{count, plural, one {{count} failed} other {{count} failed}}"),
+    dotClass: "bg-red-500 dark:bg-red-300/90",
+  },
+  {
+    key: "finished",
+    countLabel: msg("{count, plural, one {{count} finished} other {{count} finished}}"),
+    dotClass: "bg-emerald-500 dark:bg-emerald-300/90",
+  },
 ] as const;
 
 // Says why a card waits, in the stock status words: approval, input, or a failure.
@@ -82,61 +93,48 @@ function ProjectThreadBoardContent({
     );
   }
 
-  const hasDigest = sinceAwayDigestCount(digest) > 0;
+  const digestGroups = DIGEST_GROUP_PRESENTATION.filter(({ key }) => digest[key].length > 0);
+  // The digest's copies carry this client's last visit, so their status dot agrees with the counts.
+  const unseenThreads = new Map(
+    digestGroups
+      .flatMap(({ key }) => digest[key])
+      .map((thread) => [`${thread.environmentId}:${thread.id}`, thread]),
+  );
   const markableThreads = [...digest.failed, ...digest.finished];
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden", className)}>
-      {hasDigest ? (
-        <section
-          aria-label={m(SINCE_AWAY_LABEL)}
-          className="mx-4 mt-3 flex shrink-0 flex-col gap-2 rounded-lg border bg-muted/30 px-3 py-2.5"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-xs font-medium text-muted-foreground">{m(SINCE_AWAY_LABEL)}</h2>
-            {markableThreads.length > 0 ? (
-              <Button
-                variant="ghost-muted"
-                size="xs"
-                onClick={() => {
-                  // The server's own updatedAt, like the command palette, so client clock skew can't leave a thread unseen.
-                  for (const thread of markableThreads) {
-                    markThreadVisited(
-                      scopeThreadRef(thread.environmentId, thread.id),
-                      thread.updatedAt,
-                    );
-                  }
-                }}
-              >
-                <T>Mark all seen</T>
-              </Button>
-            ) : null}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            {DIGEST_GROUP_PRESENTATION.map(({ key, label, dotClass }) => {
-              const threads = digest[key];
-              if (threads.length === 0) return null;
-              return (
-                <div key={key} className="flex flex-wrap items-center gap-1.5">
-                  <span className="flex shrink-0 items-center gap-1.5 pr-1 text-xs font-medium text-muted-foreground">
-                    <span aria-hidden className={cn("size-2 rounded-full", dotClass)} />
-                    {m(label)}
-                    <span className="tabular-nums">{threads.length}</span>
-                  </span>
-                  {threads.map((thread) => (
-                    <button
-                      key={`${thread.environmentId}:${thread.id}`}
-                      type="button"
-                      onClick={() => onOpenThread(thread)}
-                      className="max-w-56 cursor-pointer truncate rounded-md border bg-card px-2 py-0.5 text-xs text-foreground hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
-                    >
-                      {thread.title}
-                    </button>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        </section>
+      {digestGroups.length > 0 ? (
+        <div className="mx-4 mt-3 flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs font-medium text-muted-foreground">
+          <span>
+            <T>Since you were away:</T>
+          </span>
+          {digestGroups.map(({ key, countLabel, dotClass }, index) => (
+            <Fragment key={key}>
+              {index > 0 ? <span aria-hidden>·</span> : null}
+              <span className="flex items-center gap-1.5 tabular-nums">
+                <span aria-hidden className={cn("size-2 rounded-full", dotClass)} />
+                {m(countLabel, { count: digest[key].length })}
+              </span>
+            </Fragment>
+          ))}
+          {markableThreads.length > 0 ? (
+            <Button
+              variant="ghost-muted"
+              size="xs"
+              onClick={() => {
+                // The server's own updatedAt, like the command palette, so client clock skew can't leave a thread unseen.
+                for (const thread of markableThreads) {
+                  markThreadVisited(
+                    scopeThreadRef(thread.environmentId, thread.id),
+                    thread.updatedAt,
+                  );
+                }
+              }}
+            >
+              <T>Mark all seen</T>
+            </Button>
+          ) : null}
+        </div>
       ) : null}
       <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4">
         {PROJECT_THREAD_BOARD_COLUMNS.map((column) => (
@@ -154,24 +152,30 @@ function ProjectThreadBoardContent({
               <span className="tabular-nums">{columns[column].length}</span>
             </h2>
             <ul className="flex min-h-0 flex-col gap-1.5 overflow-y-auto">
-              {columns[column].map((thread) => (
-                <li key={`${thread.environmentId}:${thread.id}`}>
-                  <button
-                    type="button"
-                    onClick={() => onOpenThread(thread)}
-                    className={cn(
-                      "flex w-full flex-col gap-0.5 rounded-lg border bg-card px-2.5 py-2 text-left hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
-                      column === "done" && "text-muted-foreground",
-                    )}
-                  >
-                    <span className="truncate text-sm">{thread.title}</span>
-                    <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                      {formatRelativeTimeLabel(thread.updatedAt)}
-                      {column === "waiting" ? <WaitingReason thread={thread} /> : null}
-                    </span>
-                  </button>
-                </li>
-              ))}
+              {columns[column].map((thread) => {
+                const unseenThread = unseenThreads.get(`${thread.environmentId}:${thread.id}`);
+                return (
+                  <li key={`${thread.environmentId}:${thread.id}`}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenThread(thread)}
+                      className={cn(
+                        "flex w-full flex-col gap-0.5 rounded-lg border bg-card px-2.5 py-2 text-left hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
+                        column === "done" && "text-muted-foreground",
+                      )}
+                    >
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        {unseenThread ? <ThreadStatusDot thread={unseenThread} /> : null}
+                        <span className="truncate text-sm">{thread.title}</span>
+                      </span>
+                      <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                        {formatRelativeTimeLabel(thread.updatedAt)}
+                        {column === "waiting" ? <WaitingReason thread={thread} /> : null}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         ))}
