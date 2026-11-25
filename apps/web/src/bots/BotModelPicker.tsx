@@ -18,6 +18,7 @@ import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { getCustomModelOptionsByInstance } from "~/modelSelection";
 import { providerInstanceEntriesFor } from "~/providerInstances";
 import { EMPTY_SERVER_PROVIDERS, serverEnvironment } from "~/state/server";
+import { resolveBotEffectiveModelSelection } from "./bots.logic";
 
 export function BotModelPicker({
   environmentId,
@@ -53,12 +54,20 @@ export function BotModelPicker({
   );
   const activeProvider: ProviderDriverKind =
     activeEntry?.driverKind ?? ProviderDriverKind.make("codex");
-  const selectedUnsupported =
-    value !== null && activeEntry !== undefined && !providerSupportsBotGate(activeEntry.driverKind);
+  const effectiveModel = resolveBotEffectiveModelSelection({
+    botModelSelection: value,
+    environmentDefaultModelSelection: settings.defaultModelSelection,
+    instanceEntries,
+  });
   const unsupportedReason = gt("Not supported for bots yet. Pick Claude or Codex.");
 
   return (
     <div className="space-y-1.5">
+      {effectiveModel.unsupported ? (
+        <p className="text-xs text-warning" role="status">
+          <T>Bots run only on Claude or Codex. Pick a model below.</T>
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <ProviderModelPicker
           environmentId={environmentId}
@@ -111,11 +120,6 @@ export function BotModelPicker({
           </Button>
         ) : null}
       </div>
-      {selectedUnsupported ? (
-        <p className="text-xs text-destructive">
-          <T>This bot&apos;s model can&apos;t be gated by T3. Pick a Claude or Codex model.</T>
-        </p>
-      ) : null}
     </div>
   );
 }

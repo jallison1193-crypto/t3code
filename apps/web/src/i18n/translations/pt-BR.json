@@ -13031,5 +13031,17 @@
   "c82e1f320b93fbc1": "Execuções por dia",
   "2996ea4e1e583d34": "Tokens por dia",
   "dc53cecbcc085b27": "Ainda não compatível com bots. Escolha Claude ou Codex.",
-  "5049d15df6e0fe27": "O modelo deste bot não pode ser controlado pelo T3. Escolha um modelo Claude ou Codex."
+  "5809fc3ea87f6c3f": "Bots estão desativados",
+  "2f05279f6289eddb": "Bot está pausado",
+  "5fc9ee50f62ce033": "Execute seu objetivo agora.",
+  "c228ed50ec7715bf": "Bots rodam apenas no Claude ou Codex. Escolha um modelo abaixo.",
+  "0deadb4000b39337": "O gatilho está incompleto",
+  "13ead388ab769a27": "Escolha primeiro um modelo para este bot.",
+  "403b71f0c87b5893": "Adicione um nome e o que fazer neste gatilho.",
+  "2102cfe9fbd2c604": "Editar gatilho",
+  "0ea3c5c6f60fc214": "Novo gatilho",
+  "9f66a4545d8fc4ba": "O que fazer neste gatilho",
+  "bfdc4af2fa62d728": "Usa o modelo do bot: {model}",
+  "eefdcfcd0b5f062a": "Salvar gatilho",
+  "45b4cf556960f6f5": "O objetivo do bot é sempre incluído."
 }

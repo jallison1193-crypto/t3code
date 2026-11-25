@@ -1,3 +1,4 @@
+import { useAtomValue } from "@effect/atom-react";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { derivePhysicalProjectKeyFromPath } from "@t3tools/client-runtime/state/project-grouping";
 import {
@@ -5,11 +6,13 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import {
+  DEFAULT_SERVER_SETTINGS,
   type EnvironmentId,
   type ModelSelection,
   resolveEnvironmentMachineKind,
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
+import { Atom } from "effect/reactivity";
 import { T, useGT, useMessages } from "gt-react";
 import { useState } from "react";
 
@@ -36,12 +39,16 @@ import {
 } from "~/components/ui/select";
 import { Textarea } from "~/components/ui/textarea";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
+import { providerInstanceEntriesFor } from "~/providerInstances";
 import { usePrimaryEnvironmentId } from "~/state/environments";
-import { serverEnvironment } from "~/state/server";
+import { EMPTY_SERVER_PROVIDERS, serverEnvironment } from "~/state/server";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { BotModelPicker } from "./BotModelPicker";
+import { resolveFirstSupportedBotModelSelection } from "./bots.logic";
 import { closeNewBotDialog, type NewBotDialogRequest, useNewBotDialog } from "./newBotDialogState";
 import { useBotWritableEnvironments } from "./useBots";
+
+const EMPTY_PROVIDERS_ATOM = Atom.make(EMPTY_SERVER_PROVIDERS);
 
 export function NewBotDialogHost() {
   const request = useNewBotDialog((state) => state.request);
@@ -66,7 +73,10 @@ function NewBotDialog({ request }: { readonly request: NewBotDialogRequest }) {
   const [environmentId, setEnvironmentId] = useState<EnvironmentId | null>(defaultEnvironmentId);
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
-  const [modelSelection, setModelSelection] = useState<ModelSelection | null>(null);
+  const [modelPick, setModelPick] = useState<{
+    readonly environmentId: EnvironmentId | null;
+    readonly value: ModelSelection | null;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,6 +92,21 @@ function NewBotDialog({ request }: { readonly request: NewBotDialogRequest }) {
       : (writableEnvironments[0]?.environmentId ?? null);
   const selectedEnvironment =
     writableEnvironments.find((env) => env.environmentId === resolvedEnvironmentId) ?? null;
+  const selectedSettings = selectedEnvironment?.serverConfig?.settings ?? DEFAULT_SERVER_SETTINGS;
+  const selectedProviders =
+    useAtomValue(
+      resolvedEnvironmentId !== null
+        ? serverEnvironment.providersValueAtom(resolvedEnvironmentId)
+        : EMPTY_PROVIDERS_ATOM,
+    ) ?? EMPTY_SERVER_PROVIDERS;
+  const seededModelSelection = resolveFirstSupportedBotModelSelection(
+    selectedSettings,
+    providerInstanceEntriesFor(selectedProviders, selectedSettings, null),
+  );
+  const modelSelection =
+    modelPick !== null && modelPick.environmentId === resolvedEnvironmentId
+      ? modelPick.value
+      : seededModelSelection;
 
   const submit = async () => {
     if (saving || resolvedEnvironmentId === null) return;
@@ -171,7 +196,7 @@ function NewBotDialog({ request }: { readonly request: NewBotDialogRequest }) {
                     const match = writableEnvironments.find((env) => env.environmentId === nextId);
                     if (!match) return;
                     setEnvironmentId(match.environmentId);
-                    setModelSelection(null);
+                    setModelPick(null);
                   }}
                 >
                   <SelectTrigger id="new-bot-environment" size="sm">
@@ -247,7 +272,9 @@ function NewBotDialog({ request }: { readonly request: NewBotDialogRequest }) {
                   projectId={null}
                   value={modelSelection}
                   disabled={saving}
-                  onChange={setModelSelection}
+                  onChange={(next) =>
+                    setModelPick({ environmentId: resolvedEnvironmentId, value: next })
+                  }
                 />
               </div>
             ) : (

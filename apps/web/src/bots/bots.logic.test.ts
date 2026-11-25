@@ -1,8 +1,11 @@
 import {
   EnvironmentId,
   ProjectId,
+  ProviderDriverKind,
+  ProviderInstanceId,
   resolveSidebarModeFilter,
   ThreadId,
+  type ServerProvider,
   type ServerSettings,
 } from "@t3tools/contracts";
 import { derivePhysicalProjectKey } from "@t3tools/client-runtime/state/project-grouping";
@@ -13,14 +16,21 @@ import {
   type ProjectsSidebarGroupInput,
   type ProjectsSidebarThread,
 } from "../components/sidebar/ProjectsSidebar.logic";
+import { deriveProviderInstanceEntries } from "../providerInstances";
 import {
   deriveBotSidebarEntries,
   filterNonBotProjects,
   filterNonBotThreads,
+  formatBotModelDisplayName,
   formatBotTokenCount,
   isAnyBotsEnabled,
+  isBotSidebarRoute,
   keepBotProjectsSeparate,
   parseBotPositiveInt,
+  resolveBotEffectiveModelSelection,
+  resolveBotRouteSidebarMode,
+  resolveBotRunNowState,
+  resolveFirstSupportedBotModelSelection,
 } from "./bots.logic";
 
 const ENV_LOCAL = EnvironmentId.make("env-local");
@@ -231,5 +241,255 @@ describe("bots client logic", () => {
     expect(parseBotPositiveInt("-5")).toBeNull();
     expect(parseBotPositiveInt("1.5")).toBeNull();
     expect(parseBotPositiveInt("abc")).toBeNull();
+  });
+
+  it("resolves effective bot models, flags unsupported providers, seeds a supported model, and formats labels", () => {
+    const antigravityId = ProviderInstanceId.make("antigravity");
+    const claudeId = ProviderInstanceId.make("claudeAgent");
+    const codexId = ProviderInstanceId.make("codex");
+    const providers: ReadonlyArray<ServerProvider> = [
+      {
+        instanceId: antigravityId,
+        driver: ProviderDriverKind.make("antigravity"),
+        displayName: "Antigravity",
+        enabled: true,
+        installed: true,
+        version: null,
+        status: "ready",
+        auth: { status: "authenticated" },
+        checkedAt: "2026-10-01T00:00:00.000Z",
+        slashCommands: [],
+        skills: [],
+        models: [
+          {
+            slug: "gemini-pro",
+            name: "Gemini Pro",
+            isDefault: true,
+            isCustom: false,
+            capabilities: null,
+          },
+        ],
+      },
+      {
+        instanceId: claudeId,
+        driver: ProviderDriverKind.make("claudeAgent"),
+        displayName: "Claude",
+        enabled: true,
+        installed: true,
+        version: null,
+        status: "ready",
+        auth: { status: "authenticated" },
+        checkedAt: "2026-10-01T00:00:00.000Z",
+        slashCommands: [],
+        skills: [],
+        models: [
+          {
+            slug: "claude-haiku-4-5",
+            name: "Claude Haiku 4.5",
+            isCustom: false,
+            capabilities: null,
+          },
+          {
+            slug: "claude-sonnet-4-6",
+            name: "Claude Sonnet 4.6",
+            isDefault: true,
+            isCustom: false,
+            capabilities: null,
+          },
+        ],
+      },
+      {
+        instanceId: codexId,
+        driver: ProviderDriverKind.make("codex"),
+        displayName: "Codex",
+        enabled: true,
+        installed: true,
+        version: null,
+        status: "ready",
+        auth: { status: "authenticated" },
+        checkedAt: "2026-10-01T00:00:00.000Z",
+        slashCommands: [],
+        skills: [],
+        models: [
+          {
+            slug: "gpt-5.4",
+            name: "GPT-5.4",
+            isDefault: true,
+            isCustom: false,
+            capabilities: null,
+          },
+        ],
+      },
+    ];
+    const entries = deriveProviderInstanceEntries(providers);
+
+    // Bot inheriting an unsupported app default flags unsupported.
+    const inheritedUnsupported = resolveBotEffectiveModelSelection({
+      botModelSelection: null,
+      environmentDefaultModelSelection: { instanceId: antigravityId, model: "gemini-pro" },
+      instanceEntries: entries,
+    });
+    expect(inheritedUnsupported).toMatchObject({
+      source: "default",
+      unsupported: true,
+      selection: { instanceId: antigravityId, model: "gemini-pro" },
+    });
+
+    // Bot with no explicit model and no app default falls back to first selectable provider.
+    const fallbackUnsupported = resolveBotEffectiveModelSelection({
+      botModelSelection: null,
+      environmentDefaultModelSelection: null,
+      instanceEntries: entries,
+    });
+    expect(fallbackUnsupported).toMatchObject({
+      source: "fallback",
+      unsupported: true,
+      selection: { instanceId: antigravityId, model: "gemini-pro" },
+    });
+
+    // Bot with an explicit Claude model is supported.
+    const explicitClaude = resolveBotEffectiveModelSelection({
+      botModelSelection: { instanceId: claudeId, model: "claude-haiku-4-5" },
+      environmentDefaultModelSelection: { instanceId: antigravityId, model: "gemini-pro" },
+      instanceEntries: entries,
+    });
+    expect(explicitClaude).toMatchObject({
+      source: "bot",
+      unsupported: false,
+      selection: { instanceId: claudeId, model: "claude-haiku-4-5" },
+    });
+
+    // Seeding skips an unsupported app default and picks the first available Claude/Codex model.
+    expect(
+      resolveFirstSupportedBotModelSelection(
+        { defaultModelSelection: { instanceId: antigravityId, model: "gemini-pro" } },
+        entries,
+      ),
+    ).toEqual({ instanceId: claudeId, model: "claude-sonnet-4-6" });
+
+    // Seeding keeps a supported app default when available.
+    expect(
+      resolveFirstSupportedBotModelSelection(
+        { defaultModelSelection: { instanceId: codexId, model: "gpt-5.4" } },
+        entries,
+      ),
+    ).toEqual({ instanceId: codexId, model: "gpt-5.4" });
+
+    // Seeding returns null when only unsupported providers exist.
+    expect(
+      resolveFirstSupportedBotModelSelection(
+        { defaultModelSelection: { instanceId: antigravityId, model: "gemini-pro" } },
+        entries.slice(0, 1),
+      ),
+    ).toBeNull();
+
+    // Model display formatting uses catalog display name and falls back to raw slug.
+    expect(
+      formatBotModelDisplayName({ instanceId: claudeId, model: "claude-haiku-4-5" }, entries),
+    ).toBe("Claude Haiku 4.5");
+    expect(
+      formatBotModelDisplayName({ instanceId: claudeId, model: "custom-model" }, entries),
+    ).toBe("custom-model");
+    expect(formatBotModelDisplayName(null, entries)).toBeNull();
+  });
+
+  it("computes Run now availability and derives the Bots sidebar tab on bot routes", () => {
+    expect(
+      resolveBotRunNowState({
+        botsEnabled: false,
+        paused: false,
+        connected: true,
+        canOperate: true,
+      }),
+    ).toEqual({ disabled: true, reason: "bots_off" });
+    expect(
+      resolveBotRunNowState({ botsEnabled: true, paused: true, connected: true, canOperate: true }),
+    ).toEqual({ disabled: true, reason: "paused" });
+    expect(
+      resolveBotRunNowState({
+        botsEnabled: true,
+        paused: false,
+        connected: false,
+        canOperate: true,
+      }),
+    ).toEqual({ disabled: true, reason: "disconnected" });
+    expect(
+      resolveBotRunNowState({
+        botsEnabled: true,
+        paused: false,
+        connected: true,
+        canOperate: false,
+      }),
+    ).toEqual({ disabled: true, reason: "no_permission" });
+    expect(
+      resolveBotRunNowState({
+        botsEnabled: true,
+        paused: false,
+        connected: true,
+        canOperate: true,
+      }),
+    ).toEqual({ disabled: false, reason: null });
+
+    const groups = [makeGroup(ORDINARY_PROJECT, "App"), makeGroup(BOT_PROJECT, "PR Digest")];
+    const getSettings = () => makeSettings(true);
+
+    expect(
+      isBotSidebarRoute({
+        activeProjectKey: `${ENV_LOCAL}:${BOT_PROJECT}`,
+        activeThreadProject: null,
+        projectGroups: groups,
+        getServerSettings: getSettings,
+      }),
+    ).toBe(true);
+    expect(
+      isBotSidebarRoute({
+        activeProjectKey: null,
+        activeThreadProject: { environmentId: ENV_LOCAL, projectId: BOT_PROJECT },
+        projectGroups: groups,
+        getServerSettings: getSettings,
+      }),
+    ).toBe(true);
+    expect(
+      isBotSidebarRoute({
+        activeProjectKey: `${ENV_LOCAL}:${ORDINARY_PROJECT}`,
+        activeThreadProject: { environmentId: ENV_LOCAL, projectId: ORDINARY_PROJECT },
+        projectGroups: groups,
+        getServerSettings: getSettings,
+      }),
+    ).toBe(false);
+
+    // Bot route selects Bots tab even when saved filter is All; explicit override can switch away.
+    expect(
+      resolveBotRouteSidebarMode({
+        savedMode: "all",
+        botsEnabled: true,
+        isBotRoute: true,
+        routeOverride: null,
+      }),
+    ).toBe("bots");
+    expect(
+      resolveBotRouteSidebarMode({
+        savedMode: "all",
+        botsEnabled: true,
+        isBotRoute: true,
+        routeOverride: "all",
+      }),
+    ).toBe("all");
+    expect(
+      resolveBotRouteSidebarMode({
+        savedMode: "work",
+        botsEnabled: true,
+        isBotRoute: false,
+        routeOverride: null,
+      }),
+    ).toBe("work");
+    expect(
+      resolveBotRouteSidebarMode({
+        savedMode: "all",
+        botsEnabled: false,
+        isBotRoute: true,
+        routeOverride: null,
+      }),
+    ).toBe("all");
   });
 });

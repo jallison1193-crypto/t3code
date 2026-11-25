@@ -13033,5 +13033,17 @@
   "c82e1f320b93fbc1": "Ausführungen pro Tag",
   "2996ea4e1e583d34": "Tokens pro Tag",
   "dc53cecbcc085b27": "Für Bots noch nicht unterstützt. Wähle Claude oder Codex.",
-  "5049d15df6e0fe27": "Das Modell dieses Bots kann von T3 nicht gesteuert werden. Wähle ein Claude- oder Codex-Modell."
+  "5809fc3ea87f6c3f": "Bots sind aus",
+  "2f05279f6289eddb": "Bot ist pausiert",
+  "5fc9ee50f62ce033": "Führe dein Ziel jetzt aus.",
+  "c228ed50ec7715bf": "Bots laufen nur mit Claude oder Codex. Wähle unten ein Modell.",
+  "0deadb4000b39337": "Auslöser ist unvollständig",
+  "13ead388ab769a27": "Wähle zuerst ein Modell für diesen Bot.",
+  "403b71f0c87b5893": "Füge einen Namen und die Aufgabe für diesen Auslöser hinzu.",
+  "2102cfe9fbd2c604": "Auslöser bearbeiten",
+  "0ea3c5c6f60fc214": "Neuer Auslöser",
+  "9f66a4545d8fc4ba": "Was bei diesem Auslöser zu tun ist",
+  "bfdc4af2fa62d728": "Verwendet das Modell des Bots: {model}",
+  "eefdcfcd0b5f062a": "Auslöser speichern",
+  "45b4cf556960f6f5": "Das Ziel des Bots ist immer enthalten."
 }
