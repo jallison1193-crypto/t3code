@@ -176,7 +176,7 @@ Asked for 2026-11-25. A native version of Josh's T3 Mini prototype (`C:\Users\ja
 - Always on top by default, with a minimize button.
 - Settings > General (desktop only): on/off; position (right side, bottom right, bottom left, left side); size (small: an avatar-sized status bubble that expands on click; medium: a compact feed and composer; large: a full thread view); auto-open and auto-hide switches.
 - Content is the existing web app on a compact route (thread timeline, composer, Stop), so every provider works and nothing is duplicated.
-- M7a (done 2026-11-25): the window, the compact route, settings, and opening it by hand from the command palette, the thread menu or a keybinding. Not yet run in Electron; Josh tries it by hand. M7b: auto-open and auto-hide on computer use, click-through, and remembering a dragged position.
+- M7a (done 2026-11-25): the window, the compact route, settings, and opening it by hand from the command palette, the thread menu or a keybinding. Not yet run in Electron; Josh tries it by hand. M7b (done 2026-11-25): opens on the thread that starts using the computer, click-through at half opacity while it does (toggle in the command palette), hides about 8 seconds after, remembers a dragged position. Detection reads the running-thread streams the main window already holds; subagents a provider runs inside its own turn are not detected.
 - Prior art: Claude Desktop shrinks its chat into a panel docked at the top right during computer use; the ChatGPT and Codex desktop apps float a small avatar.
 
 ## Going public
