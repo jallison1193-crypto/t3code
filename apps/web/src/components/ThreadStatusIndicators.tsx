@@ -769,7 +769,7 @@ export function ThreadTerminalStatusButton({
   );
 }
 
-function ThreadStatusLabel({
+export function ThreadStatusLabel({
   status,
   compact = false,
 }: {

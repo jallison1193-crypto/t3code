@@ -1,8 +1,4 @@
 import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
-import {
-  projectThreadBoardColumn,
-  type ProjectThreadBoardColumn,
-} from "@t3tools/client-runtime/project-thread-board";
 import { T, useGT } from "gt-react";
 import { BotIcon, ChevronDownIcon, PlusIcon } from "lucide-react";
 
@@ -10,6 +6,7 @@ import type { BotSidebarEntry } from "~/bots/bots.logic";
 import { openNewBotDialog } from "~/bots/newBotDialogState";
 import { useBotWritableEnvironments } from "~/bots/useBots";
 import { cn } from "~/lib/utils";
+import { ThreadStatusDot } from "../ThreadStatusDot";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {
@@ -21,15 +18,6 @@ import {
   SidebarMenuSubItem,
 } from "../ui/sidebar";
 import type { ProjectsSidebarGroupInput, ProjectsSidebarThread } from "./ProjectsSidebar.logic";
-import { SidebarHeaderIconButton } from "./SidebarThreadHeader";
-
-const THREAD_DOT_CLASS: Record<ProjectThreadBoardColumn, string> = {
-  review: "bg-emerald-500 dark:bg-emerald-300/90",
-  waiting: "bg-amber-500 dark:bg-amber-300/90",
-  working: "bg-sky-500 dark:bg-sky-300/80",
-  idle: "bg-muted-foreground/60",
-  done: "bg-border",
-};
 
 export function BotsSidebarSection<
   TGroup extends ProjectsSidebarGroupInput,
@@ -57,17 +45,6 @@ export function BotsSidebarSection<
 
   return (
     <SidebarGroup>
-      <div className="flex items-center justify-between pr-1">
-        <div className="px-(--sidebar-row-content-inset) pb-1 text-xs font-medium text-sidebar-muted-foreground">
-          <T>Bots</T>
-        </div>
-        {canCreate ? (
-          <SidebarHeaderIconButton label={gt("New bot")} onClick={() => openNewBotDialog()}>
-            <PlusIcon />
-          </SidebarHeaderIconButton>
-        ) : null}
-      </div>
-
       {bots.length === 0 ? (
         <div className="flex flex-col items-start gap-2 px-(--sidebar-row-content-inset) py-1.5">
           <p className="text-xs text-sidebar-muted-foreground">
@@ -90,7 +67,7 @@ export function BotsSidebarSection<
                 <div
                   data-active={isBotActive ? "true" : undefined}
                   className={cn(
-                    "flex h-8 w-full items-center gap-1 rounded-(--control-radius) pr-1 transition-colors hover:bg-sidebar-row-hover",
+                    "flex h-8 w-full items-center rounded-(--control-radius) transition-colors hover:bg-sidebar-row-hover",
                     isBotActive && "bg-sidebar-row-selected",
                   )}
                 >
@@ -118,11 +95,11 @@ export function BotsSidebarSection<
                         : gt("Expand {name}", { name: bot.name })
                     }
                     onClick={() => onToggleBot(bot.group.projectKey)}
-                    className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-(--control-radius) text-sidebar-muted-foreground outline-none hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    className="flex h-8 shrink-0 cursor-pointer items-center rounded-(--control-radius) px-(--sidebar-row-content-inset) text-sidebar-muted-foreground outline-none hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   >
                     <ChevronDownIcon
                       aria-hidden
-                      className={cn("size-3.5 transition-transform", !isExpanded && "-rotate-90")}
+                      className={cn("size-3 transition-transform", !isExpanded && "-rotate-90")}
                     />
                   </button>
                 </div>
@@ -133,7 +110,6 @@ export function BotsSidebarSection<
                         const key = scopedThreadKey(
                           scopeThreadRef(thread.environmentId, thread.id),
                         );
-                        const column = projectThreadBoardColumn(thread);
                         return (
                           <SidebarMenuSubItem key={key}>
                             <SidebarMenuButton
@@ -141,13 +117,7 @@ export function BotsSidebarSection<
                               isActive={activeThreadKey === key}
                               onClick={() => onOpenThread(thread)}
                             >
-                              <span
-                                aria-hidden
-                                className={cn(
-                                  "size-2 shrink-0 rounded-full",
-                                  THREAD_DOT_CLASS[column],
-                                )}
-                              />
+                              <ThreadStatusDot thread={thread} />
                               <span className="min-w-0 flex-1 truncate">{thread.title}</span>
                             </SidebarMenuButton>
                           </SidebarMenuSubItem>
@@ -163,6 +133,14 @@ export function BotsSidebarSection<
               </SidebarMenuItem>
             );
           })}
+          {canCreate ? (
+            <SidebarMenuItem>
+              <SidebarMenuButton size="sm" onClick={() => openNewBotDialog()}>
+                <PlusIcon />
+                <T>New bot</T>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ) : null}
         </SidebarMenu>
       )}
     </SidebarGroup>

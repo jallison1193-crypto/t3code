@@ -26,7 +26,6 @@ import type {
   ScheduledTaskThreadMode,
   ScheduledTaskUpsertInput,
   ScheduledTaskWebhookDeliverySummary,
-  ScheduledTaskWebhookEndpoint,
   ThreadId,
 } from "@t3tools/contracts";
 import {
@@ -75,13 +74,15 @@ import {
   type EnvironmentPresentation,
 } from "../../state/environments";
 import {
+  useProject,
   useProjects,
   useQuietThreadShell,
   useThreadShell,
   useVisibleThreadShells,
 } from "../../state/entities";
 import { buildThreadRouteParams } from "../../threadRoutes";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { derivePhysicalProjectKey } from "@t3tools/client-runtime/state/project-grouping";
 import { environmentAtomList, environmentIdsKey } from "../../state/environmentAtomList";
 import { usePaginatedBranches, useThreadSearch } from "../../state/queries";
 import { formatEnvironmentQueryError, useEnvironmentQuery } from "../../state/query";
@@ -792,13 +793,14 @@ export function ScheduledTaskRow({
   environmentId,
   task,
   timeZone,
-  showWebhookUrl = false,
+  botPage = false,
   onEdit,
 }: {
   readonly environmentId: EnvironmentId;
   readonly task: ScheduledTask;
   readonly timeZone: string | undefined;
-  readonly showWebhookUrl?: boolean;
+  /** The row sits on its bot's own page, which is also where a webhook's URL is handed out. */
+  readonly botPage?: boolean;
   readonly onEdit: () => void;
 }) {
   const messages = useMessages();
@@ -811,6 +813,34 @@ export function ScheduledTaskRow({
   const [busy, setBusy] = useState(false);
   const [deliveriesOpen, setDeliveriesOpen] = useState(false);
   const isWebhook = task.schedule.type === "webhook";
+  const isBotTask = isBotProject(
+    useEnvironment(environmentId)?.serverConfig?.settings,
+    task.projectId,
+  );
+  const httpBaseUrl = useEnvironmentHttpBaseUrl(environmentId);
+  const webhook =
+    botPage && isWebhook && task.webhook
+      ? webhookAddress(task.webhook, httpBaseUrl, messages)
+      : null;
+  const { copyToClipboard } = useCopyToClipboard<string | null>({
+    target: WEBHOOK_URL_COPY_TARGET,
+    onCopy: (note) => {
+      toastManager.add({
+        type: "success",
+        title: gt("Webhook URL copied"),
+        ...(note === null ? {} : { description: note }),
+      });
+    },
+    onError: (error) => {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: gt("Failed to copy webhook URL"),
+          description: error.message,
+        }),
+      );
+    },
+  });
   const toggle = useAtomCommand(serverEnvironment.setScheduledTaskEnabled, {
     label: "scheduled task enabled",
   });
@@ -882,6 +912,9 @@ export function ScheduledTaskRow({
               {messages(RUN_STATUS_LABELS[task.lastRunStatus])}
             </Badge>
           ) : null}
+          {isBotTask && !botPage ? (
+            <ScheduledTaskBotLink environmentId={environmentId} projectId={task.projectId} />
+          ) : null}
           {task.threadId !== null && scheduledTaskThreadMode(task) !== "new_thread" ? (
             <ScheduledTaskThreadLink environmentId={environmentId} threadId={task.threadId} />
           ) : null}
@@ -914,6 +947,15 @@ export function ScheduledTaskRow({
                 <PencilIcon />
                 <T>Edit</T>
               </MenuItem>
+              {webhook ? (
+                <MenuItem
+                  disabled={!webhook.copyable}
+                  onClick={() => copyToClipboard(webhook.address, webhook.note)}
+                >
+                  <CopyIcon />
+                  <T>Copy webhook URL</T>
+                </MenuItem>
+              ) : null}
               {isWebhook ? (
                 <MenuItem onClick={() => setDeliveriesOpen(true)}>
                   <InboxIcon />
@@ -942,10 +984,31 @@ export function ScheduledTaskRow({
         </div>
       }
     >
-      {showWebhookUrl && isWebhook && task.webhook ? (
-        <ScheduledTaskWebhookUrl environmentId={environmentId} endpoint={task.webhook} />
+      {webhook && !webhook.copyable && webhook.note !== null ? (
+        <p className="pb-2 text-xs text-muted-foreground">{webhook.note}</p>
       ) : null}
     </SettingsRow>
+  );
+}
+
+function ScheduledTaskBotLink({
+  environmentId,
+  projectId,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly projectId: ProjectId;
+}) {
+  const project = useProject(scopeProjectRef(environmentId, projectId));
+  if (project === null) return null;
+  return (
+    <Link
+      to="/projects/$projectKey"
+      // Bot projects are never grouped with others, so the physical key is the page's key.
+      params={{ projectKey: derivePhysicalProjectKey(project) }}
+      className="max-w-64 truncate underline underline-offset-2 hover:text-foreground"
+    >
+      {project.title}
+    </Link>
   );
 }
 
@@ -1172,46 +1235,6 @@ const WEBHOOK_URL_COPY_TARGET = {
   unavailableMessage: msg("Clipboard API is unavailable while copying webhook URL."),
   failureMessage: msg("Failed to copy webhook URL to the clipboard."),
 } as const;
-
-function ScheduledTaskWebhookUrl({
-  environmentId,
-  endpoint,
-}: {
-  readonly environmentId: EnvironmentId;
-  readonly endpoint: ScheduledTaskWebhookEndpoint;
-}) {
-  const gt = useGT();
-  const messages = useMessages();
-  const httpBaseUrl = useEnvironmentHttpBaseUrl(environmentId);
-  const { copyToClipboard, isCopied } = useCopyToClipboard({
-    target: WEBHOOK_URL_COPY_TARGET,
-  });
-  const { address: url, copyable, note } = webhookAddress(endpoint, httpBaseUrl, messages);
-  return (
-    <div className="mt-2.5 space-y-1 pb-2">
-      <div className="flex items-center gap-2">
-        <Input
-          readOnly
-          size="sm"
-          aria-label={gt("Webhook URL")}
-          value={url}
-          onFocus={(event) => event.currentTarget.select()}
-        />
-        <Button
-          size="sm"
-          variant="outline"
-          type="button"
-          disabled={!copyable}
-          onClick={() => copyToClipboard(url, undefined)}
-        >
-          <CopyIcon />
-          {isCopied ? gt("Copied") : gt("Copy")}
-        </Button>
-      </div>
-      {note !== null ? <p className="text-xs text-muted-foreground">{note}</p> : null}
-    </div>
-  );
-}
 
 function WebhookEndpointField({
   environmentId,

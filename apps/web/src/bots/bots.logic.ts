@@ -304,18 +304,30 @@ export function formatBotModelDisplayName(
   return model ? getDisplayModelName(model) : selection.model;
 }
 
-export type BotRunNowDisabledReason = "bots_off" | "paused" | "disconnected" | "no_permission";
+export type BotRunNowDisabledReason =
+  | "bots_off"
+  | "paused"
+  | "disconnected"
+  | "no_permission"
+  | "unsaved"
+  | "blocked";
 
 export function resolveBotRunNowState(input: {
   readonly botsEnabled: boolean;
   readonly paused: boolean;
   readonly connected: boolean;
   readonly canOperate: boolean;
+  /** Unsaved edits: a run would use the goal and model from before them. */
+  readonly dirty: boolean;
+  /** The server's own refusal, such as a daily limit. */
+  readonly blockedByPolicy: string | undefined;
 }): { readonly disabled: boolean; readonly reason: BotRunNowDisabledReason | null } {
   if (!input.botsEnabled) return { disabled: true, reason: "bots_off" };
   if (input.paused) return { disabled: true, reason: "paused" };
   if (!input.connected) return { disabled: true, reason: "disconnected" };
   if (!input.canOperate) return { disabled: true, reason: "no_permission" };
+  if (input.dirty) return { disabled: true, reason: "unsaved" };
+  if (input.blockedByPolicy !== undefined) return { disabled: true, reason: "blocked" };
   return { disabled: false, reason: null };
 }
 

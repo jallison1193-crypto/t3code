@@ -15,6 +15,7 @@ import { cn } from "~/lib/utils";
 import { useRightPanelStore } from "~/rightPanelStore";
 import { readEnvironment, useEnvironments } from "~/state/environments";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
+import { resolveThreadStatusPill } from "../Sidebar.logic";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
@@ -42,7 +43,14 @@ const DIGEST_GROUP_PRESENTATION = [
   { key: "finished", label: msg("Finished"), dotClass: "bg-emerald-500 dark:bg-emerald-300/90" },
 ] as const;
 
-export function ProjectThreadBoardContent({
+// Says why a card waits, in the stock status words: approval, input, or a failure.
+function WaitingReason({ thread }: { readonly thread: EnvironmentThreadShell }) {
+  const m = useMessages();
+  const status = resolveThreadStatusPill({ thread });
+  return status ? <span className={status.colorClass}>{m(status.label)}</span> : null;
+}
+
+function ProjectThreadBoardContent({
   columns,
   openCount,
   digest,
@@ -159,8 +167,9 @@ export function ProjectThreadBoardContent({
                     )}
                   >
                     <span className="truncate text-sm">{thread.title}</span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                       {formatRelativeTimeLabel(thread.updatedAt)}
+                      {column === "waiting" ? <WaitingReason thread={thread} /> : null}
                     </span>
                   </button>
                 </li>

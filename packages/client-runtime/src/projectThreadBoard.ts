@@ -7,8 +7,9 @@ import {
 } from "@t3tools/contracts";
 
 import { coordinatorThreadIdOf } from "./coordinatorThread.ts";
-import type { EnvironmentThreadShell } from "./state/models.ts";
+import { threadRuntimeIsActive, type EnvironmentThreadShell } from "./state/models.ts";
 import { isThreadWorking } from "./state/threadInbox.ts";
+import { hasUnseenRunFailure } from "./state/threadSettled.ts";
 import { toSortableTimestamp } from "./state/threadSort.ts";
 
 export const PROJECT_THREAD_BOARD_COLUMNS = [
@@ -42,6 +43,15 @@ type BoardThread = Pick<
 export function projectThreadBoardColumn(thread: BoardThread): ProjectThreadBoardColumn {
   if (thread.hasPendingApprovals || thread.hasPendingUserInput) return "waiting";
   if (thread.pendingSubagentRequest != null) return "waiting";
+  // An unseen failure waits on the user even while background work holds the thread.
+  // `undefined` visit tracking is an older server, where a failure would never clear.
+  if (
+    thread.lastVisitedAt !== undefined &&
+    !threadRuntimeIsActive(thread.runtime) &&
+    hasUnseenRunFailure(thread)
+  ) {
+    return thread.settledOverride === "settled" ? "done" : "waiting";
+  }
   if (isThreadWorking(thread)) return "working";
   if (thread.settledOverride === "settled") return "done";
   if (hasUnreviewedCompletion(thread)) return "review";

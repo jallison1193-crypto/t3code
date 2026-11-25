@@ -30,7 +30,10 @@ function withoutVisitTracking<T extends { lastVisitedAt?: string | null }>(input
   return rest;
 }
 
-function completedRun(completedAt: string, status: "completed" | "interrupted" = "completed") {
+function completedRun(
+  completedAt: string,
+  status: "completed" | "interrupted" | "failed" = "completed",
+) {
   return {
     runId: RunId.make("run-1"),
     status,
@@ -82,6 +85,37 @@ describe("projectThreadBoardColumn", () => {
     [
       "server without visit tracking",
       withoutVisitTracking(thread("a", { latestRun: completedRun("2026-06-02T00:00:00.000Z") })),
+      "idle",
+    ],
+    [
+      "failed since the last visit",
+      thread("a", {
+        latestRun: completedRun("2026-06-02T00:00:00.000Z", "failed"),
+        runtime: { ...running, status: "idle" as const },
+      }),
+      "waiting",
+    ],
+    [
+      "failed and already seen",
+      thread("a", {
+        lastVisitedAt: "2026-06-03T00:00:00.000Z",
+        latestRun: completedRun("2026-06-02T00:00:00.000Z", "failed"),
+      }),
+      "idle",
+    ],
+    [
+      "failed then settled",
+      thread("a", {
+        settledOverride: "settled",
+        latestRun: completedRun("2026-06-02T00:00:00.000Z", "failed"),
+      }),
+      "done",
+    ],
+    [
+      "failed on a server without visit tracking",
+      withoutVisitTracking(
+        thread("a", { latestRun: completedRun("2026-06-02T00:00:00.000Z", "failed") }),
+      ),
       "idle",
     ],
     ["never run", thread("a"), "idle"],

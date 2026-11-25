@@ -12,9 +12,10 @@ Each bot gets its own managed folder inside T3 Code's data directory and its own
 
 ## Run a bot manually
 
-Click **Run now** at the top of a bot's page to open a new thread draft in that bot's project, prefilled with the bot's model and an editable prompt (`Do your goal now.`). Edit the message if needed and send it to start a run.
+Click **Run now** at the top of a bot's page to start a run right away with the bot's saved goal and model. T3 Code opens the new run when it starts.
 
-- **Run now** is disabled while Bots are turned off or the bot is paused.
+- **Run now** is disabled while Bots are turned off, the bot is paused, or a daily limit is reached.
+- It is also disabled while the page has unsaved changes. Click **Save changes** first.
 
 ## Add a trigger
 
@@ -22,9 +23,9 @@ On a bot's page, open the **Triggers** section and click **Add trigger**.
 
 - Choose an interval, fixed time, one-time date, or webhook trigger, and describe what to do on that trigger (the bot's goal is always included).
 - Triggers always follow the bot's model: new triggers use the bot's current model, and changing a bot's model updates all of its existing triggers.
-- Webhook triggers display their URL and a **Copy** button directly on the trigger card on the bot's page.
+- To get a webhook trigger's address, open its **...** menu and choose **Copy webhook URL**. The address contains a secret, so give it only to services that should be able to start the bot.
 - By default, each trigger run starts a new thread under the bot so runs stay separate.
-- Click any run under **Runs** (or expand the bot in the **Bots** sidebar tab) to read the run or reply to it. If a run needs your input or approval, it also appears under **Needs you**.
+- Click any run under **Runs** (or expand the bot in the **Bots** sidebar tab) to read the run or reply to it. If a run needs your input or approval, or fails and you have not opened it, it also appears under **Needs you**.
 
 ## Pause a bot
 
@@ -64,6 +65,6 @@ Bots require a provider that routes every tool and MCP call through T3 Code's ap
 Each bot has daily usage limits to cap automated spending and run volume:
 
 - **Defaults:** 24 trigger runs per day and 2,000,000 tokens per day (`Runs and tokens`).
-- **Modes:** Edit a bot's **Limits** in its settings to switch between **Runs and tokens**, **Runs only**, or **No limits**, or to adjust the daily caps.
-- **What stops when a limit is reached:** Scheduled ticks are skipped without building a backlog, and incoming webhooks are refused. Clicking **Run now** on a trigger and chatting in a bot thread still work.
+- **Modes:** Edit a bot's **Daily limits** in its settings to switch between **Runs and tokens**, **Runs only**, or **No limits**, or to adjust the daily caps.
+- **What stops when a limit is reached:** Scheduled ticks are skipped without building a backlog, incoming webhooks are refused, and **Run now** at the top of the bot's page is disabled. Clicking **Run now** on a trigger and chatting in a bot thread still work.
 - **Midnight reset:** Counts reset at local midnight on the server, and blocked triggers resume automatically without firing missed runs.
