@@ -34,6 +34,7 @@ const toBotSummary = (bot: BotRecord) => ({
   goal: bot.goal,
   modelSelection: bot.modelSelection,
   paused: bot.paused,
+  ...(bot.limits === undefined ? {} : { limits: bot.limits }),
 });
 
 const mapBotError = (error: BotOperationError): OrchestratorMcpFailure => {
@@ -67,6 +68,7 @@ export const layer = McpToolAccess.toLayer(BotToolkit, {
       }
 
       const bot = yield* bots.get(input.botId).pipe(Effect.mapError(mapBotError));
+      const usageResult = yield* bots.getUsage(bot.projectId).pipe(Effect.mapError(mapBotError));
       const scheduledTasks = yield* ScheduledTaskService.ScheduledTaskService;
       const threads = yield* ThreadManagementService.ThreadManagementService;
 
@@ -102,6 +104,8 @@ export const layer = McpToolAccess.toLayer(BotToolkit, {
       return {
         bot: {
           ...toBotSummary(bot),
+          limits: usageResult.limits,
+          todayUsage: usageResult.usage,
           triggers,
           recentRuns,
         },
@@ -122,6 +126,7 @@ export const layer = McpToolAccess.toLayer(BotToolkit, {
               ...(input.modelSelection === undefined
                 ? {}
                 : { modelSelection: input.modelSelection }),
+              ...(input.limits === undefined ? {} : { limits: input.limits }),
             })
             .pipe(Effect.mapError(mapBotError));
           return { bot: toBotSummary(bot) };
@@ -136,6 +141,7 @@ export const layer = McpToolAccess.toLayer(BotToolkit, {
               ...(input.modelSelection === undefined
                 ? {}
                 : { modelSelection: input.modelSelection }),
+              ...(input.limits === undefined ? {} : { limits: input.limits }),
             })
             .pipe(Effect.mapError(mapBotError));
           return { bot: toBotSummary(bot) };

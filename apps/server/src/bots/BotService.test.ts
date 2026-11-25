@@ -2,27 +2,41 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import {
+  BOT_DAILY_RUN_LIMIT_REASON,
+  BOT_DAILY_TOKEN_LIMIT_REASON,
   BOT_PAUSED_REASON,
+  BOT_UNSUPPORTED_PROVIDER_REASON,
   BOTS_DISABLED_REASON,
+  BotProfile,
+  DEFAULT_BOT_LIMITS,
   ProjectId,
+  ProviderDriverKind,
   ProviderInstanceId,
+  resolveBotLimits,
   ScheduledTaskId,
   type Project,
   type ScheduledTask,
 } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as SqlClient from "effect/sql/SqlClient";
+import * as TestClock from "effect/testing/TestClock";
 
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as ProjectService from "../project/ProjectService.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as BotService from "./BotService.ts";
+import { localDayStartUtc, resolveBotTriggerBlock } from "./botUsage.ts";
 
 const EPOCH_ISO = "2026-10-01T12:00:00.000Z";
+const decodeBotProfile = Schema.decodeUnknownSync(BotProfile);
 
 const makeScheduledTask = (id: string, projectId: ProjectId): ScheduledTask => ({
   id: ScheduledTaskId.make(id),
@@ -83,6 +97,7 @@ const makeHarness = Effect.fn("BotServiceTest.makeHarness")(function* (initial?:
   });
 
   const deps = Layer.mergeAll(
+    SqlitePersistence.layerMemory,
     serverSettingsLayer,
     NodeCrypto.layer,
     Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
@@ -161,10 +176,12 @@ const makeHarness = Effect.fn("BotServiceTest.makeHarness")(function* (initial?:
   const ctx = yield* Layer.build(layer);
   const service = yield* BotService.BotService.pipe(Effect.provide(ctx));
   const settings = yield* ServerSettings.ServerSettingsService.pipe(Effect.provide(ctx));
+  const sql = yield* SqlClient.SqlClient.pipe(Effect.provide(ctx));
 
   return {
     service,
     settings,
+    sql,
     ordinaryProjectId,
     projectsMap,
     tasksMap,
@@ -260,6 +277,140 @@ describe("BotService", () => {
         expect(tasksMap.has(ordinaryTask.id)).toBe(true);
         expect(deletedProjectIds).toEqual([created.projectId]);
         expect(yield* service.list()).toEqual([]);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "decodes legacy BotProfile without limits, updates limits without losing paused state, and computes daily usage & limit blocks",
+    () =>
+      Effect.gen(function* () {
+        yield* TestClock.setTime(Date.parse("2026-10-01T15:00:00.000Z"));
+        const legacy = decodeBotProfile({});
+        expect(legacy.limits).toBeUndefined();
+        expect(resolveBotLimits(legacy)).toEqual(DEFAULT_BOT_LIMITS);
+
+        const withLimits = decodeBotProfile({
+          paused: true,
+          limits: { mode: "runs_only", runsPerDay: 5 },
+        });
+        expect(resolveBotLimits(withLimits)).toEqual({
+          mode: "runs_only",
+          runsPerDay: 5,
+          tokensPerDay: DEFAULT_BOT_LIMITS.tokensPerDay,
+        });
+
+        const { service, settings, sql, ordinaryProjectId } = yield* makeHarness();
+        const created = yield* service.create({
+          name: "Daily Bot",
+          goal: "Check metrics",
+        });
+        expect(created.limits).toEqual(DEFAULT_BOT_LIMITS);
+
+        // Updating limits preserves paused, and toggling paused preserves limits.
+        yield* service.update({
+          projectId: created.projectId,
+          limits: { mode: "runs_and_tokens", runsPerDay: 2, tokensPerDay: 1000 },
+        });
+        const pausedBot = yield* service.update({
+          projectId: created.projectId,
+          paused: true,
+        });
+        expect(pausedBot.paused).toBe(true);
+        expect(pausedBot.limits).toEqual({
+          mode: "runs_and_tokens",
+          runsPerDay: 2,
+          tokensPerDay: 1000,
+        });
+        yield* service.update({ projectId: created.projectId, paused: false });
+
+        const now = yield* DateTime.withCurrentZoneLocal(DateTime.nowInCurrentZone);
+        const dayStart = localDayStartUtc(now);
+        const todayIso = DateTime.formatIso(DateTime.add(dayStart, { hours: 1 }));
+        const yesterdayIso = DateTime.formatIso(DateTime.subtract(dayStart, { hours: 1 }));
+
+        // Seed today's bot thread, yesterday's bot thread, and an ordinary project thread.
+        yield* sql`
+          INSERT INTO orchestration_v2_projection_threads (
+            thread_id, project_id, title, default_provider, runtime_mode, interaction_mode,
+            active_provider_thread_id, created_at, updated_at, archived_at, deleted_at, payload_json
+          ) VALUES
+            ('thread:today', ${created.projectId}, 'Today', 'codex', 'approval-required', 'default', NULL, ${todayIso}, ${todayIso}, NULL, NULL, '{}'),
+            ('thread:yesterday', ${created.projectId}, 'Yesterday', 'codex', 'approval-required', 'default', NULL, ${yesterdayIso}, ${yesterdayIso}, NULL, NULL, '{}'),
+            ('thread:other', ${ordinaryProjectId}, 'Other', 'codex', 'full-access', 'default', NULL, ${todayIso}, ${todayIso}, NULL, NULL, '{}')
+        `;
+
+        // Insert 1 scheduled run today, 1 manual run today (excluded from runs), 1 yesterday (excluded), 1 other project (excluded).
+        yield* sql`
+          INSERT INTO orchestration_v2_projection_messages (
+            message_id, thread_id, run_id, node_id, role, streaming, created_at, updated_at, payload_json
+          ) VALUES
+            ('scheduled-task-message:t1:1:scheduled', 'thread:today', 'run:1', 'node:1', 'user', 0, ${todayIso}, ${todayIso}, '{"scheduledTaskId":"task:1"}'),
+            ('scheduled-task-message:t1:2:manual', 'thread:today', 'run:2', 'node:2', 'user', 0, ${todayIso}, ${todayIso}, '{"scheduledTaskId":"task:1"}'),
+            ('scheduled-task-message:t1:0:scheduled', 'thread:yesterday', 'run:0', 'node:0', 'user', 0, ${yesterdayIso}, ${yesterdayIso}, '{"scheduledTaskId":"task:1"}'),
+            ('scheduled-task-message:t2:1:scheduled', 'thread:other', 'run:3', 'node:3', 'user', 0, ${todayIso}, ${todayIso}, '{"scheduledTaskId":"task:2"}')
+        `;
+
+        // Insert 600 tokens today for bot, 5000 yesterday, 9000 other project.
+        yield* sql`
+          INSERT INTO orchestration_v2_projection_provider_turns (
+            provider_turn_id, thread_id, provider_thread_id, node_id, run_attempt_id, ordinal, status, started_at, completed_at, payload_json
+          ) VALUES
+            ('pt:today-1', 'thread:today', 'pth:1', 'node:1', 'att:1', 1, 'completed', ${todayIso}, ${todayIso}, '{"turnTokenUsage":{"inputTokens":400,"outputTokens":200}}'),
+            ('pt:yesterday', 'thread:yesterday', 'pth:0', 'node:0', 'att:0', 1, 'completed', ${yesterdayIso}, ${yesterdayIso}, '{"turnTokenUsage":{"inputTokens":4000,"outputTokens":1000}}'),
+            ('pt:other', 'thread:other', 'pth:2', 'node:3', 'att:3', 1, 'completed', ${todayIso}, ${todayIso}, '{"turnTokenUsage":{"inputTokens":8000,"outputTokens":1000}}')
+        `;
+
+        const usage1 = yield* service.getUsage(created.projectId);
+        expect(usage1.usage.runs).toBe(1);
+        expect(usage1.usage.tokens).toBe(600);
+        expect(yield* service.triggerBlock(created.projectId)).toBeUndefined();
+
+        // Hit token limit (600 + 500 >= 1000).
+        yield* sql`
+          INSERT INTO orchestration_v2_projection_provider_turns (
+            provider_turn_id, thread_id, provider_thread_id, node_id, run_attempt_id, ordinal, status, started_at, completed_at, payload_json
+          ) VALUES
+            ('pt:today-2', 'thread:today', 'pth:1', 'node:2', 'att:2', 2, 'completed', ${todayIso}, ${todayIso}, '{"tokenUsage":{"inputTokens":300,"outputTokens":200,"usedTokens":500}}')
+        `;
+        expect(yield* service.triggerBlock(created.projectId)).toBe(BOT_DAILY_TOKEN_LIMIT_REASON);
+
+        // Switching to runs_only ignores token limit while still enforcing run limit.
+        yield* service.update({
+          projectId: created.projectId,
+          limits: { mode: "runs_only", runsPerDay: 2 },
+        });
+        expect(yield* service.triggerBlock(created.projectId)).toBeUndefined();
+
+        // Add a webhook run today -> hits runsPerDay (2).
+        yield* sql`
+          INSERT INTO orchestration_v2_projection_messages (
+            message_id, thread_id, run_id, node_id, role, streaming, created_at, updated_at, payload_json
+          ) VALUES
+            ('scheduled-task-message:t1:webhook:d1', 'thread:today', 'run:4', 'node:4', 'user', 0, ${todayIso}, ${todayIso}, '{"scheduledTaskId":"task:1"}')
+        `;
+        expect(yield* service.triggerBlock(created.projectId)).toBe(BOT_DAILY_RUN_LIMIT_REASON);
+
+        // Switching to none lifts all usage limits.
+        yield* service.update({
+          projectId: created.projectId,
+          limits: { mode: "none" },
+        });
+        expect(yield* service.triggerBlock(created.projectId)).toBeUndefined();
+
+        // Unsupported provider blocks triggers before limits.
+        const currentSettings = yield* settings.getSettings;
+        const unsupportedBlock = yield* resolveBotTriggerBlock({
+          settings: currentSettings,
+          projectId: created.projectId,
+          modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "cursor-fast" },
+          sql,
+          now,
+          resolveDriverKind: () => Effect.succeed(ProviderDriverKind.make("cursor")),
+        });
+        expect(unsupportedBlock).toEqual({
+          reason: BOT_UNSUPPORTED_PROVIDER_REASON,
+          allowManualRun: false,
+        });
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

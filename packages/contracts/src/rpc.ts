@@ -91,9 +91,11 @@ import {
   BotCreateInput,
   BotDeleteInput,
   BotDeleteResult,
+  BotGetUsageInput,
   BotOperationError,
   BotRecord,
   BotUpdateInput,
+  BotUsageResult,
 } from "./bot.ts";
 import {
   PluginOperationError,
@@ -702,6 +704,7 @@ export const WS_METHODS = {
   scheduledTasksListWebhookDeliveries: "scheduledTasks.listWebhookDeliveries",
   scheduledTasksGetWebhookDelivery: "scheduledTasks.getWebhookDelivery",
 
+  botsGetUsage: "bots.getUsage",
   botsCreate: "bots.create",
   botsUpdate: "bots.update",
   botsDelete: "bots.delete",
@@ -2566,6 +2569,12 @@ const WsScheduledTasksGetWebhookDeliveryRpc = Rpc.make(
   },
 );
 
+const WsBotsGetUsageRpc = Rpc.make(WS_METHODS.botsGetUsage, {
+  payload: BotGetUsageInput,
+  success: BotUsageResult,
+  error: Schema.Union([BotOperationError, EnvironmentAuthorizationError]),
+});
+
 const WsBotsCreateRpc = Rpc.make(WS_METHODS.botsCreate, {
   payload: BotCreateInput,
   success: BotRecord,
@@ -2707,6 +2716,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsAgentFeedbackAnswerRequestRpc,
   WsScheduledTasksListWebhookDeliveriesRpc,
   WsScheduledTasksGetWebhookDeliveryRpc,
+  WsBotsGetUsageRpc,
   WsBotsCreateRpc,
   WsBotsUpdateRpc,
   WsBotsDeleteRpc,

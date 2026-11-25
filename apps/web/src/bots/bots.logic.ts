@@ -161,3 +161,27 @@ export function deriveBotSidebarEntries<
   }
   return entries.toSorted((a, b) => a.name.localeCompare(b.name));
 }
+
+export function formatBotTokenCount(tokens: number): string {
+  const safe = Math.max(0, Math.trunc(tokens));
+  if (safe >= 1_000_000) {
+    const millions = safe / 1_000_000;
+    const formatted =
+      millions >= 10 || Number.isInteger(millions) ? millions.toFixed(0) : millions.toFixed(1);
+    return `${formatted.replace(/\.0$/, "")}M`;
+  }
+  if (safe >= 1_000) {
+    const thousands = safe / 1_000;
+    const formatted =
+      thousands >= 10 || Number.isInteger(thousands) ? thousands.toFixed(0) : thousands.toFixed(1);
+    return `${formatted.replace(/\.0$/, "")}k`;
+  }
+  return String(safe);
+}
+
+export function parseBotPositiveInt(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}

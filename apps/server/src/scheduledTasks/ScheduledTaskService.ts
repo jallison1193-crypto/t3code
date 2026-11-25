@@ -1,9 +1,8 @@
 import {
-  botTriggerBlockReason,
   CommandId,
   MessageId,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
-  type ProjectId,
+  ProjectId,
   ScheduledTask,
   ScheduledTaskError,
   ScheduledTaskId,
@@ -60,7 +59,9 @@ import { OrchestratorDispatchError } from "../orchestration-v2/Orchestrator.ts";
 import { userFacingDispatchErrorMessage } from "../orchestration-v2/UserFacingErrors.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
+import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import { type BotTriggerBlock, resolveBotTriggerBlock } from "../bots/botUsage.ts";
 import * as DueHint from "../scheduling/DueHint.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import { latestRootProviderFailure } from "@t3tools/shared/orchestrationV2ThreadError";
@@ -498,6 +499,14 @@ export const layer = Layer.effect(
     const readWebhookOrigin = yield* ScheduledTaskWebhookOrigin;
     const managedPolicy = yield* ManagedPolicy.ManagedPolicy;
     const serverSettingsOption = yield* Effect.serviceOption(ServerSettings.ServerSettingsService);
+    const providerInstancesOption = yield* Effect.serviceOption(
+      ProviderInstanceRegistry.ProviderInstanceRegistry,
+    );
+    const resolveDriverKind = Option.match(providerInstancesOption, {
+      onNone: () => undefined,
+      onSome: (registry) => (instanceId: Parameters<typeof registry.getInstance>[0]) =>
+        registry.getInstance(instanceId).pipe(Effect.map((instance) => instance?.driverKind)),
+    });
     const readServerSettings = (): Effect.Effect<ServerSettingsValue | undefined> =>
       Option.match(serverSettingsOption, {
         onNone: () => Effect.undefined,
@@ -509,22 +518,31 @@ export const layer = Layer.effect(
       webhookPolicyOrganization === undefined
         ? undefined
         : managedPolicyDeniedMessage(webhookPolicyOrganization, "webhook tasks");
-    const taskBlockReason = (
-      task: Pick<ScheduledTask, "projectId" | "schedule">,
+    const taskBlock = Effect.fnUntraced(function* (
+      task: Pick<ScheduledTask, "projectId" | "schedule" | "modelSelection">,
       settings: ServerSettingsValue | undefined,
-    ): string | undefined => {
+      now: DateTime.DateTime,
+    ): Effect.fn.Return<BotTriggerBlock | undefined, never> {
       if (webhookPolicyBlock !== undefined && task.schedule.type === "webhook") {
-        return webhookPolicyBlock;
+        return { reason: webhookPolicyBlock, allowManualRun: false };
       }
-      return botTriggerBlockReason(settings, task.projectId);
-    };
-    const withPolicy = (
+      return yield* resolveBotTriggerBlock({
+        settings,
+        projectId: task.projectId,
+        modelSelection: task.modelSelection,
+        sql,
+        now,
+        resolveDriverKind,
+      });
+    });
+    const withPolicy = Effect.fnUntraced(function* (
       task: ScheduledTask,
       settings: ServerSettingsValue | undefined,
-    ): ScheduledTask => {
-      const reason = taskBlockReason(task, settings);
-      return reason !== undefined ? { ...task, blockedByPolicy: reason } : task;
-    };
+      now: DateTime.DateTime,
+    ): Effect.fn.Return<ScheduledTask, never> {
+      const block = yield* taskBlock(task, settings, now);
+      return block !== undefined ? { ...task, blockedByPolicy: block.reason } : task;
+    });
     const webhookPermits = yield* Ref.make<ReadonlyMap<ScheduledTaskId, Semaphore.Semaphore>>(
       new Map(),
     );
@@ -588,9 +606,11 @@ export const layer = Layer.effect(
       const rows = yield* selectAllRows();
       const origin = yield* readWebhookOrigin;
       const settings = yield* readServerSettings();
+      const now = yield* localNow;
       return yield* Effect.forEach(
         rows,
-        (row) => decodeRow(row, origin).pipe(Effect.map((task) => withPolicy(task, settings))),
+        (row) =>
+          decodeRow(row, origin).pipe(Effect.flatMap((task) => withPolicy(task, settings, now))),
         { concurrency: 1 },
       );
     });
@@ -634,7 +654,8 @@ export const layer = Layer.effect(
       const row = rows[0];
       if (row === undefined) return null;
       const settings = yield* readServerSettings();
-      return withPolicy(yield* decodeRow(row, yield* readWebhookOrigin), settings);
+      const now = yield* localNow;
+      return yield* withPolicy(yield* decodeRow(row, yield* readWebhookOrigin), settings, now);
     });
 
     const findWebhookCredentials = (id: ScheduledTaskId) =>
@@ -1039,10 +1060,14 @@ export const layer = Layer.effect(
           return { task: active, threadId: null, dispatchFailed: false };
         }
         const settings = yield* readServerSettings();
-        const blockReason = taskBlockReason(active, settings);
-        if (trigger === "scheduled" && blockReason !== undefined) {
+        const block = yield* taskBlock(active, settings, startedAt);
+        if (trigger === "scheduled" && block !== undefined) {
           yield* rescheduleMissedRun(active, startedAt, "blocked");
-          return { task: withPolicy(active, settings), threadId: null, dispatchFailed: false };
+          return {
+            task: { ...active, blockedByPolicy: block.reason },
+            threadId: null,
+            dispatchFailed: false,
+          };
         }
         // A thread that stays busy would otherwise collect one copy of the
         // prompt per interval. A failed read falls through to the normal send.
@@ -1072,8 +1097,8 @@ export const layer = Layer.effect(
               ? "The task was replaced before this delivery ran."
               : active.schedule.type !== "webhook"
                 ? "The task's trigger changed before this delivery ran."
-                : blockReason !== undefined
-                  ? blockReason
+                : block !== undefined
+                  ? block.reason
                   : !active.enabled
                     ? "The task was paused before this delivery ran."
                     : null;
@@ -1369,11 +1394,11 @@ export const layer = Layer.effect(
       yield* Effect.forEach(
         due,
         ({ task, dueAt }) =>
-          Effect.suspend(() => {
-            if (taskBlockReason(task, settings) !== undefined) {
-              return rescheduleMissedRun(task, now, "blocked");
+          Effect.gen(function* () {
+            if ((yield* taskBlock(task, settings, now)) !== undefined) {
+              return yield* rescheduleMissedRun(task, now, "blocked");
             }
-            return isMissedFixedTimeRun(task.schedule, dueAt, now)
+            return yield* isMissedFixedTimeRun(task.schedule, dueAt, now)
               ? rescheduleMissedRun(
                   task,
                   now,
@@ -1458,12 +1483,26 @@ export const layer = Layer.effect(
               ...Object.keys(prev?.projectSettingsOverrides ?? {}),
               ...Object.keys(nextSettings.projectSettingsOverrides),
             ]);
+            const now = yield* localNow;
             const unblockedProjects = new Set<string>();
             let blockStateChanged = prev?.botsEnabled !== nextSettings.botsEnabled;
-            for (const projectId of projectIds) {
-              const prevBlock = botTriggerBlockReason(prev, projectId);
-              const nextBlock = botTriggerBlockReason(nextSettings, projectId);
-              if (prevBlock !== nextBlock) {
+            for (const rawProjectId of projectIds) {
+              const projectId = ProjectId.make(rawProjectId);
+              const prevBlock = yield* resolveBotTriggerBlock({
+                settings: prev,
+                projectId,
+                sql,
+                now,
+                resolveDriverKind,
+              });
+              const nextBlock = yield* resolveBotTriggerBlock({
+                settings: nextSettings,
+                projectId,
+                sql,
+                now,
+                resolveDriverKind,
+              });
+              if (prevBlock?.reason !== nextBlock?.reason) {
                 blockStateChanged = true;
                 if (prevBlock !== undefined && nextBlock === undefined) {
                   unblockedProjects.add(projectId);
@@ -1471,7 +1510,6 @@ export const layer = Layer.effect(
               }
             }
             if (unblockedProjects.size > 0) {
-              const now = yield* localNow;
               const due = yield* listDueTasks(now).pipe(Effect.orElseSucceed(() => []));
               yield* Effect.forEach(
                 due.filter((task) => unblockedProjects.has(task.projectId)),
@@ -1851,8 +1889,11 @@ export const layer = Layer.effect(
       "ScheduledTaskService.runNow",
     )(function* (input: ScheduledTaskRunNowInput) {
       const task = yield* loadTask(input.id);
-      if (task.blockedByPolicy !== undefined) {
-        return yield* taskError(task.blockedByPolicy, { taskId: input.id });
+      const settings = yield* readServerSettings();
+      const now = yield* localNow;
+      const block = yield* taskBlock(task, settings, now);
+      if (block !== undefined && !block.allowManualRun) {
+        return yield* taskError(block.reason, { taskId: input.id });
       }
       if (task.schedule.type === "webhook") {
         return yield* taskError("Webhook tasks run when their URL receives a request.", {
@@ -2303,13 +2344,13 @@ export const layer = Layer.effect(
       yield* Effect.annotateCurrentSpan({ "scheduled_task.id": task.id });
       const schedule = task.schedule;
       if (schedule.type !== "webhook") return yield* notFound;
-      if (taskBlockReason(task, yield* readServerSettings()) !== undefined) {
+      const now = yield* localNow;
+      if ((yield* taskBlock(task, yield* readServerSettings(), now)) !== undefined) {
         return yield* observeDelivery(request, "blocked_by_policy", undefined, undefined).pipe(
           Effect.as({ _tag: "blocked_by_policy" as const }),
         );
       }
 
-      const now = yield* localNow;
       // Anyone can reach the tunnel directly and set the relay's header, so
       // a receive time is never later than now: a future one would pin the
       // delivery in the log and slip past the task's max age.

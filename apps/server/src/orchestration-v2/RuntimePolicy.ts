@@ -1,10 +1,14 @@
 import {
+  BOT_UNSUPPORTED_PROVIDER_REASON,
+  isBotProject,
   isRuntimeModeAbove,
   managedRuntimeModeCeilingMessage,
   ModelSelection,
   OrchestrationV2AppThread,
   ProjectId,
+  ProviderDriverKind,
   ProviderInstanceId,
+  providerSupportsBotGate,
   RuntimeMode,
   ThreadId,
 } from "@t3tools/contracts";
@@ -54,9 +58,32 @@ export class RuntimePolicyAboveCeilingError extends Schema.TaggedError<RuntimePo
 
 export const isRuntimePolicyAboveCeilingError = Schema.is(RuntimePolicyAboveCeilingError);
 
+/**
+ * A bot thread tried to start a turn on a provider whose adapter cannot guarantee
+ * T3 approval gating for every tool and MCP call. Fails closed.
+ */
+export class RuntimePolicyBotProviderUnsupportedError extends Schema.TaggedError<RuntimePolicyBotProviderUnsupportedError>()(
+  "RuntimePolicyBotProviderUnsupportedError",
+  {
+    threadId: ThreadId,
+    projectId: ProjectId,
+    providerInstanceId: ProviderInstanceId,
+    driverKind: Schema.optionalKey(ProviderDriverKind),
+  },
+) {
+  override get message(): string {
+    return BOT_UNSUPPORTED_PROVIDER_REASON;
+  }
+}
+
+export const isRuntimePolicyBotProviderUnsupportedError = Schema.is(
+  RuntimePolicyBotProviderUnsupportedError,
+);
+
 export const RuntimePolicyV2Error = Schema.Union([
   RuntimePolicyResolveError,
   RuntimePolicyAboveCeilingError,
+  RuntimePolicyBotProviderUnsupportedError,
 ]);
 export type RuntimePolicyV2Error = typeof RuntimePolicyV2Error.Type;
 
@@ -152,12 +179,25 @@ export const layerFromProjectStore: Layer.Layer<
     const workspaceFolders = yield* WorkspaceFolders.WorkspaceFolders;
     const providerInstances = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
     // The same ceiling the orchestrator enforces, fixed for the server's life.
-    const { managedPolicy } = yield* ServerSettings.ServerSettingsService;
+    const serverSettings = yield* ServerSettings.ServerSettingsService;
+    const { managedPolicy } = serverSettings;
     const maxRuntimeMode = managedPolicy?.limits?.maxRuntimeMode;
     return RuntimePolicyV2.of({
       resolve: Effect.fn("RuntimePolicyV2.resolve")(function* (input) {
         yield* refuseAboveCeiling(managedPolicy, input.thread);
+        const settings = yield* serverSettings.getSettings.pipe(
+          Effect.orElseSucceed(() => undefined),
+        );
+        const isBot = isBotProject(settings, input.thread.projectId);
         const instance = yield* providerInstances.getInstance(input.modelSelection.instanceId);
+        if (isBot && (instance === undefined || !providerSupportsBotGate(instance.driverKind))) {
+          return yield* new RuntimePolicyBotProviderUnsupportedError({
+            threadId: input.thread.id,
+            projectId: input.thread.projectId,
+            providerInstanceId: input.modelSelection.instanceId,
+            ...(instance === undefined ? {} : { driverKind: instance.driverKind }),
+          });
+        }
         const supportedRuntimeModes =
           instance === undefined
             ? undefined
@@ -200,11 +240,23 @@ export const layerFromProjectStore: Layer.Layer<
               ),
             ),
           );
+        const requestedRuntimeMode =
+          isBot && isRuntimeModeAbove(input.thread.runtimeMode, "approval-required")
+            ? ("approval-required" as const)
+            : input.thread.runtimeMode;
+        const effectiveMaxRuntimeMode =
+          isBot &&
+          (maxRuntimeMode === undefined || isRuntimeModeAbove(maxRuntimeMode, "approval-required"))
+            ? ("approval-required" as const)
+            : maxRuntimeMode;
         return ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
-          runtimeMode: providerRuntimeMode(input.thread.runtimeMode, supportedRuntimeModes),
+          runtimeMode: providerRuntimeMode(requestedRuntimeMode, supportedRuntimeModes),
           interactionMode: input.thread.interactionMode,
           cwd,
-          ...(maxRuntimeMode === undefined ? {} : { maxRuntimeMode }),
+          ...(effectiveMaxRuntimeMode === undefined
+            ? {}
+            : { maxRuntimeMode: effectiveMaxRuntimeMode }),
+          ...(isBot ? { gateAllMcpTools: true } : {}),
           ...(workspace === undefined || workspace.folders.length === 0 ? {} : { workspace }),
         });
       }),

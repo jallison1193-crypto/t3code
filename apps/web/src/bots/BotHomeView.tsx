@@ -6,8 +6,11 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import {
   AuthOrchestrationOperateScope,
+  type BotLimitMode,
+  type BotLimits,
   isBotPaused,
   type ModelSelection,
+  resolveBotLimits,
   type ScheduledTask,
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
@@ -27,6 +30,13 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import {
+  Select,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 import { SidebarInset } from "~/components/ui/sidebar";
 import { Textarea } from "~/components/ui/textarea";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
@@ -39,6 +49,7 @@ import { serverEnvironment } from "~/state/server";
 import { useEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { BotModelPicker } from "./BotModelPicker";
+import { formatBotTokenCount, parseBotPositiveInt } from "./bots.logic";
 
 export function BotHomeView({
   projectKey,
@@ -59,6 +70,7 @@ export function BotHomeView({
   const savedName = projectGroup.displayName;
   const savedGoal = overrides?.projectInstructions ?? "";
   const savedModelSelection: ModelSelection | null = overrides?.defaultModelSelection ?? null;
+  const savedLimits = resolveBotLimits(overrides?.bot);
   const paused = isBotPaused(settings, projectId);
 
   const canUpdateBot = useAtomValue(serverEnvironment.updateBot.permissionAtom(environmentId));
@@ -83,6 +95,9 @@ export function BotHomeView({
     readonly goal?: string;
     readonly modelSelection?: ModelSelection | null;
     readonly modelDirty?: boolean;
+    readonly limitMode?: BotLimitMode;
+    readonly runsPerDayText?: string;
+    readonly tokensPerDayText?: string;
   }>(() => ({ key: projectKey }));
 
   const currentDraft = editDraft.key === projectKey ? editDraft : { key: projectKey };
@@ -91,11 +106,37 @@ export function BotHomeView({
   const draftModelSelection = currentDraft.modelDirty
     ? (currentDraft.modelSelection ?? null)
     : savedModelSelection;
+  const draftLimitMode = currentDraft.limitMode ?? savedLimits.mode;
+  const draftRunsPerDayText = currentDraft.runsPerDayText ?? String(savedLimits.runsPerDay);
+  const draftTokensPerDayText = currentDraft.tokensPerDayText ?? String(savedLimits.tokensPerDay);
+  const parsedRunsPerDay = parseBotPositiveInt(draftRunsPerDayText);
+  const parsedTokensPerDay = parseBotPositiveInt(draftTokensPerDayText);
+  const draftLimits: BotLimits | null =
+    draftLimitMode === "none"
+      ? { mode: "none" }
+      : parsedRunsPerDay === null
+        ? null
+        : draftLimitMode === "runs_only"
+          ? { mode: "runs_only", runsPerDay: parsedRunsPerDay }
+          : parsedTokensPerDay === null
+            ? null
+            : {
+                mode: "runs_and_tokens",
+                runsPerDay: parsedRunsPerDay,
+                tokensPerDay: parsedTokensPerDay,
+              };
+  const limitsValid = draftLimits !== null;
+  const limitsDirty =
+    draftLimitMode !== savedLimits.mode ||
+    (draftLimitMode !== "none" && draftRunsPerDayText.trim() !== String(savedLimits.runsPerDay)) ||
+    (draftLimitMode === "runs_and_tokens" &&
+      draftTokensPerDayText.trim() !== String(savedLimits.tokensPerDay));
 
   const isDirty =
     draftName.trim() !== savedName ||
     draftGoal.trim() !== savedGoal ||
-    !Equal.equals(draftModelSelection, savedModelSelection);
+    !Equal.equals(draftModelSelection, savedModelSelection) ||
+    limitsDirty;
 
   const [saving, setSaving] = useState(false);
   const [togglingPause, setTogglingPause] = useState(false);
@@ -108,7 +149,39 @@ export function BotHomeView({
     connected ? serverEnvironment.scheduledTasksLive({ environmentId, input: {} }) : null,
     messages,
   );
+  const usageQuery = useEnvironmentQuery(
+    connected ? serverEnvironment.botUsage({ environmentId, input: { projectId } }) : null,
+    messages,
+  );
   const triggers = (tasksQuery.data?.tasks ?? []).filter((task) => task.projectId === projectId);
+  const todayUsage = usageQuery.data?.usage ?? null;
+
+  const limitModeLabels: Record<BotLimitMode, string> = {
+    runs_and_tokens: gt("Runs and tokens"),
+    runs_only: gt("Runs only"),
+    none: gt("No limits"),
+  };
+
+  const todaySummary =
+    todayUsage === null
+      ? null
+      : savedLimits.mode === "runs_and_tokens"
+        ? gt("Today: {runs} / {runsLimit} runs · {tokens} / {tokensLimit} tokens", {
+            runs: todayUsage.runs,
+            runsLimit: savedLimits.runsPerDay,
+            tokens: formatBotTokenCount(todayUsage.tokens),
+            tokensLimit: formatBotTokenCount(savedLimits.tokensPerDay),
+          })
+        : savedLimits.mode === "runs_only"
+          ? gt("Today: {runs} / {runsLimit} runs · {tokens} tokens", {
+              runs: todayUsage.runs,
+              runsLimit: savedLimits.runsPerDay,
+              tokens: formatBotTokenCount(todayUsage.tokens),
+            })
+          : gt("Today: {runs} runs · {tokens} tokens", {
+              runs: todayUsage.runs,
+              tokens: formatBotTokenCount(todayUsage.tokens),
+            });
 
   const { columns, openCount, digest } = useProjectThreadBoard(projectKey);
 
@@ -127,6 +200,10 @@ export function BotHomeView({
       reportError(gt("Could not save bot"), gt("Bot name must be a non-empty single line."));
       return;
     }
+    if (draftLimits === null) {
+      reportError(gt("Could not save bot"), gt("Daily limits must be positive whole numbers."));
+      return;
+    }
     setSaving(true);
     const result = await updateBot({
       environmentId,
@@ -135,6 +212,7 @@ export function BotHomeView({
         name: trimmedName,
         goal: draftGoal.trim(),
         modelSelection: draftModelSelection,
+        ...(limitsDirty ? { limits: draftLimits } : {}),
       },
     });
     setSaving(false);
@@ -290,6 +368,82 @@ export function BotHomeView({
                 />
               </div>
 
+              <div className="space-y-2 border-t border-border pt-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Label htmlFor="bot-home-limits-mode">
+                    <T>Limits</T>
+                  </Label>
+                  {todaySummary !== null ? (
+                    <p className="text-xs text-muted-foreground">{todaySummary}</p>
+                  ) : null}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="bot-home-limits-mode">
+                      <T>Daily cap</T>
+                    </Label>
+                    <Select
+                      value={draftLimitMode}
+                      disabled={!canUpdateBot || !connected || saving}
+                      onValueChange={(next) => {
+                        if (next === "runs_and_tokens" || next === "runs_only" || next === "none") {
+                          setEditDraft({ ...currentDraft, limitMode: next });
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="bot-home-limits-mode">
+                        <SelectValue>{limitModeLabels[draftLimitMode]}</SelectValue>
+                      </SelectTrigger>
+                      <SelectPopup>
+                        <SelectItem value="runs_and_tokens">
+                          {limitModeLabels.runs_and_tokens}
+                        </SelectItem>
+                        <SelectItem value="runs_only">{limitModeLabels.runs_only}</SelectItem>
+                        <SelectItem value="none">{limitModeLabels.none}</SelectItem>
+                      </SelectPopup>
+                    </Select>
+                  </div>
+                  {draftLimitMode !== "none" ? (
+                    <div className="space-y-1">
+                      <Label htmlFor="bot-home-runs-limit">
+                        <T>Runs per day</T>
+                      </Label>
+                      <Input
+                        id="bot-home-runs-limit"
+                        type="number"
+                        min={1}
+                        step={1}
+                        disabled={!canUpdateBot || !connected || saving}
+                        aria-invalid={parsedRunsPerDay === null}
+                        value={draftRunsPerDayText}
+                        onChange={(event) =>
+                          setEditDraft({ ...currentDraft, runsPerDayText: event.target.value })
+                        }
+                      />
+                    </div>
+                  ) : null}
+                  {draftLimitMode === "runs_and_tokens" ? (
+                    <div className="space-y-1">
+                      <Label htmlFor="bot-home-tokens-limit">
+                        <T>Tokens per day</T>
+                      </Label>
+                      <Input
+                        id="bot-home-tokens-limit"
+                        type="number"
+                        min={1}
+                        step={100000}
+                        disabled={!canUpdateBot || !connected || saving}
+                        aria-invalid={parsedTokensPerDay === null}
+                        value={draftTokensPerDayText}
+                        onChange={(event) =>
+                          setEditDraft({ ...currentDraft, tokensPerDayText: event.target.value })
+                        }
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
               {canUpdateBot && isDirty ? (
                 <div className="flex items-center justify-end gap-2">
                   <Button
@@ -304,7 +458,7 @@ export function BotHomeView({
                   <Button
                     type="button"
                     size="xs"
-                    disabled={saving || !connected || draftName.trim().length === 0}
+                    disabled={saving || !connected || draftName.trim().length === 0 || !limitsValid}
                     onClick={() => void handleSave()}
                   >
                     {saving ? <T>Saving…</T> : <T>Save changes</T>}

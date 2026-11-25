@@ -13013,5 +13013,18 @@
   "13557bebe932512e": "Activa Bots en Ajustes para ver y ejecutar este bot.",
   "0d77317043269532": "Abrir Ajustes",
   "381afab738cd3007": "bots agentes automatizaciones disparadores horarios webhooks pausar desactivar",
-  "bbc646fa31828539": "Aún no hay bots. Crea uno para ejecutarlo con un horario o un webhook."
+  "bbc646fa31828539": "Aún no hay bots. Crea uno para ejecutarlo con un horario o un webhook.",
+  "cf47447bfea5d2d6": "Ejecuciones y tokens",
+  "922db0c8d9c6ed4e": "Solo ejecuciones",
+  "72e4e8de8476f463": "Sin límites",
+  "88f8f3e4a67b5e5f": "Hoy: {runs} / {runsLimit} ejecuciones · {tokens} / {tokensLimit} tokens",
+  "d5b7dbb6aa82a7c9": "Hoy: {runs} / {runsLimit} ejecuciones · {tokens} tokens",
+  "a917d9e606cce99e": "Hoy: {runs} ejecuciones · {tokens} tokens",
+  "818a2b82a6f415e7": "Los límites diarios deben ser números enteros positivos.",
+  "25adc12314cdb81f": "Límites",
+  "c201f53debb9b241": "Tope diario",
+  "c82e1f320b93fbc1": "Ejecuciones por día",
+  "2996ea4e1e583d34": "Tokens por día",
+  "dc53cecbcc085b27": "Todavía no es compatible con bots. Elige Claude o Codex.",
+  "5049d15df6e0fe27": "T3 no puede controlar el modelo de este bot. Elige un modelo de Claude o Codex."
 }

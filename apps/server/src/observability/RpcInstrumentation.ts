@@ -127,6 +127,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.scheduledTasksRotateWebhookToken]: "scheduledTasks",
   [WS_METHODS.scheduledTasksListWebhookDeliveries]: "scheduledTasks",
   [WS_METHODS.scheduledTasksGetWebhookDelivery]: "scheduledTasks",
+  [WS_METHODS.botsGetUsage]: "bots",
   [WS_METHODS.botsCreate]: "bots",
   [WS_METHODS.botsUpdate]: "bots",
   [WS_METHODS.botsDelete]: "bots",

@@ -13029,5 +13029,18 @@
   "13557bebe932512e": "Turn Bots on in Settings to view and run this bot.",
   "0d77317043269532": "Open Settings",
   "381afab738cd3007": "bots agents automations triggers schedules webhooks pause disable",
-  "bbc646fa31828539": "No bots yet. Create one to run on a schedule or webhook."
+  "bbc646fa31828539": "No bots yet. Create one to run on a schedule or webhook.",
+  "cf47447bfea5d2d6": "Runs and tokens",
+  "922db0c8d9c6ed4e": "Runs only",
+  "72e4e8de8476f463": "No limits",
+  "88f8f3e4a67b5e5f": "Today: {runs} / {runsLimit} runs · {tokens} / {tokensLimit} tokens",
+  "d5b7dbb6aa82a7c9": "Today: {runs} / {runsLimit} runs · {tokens} tokens",
+  "a917d9e606cce99e": "Today: {runs} runs · {tokens} tokens",
+  "818a2b82a6f415e7": "Daily limits must be positive whole numbers.",
+  "25adc12314cdb81f": "Limits",
+  "c201f53debb9b241": "Daily cap",
+  "c82e1f320b93fbc1": "Runs per day",
+  "2996ea4e1e583d34": "Tokens per day",
+  "dc53cecbcc085b27": "Not supported for bots yet. Pick Claude or Codex.",
+  "5049d15df6e0fe27": "This bot's model can't be gated by T3. Pick a Claude or Codex model."
 }

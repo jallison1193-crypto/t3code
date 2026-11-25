@@ -56,10 +56,11 @@ describe("RPC authorization scopes", () => {
     }
   });
 
-  it("keeps bot mutations behind settings write scope", () => {
+  it("keeps bot mutations behind settings write scope and usage behind orchestration read scope", () => {
     for (const method of [WS_METHODS.botsCreate, WS_METHODS.botsUpdate, WS_METHODS.botsDelete]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthSettingsWriteScope);
     }
+    expect(requiredScopeForRpcMethod(WS_METHODS.botsGetUsage)).toBe(AuthOrchestrationReadScope);
   });
 
   it("lets only a session that operates threads approve sending a feedback report", () => {

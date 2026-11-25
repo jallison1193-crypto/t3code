@@ -27,6 +27,7 @@ import {
   type ChatAttachment,
   CommandId,
   type GuestMessageId,
+  isBotProject,
   isCompactionCommandMessage,
   isDeliveredProviderTurn,
   isOrchestrationV2WorkActive,
@@ -203,7 +204,11 @@ import * as RunExecutionService from "./RunExecutionService.ts";
 import { ProviderSessionManagerV2 } from "./ProviderSessionManager.ts";
 import { ProviderSwitchServiceV2 } from "./ProviderSwitchService.ts";
 import { isAutomaticCompletionRun, queuedRunsInDeliveryOrder } from "./QueuedRunOrder.ts";
-import { isRuntimePolicyAboveCeilingError, RuntimePolicyV2 } from "./RuntimePolicy.ts";
+import {
+  isRuntimePolicyAboveCeilingError,
+  isRuntimePolicyBotProviderUnsupportedError,
+  RuntimePolicyV2,
+} from "./RuntimePolicy.ts";
 import {
   endOrphanedNativeSubagent,
   endRunlessRootTurns,
@@ -337,6 +342,12 @@ function runtimePolicyCeilingCause(error: unknown) {
   let current = error;
   while (isOrchestratorDispatchError(current)) current = current.cause;
   return isRuntimePolicyAboveCeilingError(current) ? current : undefined;
+}
+
+function runtimePolicyBotUnsupportedCause(error: unknown) {
+  let current = error;
+  while (isOrchestratorDispatchError(current)) current = current.cause;
+  return isRuntimePolicyBotProviderUnsupportedError(current) ? current : undefined;
 }
 
 export class OrchestratorRuntimeModeAboveCeilingError extends Schema.TaggedError<OrchestratorRuntimeModeAboveCeilingError>()(
@@ -11470,6 +11481,19 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           cause: "Feedback requires a live approval that supports it and a decline decision.",
         });
       }
+      if (command.decision === "acceptForSession" || command.decision === "acceptAlways") {
+        const thread = yield* projectionStore
+          .getThread(command.threadId)
+          .pipe(mapDispatchError(command));
+        const settings = yield* serverSettings.getSettings.pipe(Effect.orDie);
+        if (isBotProject(settings, thread.projectId)) {
+          return yield* new OrchestratorDispatchError({
+            commandId: command.commandId,
+            commandType: command.type,
+            cause: "Bots only support approving once or declining.",
+          });
+        }
+      }
       const providerSessionId =
         runtimeRequest.responseCapability.type === "live"
           ? runtimeRequest.responseCapability.providerSessionId
@@ -16379,6 +16403,14 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
               runtimeMode,
               maxRuntimeMode,
               organization,
+            });
+          }
+          const botUnsupported = runtimePolicyBotUnsupportedCause(cause);
+          if (botUnsupported !== undefined) {
+            return yield* new OrchestratorDispatchError({
+              commandId: command.commandId,
+              commandType: command.type,
+              cause: botUnsupported.message,
             });
           }
           const rejectedAt = yield* DateTime.now;

@@ -1,9 +1,86 @@
 import * as Schema from "effect/Schema";
-import { IsoDateTime, ProjectId, TrimmedNonEmptyString, TrimmedString } from "./baseSchemas.ts";
+import {
+  IsoDateTime,
+  NonNegativeInt,
+  PositiveInt,
+  ProjectId,
+  TrimmedNonEmptyString,
+  TrimmedString,
+} from "./baseSchemas.ts";
 import { ModelSelection } from "./modelSelection.ts";
+import type { ProviderDriverKind } from "./providerInstance.ts";
 
 export const BOTS_DISABLED_REASON = "Bots are turned off in Settings";
 export const BOT_PAUSED_REASON = "This bot is paused";
+export const BOT_DAILY_RUN_LIMIT_REASON = "Daily run limit reached";
+export const BOT_DAILY_TOKEN_LIMIT_REASON = "Daily token limit reached";
+export const BOT_UNSUPPORTED_PROVIDER_REASON =
+  "This bot's model can't be gated by T3. Pick a Claude or Codex model.";
+
+/**
+ * Providers that route every tool and MCP call through a T3 approval request in
+ * `approval-required` mode. Bots fail closed on any other provider.
+ */
+const BOT_SUPPORTED_GATE_DRIVER_SET: ReadonlySet<string> = new Set(["claudeAgent", "codex"]);
+
+export function providerSupportsBotGate(
+  driverKind: ProviderDriverKind | string | null | undefined,
+): boolean {
+  return typeof driverKind === "string" && BOT_SUPPORTED_GATE_DRIVER_SET.has(driverKind);
+}
+
+export const BotLimitMode = Schema.Literals(["runs_and_tokens", "runs_only", "none"]);
+export type BotLimitMode = typeof BotLimitMode.Type;
+
+export const BotLimits = Schema.Struct({
+  mode: BotLimitMode,
+  runsPerDay: Schema.optionalKey(PositiveInt),
+  tokensPerDay: Schema.optionalKey(PositiveInt),
+});
+export type BotLimits = typeof BotLimits.Type;
+
+export interface ResolvedBotLimits {
+  readonly mode: BotLimitMode;
+  readonly runsPerDay: number;
+  readonly tokensPerDay: number;
+}
+
+export const DEFAULT_BOT_LIMITS: ResolvedBotLimits = {
+  mode: "runs_and_tokens",
+  runsPerDay: 24,
+  tokensPerDay: 2_000_000,
+};
+
+export function resolveBotLimits(
+  profile: { readonly limits?: BotLimits | undefined } | null | undefined,
+): ResolvedBotLimits {
+  const limits = profile?.limits;
+  if (limits === undefined) return DEFAULT_BOT_LIMITS;
+  return {
+    mode: limits.mode,
+    runsPerDay: limits.runsPerDay ?? DEFAULT_BOT_LIMITS.runsPerDay,
+    tokensPerDay: limits.tokensPerDay ?? DEFAULT_BOT_LIMITS.tokensPerDay,
+  };
+}
+
+export const BotDailyUsage = Schema.Struct({
+  runs: NonNegativeInt,
+  tokens: NonNegativeInt,
+  dayStartAt: IsoDateTime,
+});
+export type BotDailyUsage = typeof BotDailyUsage.Type;
+
+export const BotGetUsageInput = Schema.Struct({
+  projectId: ProjectId,
+});
+export type BotGetUsageInput = typeof BotGetUsageInput.Type;
+
+export const BotUsageResult = Schema.Struct({
+  projectId: ProjectId,
+  limits: BotLimits,
+  usage: BotDailyUsage,
+});
+export type BotUsageResult = typeof BotUsageResult.Type;
 
 const SingleLineBotName = TrimmedNonEmptyString.check(
   Schema.isMaxLength(120),
@@ -13,6 +90,7 @@ const SingleLineBotName = TrimmedNonEmptyString.check(
 /** Marker stored on `ProjectSettingsOverrides.bot`. Its presence makes a project a bot. */
 export const BotProfile = Schema.Struct({
   paused: Schema.optionalKey(Schema.Boolean),
+  limits: Schema.optionalKey(BotLimits),
 });
 export type BotProfile = typeof BotProfile.Type;
 
@@ -22,6 +100,7 @@ export const BotRecord = Schema.Struct({
   goal: Schema.String,
   modelSelection: Schema.NullOr(ModelSelection),
   paused: Schema.Boolean,
+  limits: Schema.optionalKey(BotLimits),
   workspaceRoot: TrimmedNonEmptyString,
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -32,6 +111,7 @@ export const BotCreateInput = Schema.Struct({
   name: SingleLineBotName,
   goal: Schema.optionalKey(TrimmedString),
   modelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
+  limits: Schema.optionalKey(BotLimits),
 });
 export type BotCreateInput = typeof BotCreateInput.Type;
 
@@ -41,6 +121,7 @@ export const BotUpdateInput = Schema.Struct({
   goal: Schema.optionalKey(TrimmedString),
   modelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   paused: Schema.optionalKey(Schema.Boolean),
+  limits: Schema.optionalKey(BotLimits),
 });
 export type BotUpdateInput = typeof BotUpdateInput.Type;
 
@@ -70,7 +151,7 @@ export type BotErrorReason = typeof BotErrorReason.Type;
 export class BotOperationError extends Schema.TaggedError<BotOperationError>()(
   "BotOperationError",
   {
-    operation: Schema.Literals(["list", "get", "create", "update", "delete"]),
+    operation: Schema.Literals(["list", "get", "getUsage", "create", "update", "delete"]),
     reason: BotErrorReason,
     projectId: Schema.optional(ProjectId),
     detail: Schema.optional(Schema.String),

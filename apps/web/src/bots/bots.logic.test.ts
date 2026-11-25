@@ -17,8 +17,10 @@ import {
   deriveBotSidebarEntries,
   filterNonBotProjects,
   filterNonBotThreads,
+  formatBotTokenCount,
   isAnyBotsEnabled,
   keepBotProjectsSeparate,
+  parseBotPositiveInt,
 } from "./bots.logic";
 
 const ENV_LOCAL = EnvironmentId.make("env-local");
@@ -213,5 +215,21 @@ describe("bots client logic", () => {
     expect(resolveSidebarModeFilter("bots", false)).toBe("all");
     expect(resolveSidebarModeFilter("bots", true)).toBe("bots");
     expect(resolveSidebarModeFilter("code", false)).toBe("code");
+  });
+
+  it("formats token counts and parses positive integer limit inputs", () => {
+    expect(formatBotTokenCount(0)).toBe("0");
+    expect(formatBotTokenCount(500)).toBe("500");
+    expect(formatBotTokenCount(1_250)).toBe("1.3k");
+    expect(formatBotTokenCount(45_000)).toBe("45k");
+    expect(formatBotTokenCount(2_000_000)).toBe("2M");
+    expect(formatBotTokenCount(1_500_000)).toBe("1.5M");
+
+    expect(parseBotPositiveInt("24")).toBe(24);
+    expect(parseBotPositiveInt(" 2000000 ")).toBe(2_000_000);
+    expect(parseBotPositiveInt("0")).toBeNull();
+    expect(parseBotPositiveInt("-5")).toBeNull();
+    expect(parseBotPositiveInt("1.5")).toBeNull();
+    expect(parseBotPositiveInt("abc")).toBeNull();
   });
 });

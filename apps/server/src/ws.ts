@@ -2490,6 +2490,10 @@ export const layerWsRpc = (
           Effect.annotateCurrentSpan({ "scheduled_task.id": input.id }).pipe(
             Effect.andThen(scheduledTasks.getWebhookDelivery(input)),
           ),
+        [WS_METHODS.botsGetUsage]: (input) =>
+          Effect.annotateCurrentSpan({ "bot.project_id": input.projectId }).pipe(
+            Effect.andThen(bots.getUsage(input.projectId)),
+          ),
         [WS_METHODS.botsCreate]: (input) => bots.create(input),
         [WS_METHODS.botsUpdate]: (input) =>
           Effect.annotateCurrentSpan({ "bot.project_id": input.projectId }).pipe(
