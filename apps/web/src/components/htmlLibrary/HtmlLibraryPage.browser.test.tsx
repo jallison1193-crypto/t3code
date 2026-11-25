@@ -150,7 +150,11 @@ it("loads on opening, keeps partial results, and resolves the preview on its sou
     .toHaveAttribute("aria-pressed", "true");
   expect(getClientSettings()).toMatchObject({ appMode: "code", sidebarModeFilter: "work" });
   await expect
-    .element(screen.getByText("No HTML pages found in available environments."))
+    .element(
+      screen.getByText(
+        "Nothing here yet in available environments. Ask an agent for a visual page, report, or file and it shows up here.",
+      ),
+    )
     .toBeVisible();
   expect(mocks.read.mock.calls.slice(5).map(([target]) => target.input)).toEqual([
     { mode: "work" },

@@ -11,7 +11,7 @@ import {
 } from "@t3tools/client-runtime/project-thread-board";
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import type { SidebarModeFilter as Mode } from "@t3tools/contracts/settings";
-import { useMatch, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { T, useGT } from "gt-react";
 import {
   ChevronDownIcon,
@@ -19,28 +19,18 @@ import {
   FolderIcon,
   FolderInputIcon,
   FolderPlusIcon,
+  PlusIcon,
   SearchIcon,
   SquarePenIcon,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
-import {
-  deriveBotSidebarEntries,
-  filterNonBotThreads,
-  isBotSidebarRoute,
-  resolveBotRouteSidebarMode,
-} from "~/bots/bots.logic";
-import { useAnyBotsEnabled } from "~/bots/useBots";
+import { deriveBotSidebarEntries, filterNonBotThreads } from "~/bots/bots.logic";
 import { openCommandPalette } from "~/commandPaletteBus";
-import { useComposerDraftStore } from "~/composerDraftStore";
 import { isElectron } from "~/env";
-import { useClientSettings } from "~/hooks/useSettings";
-import { useShownThreadRouteTarget } from "~/hooks/useShownThreadRouteTarget";
 import { cn } from "~/lib/utils";
-import { useHiddenThreadKeys, useQuietThreadShell, useQuietThreadShells } from "~/state/entities";
-import { useEnvironments } from "~/state/environments";
+import { useHiddenThreadKeys, useQuietThreadShells } from "~/state/entities";
 import { ProjectFavicon, type ProjectFaviconProject } from "../ProjectFavicon";
-import { useSettingsProjectGroups } from "../settings/useSettingsProjectGroups";
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import {
@@ -72,6 +62,7 @@ import {
   readableThreadFolderSourcesAtom,
   threadFolderHomesAtom,
 } from "./threadFoldersState";
+import { useSidebarModeTabs } from "./useSidebarModeTabs";
 
 const THREAD_DOT_CLASS: Record<ProjectThreadBoardColumn, string> = {
   review: "bg-emerald-500 dark:bg-emerald-300/90",
@@ -155,77 +146,28 @@ export function ProjectsSidebar() {
   const gt = useGT();
   const navigate = useNavigate();
   const { isMobile, setOpenMobile } = useSidebar();
-  const projectGroups = useSettingsProjectGroups({ includeBots: true });
   const threads = useQuietThreadShells();
-  const { presentationById } = useEnvironments();
-  const botsEnabled = useAnyBotsEnabled();
-  const { shownTarget } = useShownThreadRouteTarget();
-  const projectHomeMatch = useMatch({ from: "/_chat/projects/$projectKey", shouldThrow: false });
-  const projectThreadsMatch = useMatch({
-    from: "/_chat/projects/$projectKey_/threads",
-    shouldThrow: false,
-  });
-  const projectLibraryMatch = useMatch({
-    from: "/_chat/projects/$projectKey_/library",
-    shouldThrow: false,
-  });
-
-  const activeThreadKey =
-    shownTarget?.kind === "server" ? scopedThreadKey(shownTarget.threadRef) : null;
-  const activeServerThread = useQuietThreadShell(
-    shownTarget?.kind === "server" ? shownTarget.threadRef : null,
-  );
-  const activeDraftSession = useComposerDraftStore((state) =>
-    shownTarget?.kind === "draft" ? state.getDraftSession(shownTarget.draftId) : null,
-  );
-  const activeProjectKey =
-    projectHomeMatch?.params.projectKey ??
-    projectThreadsMatch?.params.projectKey ??
-    projectLibraryMatch?.params.projectKey ??
-    null;
-  const routeKey =
-    activeProjectKey ??
-    activeThreadKey ??
-    (shownTarget?.kind === "draft" ? `draft:${shownTarget.draftId}` : "");
+  const {
+    activeProjectKey,
+    activeThreadKey,
+    activeThreadProject,
+    effectiveModeFilter,
+    getServerSettings,
+    projectGroups,
+    selectMode,
+  } = useSidebarModeTabs();
 
   const [expandedByProjectKey, setExpandedByProjectKey] = useState<Record<string, boolean>>(() =>
     readExpandedProjectKeys(),
   );
-  const [tabOverride, setTabOverride] = useState<{
-    readonly routeKey: string;
-    readonly mode: Mode;
-  } | null>(null);
-  const sidebarModeFilter = useClientSettings((settings) => settings.sidebarModeFilter);
-  const getServerSettings = (environmentId: Parameters<typeof presentationById.get>[0]) =>
-    presentationById.get(environmentId)?.serverConfig?.settings;
-  const activeThreadProject =
-    activeServerThread !== null
-      ? { environmentId: activeServerThread.environmentId, projectId: activeServerThread.projectId }
-      : activeDraftSession !== null
-        ? {
-            environmentId: activeDraftSession.environmentId,
-            projectId: activeDraftSession.projectId,
-          }
-        : null;
-  const isBotRoute = isBotSidebarRoute({
-    activeProjectKey,
-    activeThreadProject,
-    projectGroups,
-    getServerSettings,
-  });
-  const effectiveModeFilter = resolveBotRouteSidebarMode({
-    savedMode: sidebarModeFilter,
-    botsEnabled,
-    isBotRoute,
-    routeOverride:
-      tabOverride !== null && tabOverride.routeKey === routeKey ? tabOverride.mode : null,
-  });
 
   const sections = buildProjectsSidebarSections({
     projectGroups,
     threads,
     getServerSettings,
     modeFilter: effectiveModeFilter,
+    activeProjectKey,
+    activeThreadProject,
   });
   const botEntries = deriveBotSidebarEntries({
     projectGroups,
@@ -314,7 +256,7 @@ export function ProjectsSidebar() {
           <SidebarModeFilter
             label={gt("Thread mode filter")}
             activeMode={effectiveModeFilter}
-            onModeSelect={(mode) => setTabOverride({ routeKey, mode })}
+            onModeSelect={selectMode}
           />
         </div>
       </SidebarGroup>
@@ -363,7 +305,13 @@ export function ProjectsSidebar() {
               <SidebarSectionHeading label={gt("Projects")} />
               {sections.projects.length === 0 ? (
                 <p className="px-(--sidebar-row-content-inset) py-1 text-xs text-sidebar-muted-foreground">
-                  <T>No projects yet</T>
+                  {effectiveModeFilter === "work" ? (
+                    <T>No projects with Work threads</T>
+                  ) : effectiveModeFilter === "code" ? (
+                    <T>No projects with Code threads</T>
+                  ) : (
+                    <T>No projects yet</T>
+                  )}
                 </p>
               ) : (
                 <SidebarMenu>
@@ -444,9 +392,21 @@ export function ProjectsSidebar() {
                                 ))}
                               </SidebarMenuSub>
                             ) : (
-                              <p className="py-1 pl-8 pr-2 text-xs text-sidebar-muted-foreground">
-                                <T>No active threads</T>
-                              </p>
+                              <div className="flex items-center justify-between gap-2 py-1 pl-8 pr-2 text-xs text-sidebar-muted-foreground">
+                                <span>
+                                  <T>No active threads</T>
+                                </span>
+                                <Link
+                                  to="/projects/$projectKey/threads"
+                                  params={{ projectKey: group.projectKey }}
+                                  onClick={() => {
+                                    if (isMobile) setOpenMobile(false);
+                                  }}
+                                  className="shrink-0 font-medium text-sidebar-foreground/80 underline-offset-2 hover:text-sidebar-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                                >
+                                  <T>Open Threads</T>
+                                </Link>
+                              </div>
                             )
                           ) : null}
                         </SidebarMenuItem>
@@ -531,6 +491,9 @@ function ThreadFoldersSidebar({
       thread,
     ]),
   );
+  const folderEntries = homes.flatMap((home) =>
+    threadFolders(home.sections).map((folder) => ({ home, folder })),
+  );
   return (
     <SidebarGroup>
       <div className="flex items-center justify-between pr-1">
@@ -539,12 +502,16 @@ function ThreadFoldersSidebar({
           label={gt("New thread folder")}
           onClick={() => openThreadFolderDialog({ kind: "create" })}
         >
-          <FolderPlusIcon />
+          <PlusIcon />
         </SidebarHeaderIconButton>
       </div>
-      <SidebarMenu>
-        {homes.flatMap((home) =>
-          threadFolders(home.sections).map((folder) => {
+      {folderEntries.length === 0 ? (
+        <p className="px-(--sidebar-row-content-inset) py-1 text-xs text-sidebar-muted-foreground">
+          <T>Group threads from any project.</T>
+        </p>
+      ) : (
+        <SidebarMenu>
+          {folderEntries.map(({ home, folder }) => {
             const key = `${home.id}:${folder.id}`;
             const expanded = !collapsed.has(key);
             const rows = expanded
@@ -663,9 +630,9 @@ function ThreadFoldersSidebar({
                 ) : null}
               </SidebarMenuItem>
             );
-          }),
-        )}
-      </SidebarMenu>
+          })}
+        </SidebarMenu>
+      )}
     </SidebarGroup>
   );
 }

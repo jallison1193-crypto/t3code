@@ -265,7 +265,11 @@ import {
 } from "./ui/combobox";
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
+import { SidebarModeFilter } from "./sidebar/SidebarModeFilter";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
+import { ThreadSidebarBotsPanel } from "./sidebar/ThreadSidebarBotsPanel";
+import { filterThreadSidebarThreads } from "./sidebar/sidebarMode.logic";
+import { useSidebarModeTabs } from "./sidebar/useSidebarModeTabs";
 import { TooltipProvider } from "./ui/tooltip";
 import {
   composerDraftHasUserContent,
@@ -1143,9 +1147,13 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             ? asLaunchingThread(thread)
             : thread,
         );
-  const listedThreads = filterNonBotThreads(
-    rawListedThreads,
-    (environmentId) => serverConfigs.get(environmentId)?.settings,
+  const sidebarMode = useSidebarModeTabs();
+  const listedThreads = filterThreadSidebarThreads(
+    filterNonBotThreads(
+      rawListedThreads,
+      (environmentId) => serverConfigs.get(environmentId)?.settings,
+    ),
+    sidebarMode.effectiveModeFilter,
   );
   const routeRowThreadKey =
     routeThreadRef === null
@@ -3370,10 +3378,29 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               activeSearchResultIndex={activeSearchResultIndex}
               onClearSearch={clearThreadSearch}
             />
+            <div className="mt-1 px-1">
+              <SidebarModeFilter
+                label={gt("Thread mode filter")}
+                activeMode={sidebarMode.effectiveModeFilter}
+                onModeSelect={sidebarMode.selectMode}
+              />
+            </div>
           </SidebarGroup>
         }
       >
-        <SidebarGroup className="flex-1" role="presentation">
+        {sidebarMode.effectiveModeFilter === "bots" ? (
+          <ThreadSidebarBotsPanel
+            projectGroups={sidebarMode.projectGroups}
+            getServerSettings={sidebarMode.getServerSettings}
+            activeProjectKey={sidebarMode.activeProjectKey}
+            activeThreadKey={sidebarMode.activeThreadKey}
+          />
+        ) : null}
+        <SidebarGroup
+          className={sidebarMode.effectiveModeFilter === "bots" ? "hidden" : "flex-1"}
+          hidden={sidebarMode.effectiveModeFilter === "bots"}
+          role="presentation"
+        >
           {isSearchingThreads ? (
             threadSearchResults.length > 0 ? (
               <TooltipProvider
@@ -3505,6 +3532,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                     <T>Show all projects</T>
                   </button>
                 </>
+              ) : sidebarMode.effectiveModeFilter === "work" ? (
+                <T>No Work threads yet</T>
+              ) : sidebarMode.effectiveModeFilter === "code" ? (
+                <T>No Code threads yet</T>
               ) : (
                 <T>No threads yet</T>
               )}

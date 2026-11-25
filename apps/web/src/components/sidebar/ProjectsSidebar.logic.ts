@@ -97,6 +97,25 @@ function compareThreadsNewestFirst(
   return (toSortableTimestamp(b.updatedAt) ?? 0) - (toSortableTimestamp(a.updatedAt) ?? 0);
 }
 
+function isRouteProjectGroup(
+  group: Pick<ProjectsSidebarGroupInput, "projectKey" | "memberProjects">,
+  activeProjectKey: string | null | undefined,
+  activeThreadProject:
+    | { readonly environmentId: EnvironmentId; readonly projectId: ProjectId }
+    | null
+    | undefined,
+): boolean {
+  if (activeProjectKey != null && group.projectKey === activeProjectKey) return true;
+  if (activeThreadProject != null) {
+    return group.memberProjects.some(
+      (member) =>
+        member.environmentId === activeThreadProject.environmentId &&
+        member.id === activeThreadProject.projectId,
+    );
+  }
+  return false;
+}
+
 export function buildProjectsSidebarSections<
   TGroup extends ProjectsSidebarGroupInput,
   TThread extends ProjectsSidebarThread,
@@ -105,10 +124,16 @@ export function buildProjectsSidebarSections<
   readonly threads: ReadonlyArray<TThread>;
   readonly getServerSettings: BotSettingsLookup;
   readonly modeFilter?: SidebarModeFilter;
+  readonly activeProjectKey?: string | null;
+  readonly activeThreadProject?: {
+    readonly environmentId: EnvironmentId;
+    readonly projectId: ProjectId;
+  } | null;
 }): ProjectsSidebarSections<TGroup, TThread> {
   const knownProjectMemberKeys = new Set<string>();
   const projects: ProjectsSidebarProjectEntry<TGroup, TThread>[] = [];
-  const modeFilteredThreads = filterThreadsByMode(input.threads, input.modeFilter ?? "all");
+  const modeFilter = input.modeFilter ?? "all";
+  const modeFilteredThreads = filterThreadsByMode(input.threads, modeFilter);
 
   for (const group of input.projectGroups) {
     if (isScratchProjectGroup(group)) continue;
@@ -123,7 +148,21 @@ export function buildProjectsSidebarSections<
       group.memberProjects,
       input.getServerSettings,
     );
-    const activeThreads = [...columns.waiting, ...columns.working];
+    const hasMatchingThread =
+      columns.review.length +
+        columns.waiting.length +
+        columns.working.length +
+        columns.idle.length +
+        columns.done.length >
+      0;
+    if (
+      (modeFilter === "code" || modeFilter === "work") &&
+      !hasMatchingThread &&
+      !isRouteProjectGroup(group, input.activeProjectKey, input.activeThreadProject)
+    ) {
+      continue;
+    }
+    const activeThreads = [...columns.waiting, ...columns.review, ...columns.working];
     const attentionCount = columns.waiting.length + columns.review.length;
     const attentionTone =
       columns.waiting.length > 0 ? "waiting" : columns.review.length > 0 ? "review" : null;

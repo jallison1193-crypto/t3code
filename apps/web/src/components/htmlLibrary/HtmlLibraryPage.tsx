@@ -594,13 +594,19 @@ function LibraryResults({
       ) : empty ? (
         <p role="status" className="py-6 text-sm text-muted-foreground">
           {pending ? (
-            <T>Loading HTML pages…</T>
+            <T>Loading pages…</T>
           ) : view.hasMore ? (
             <T>Keep searching to see more results.</T>
           ) : view.unavailable.length === 0 ? (
-            <T>No HTML pages found.</T>
+            <T>
+              Nothing here yet. Ask an agent for a visual page, report, or file and it shows up
+              here.
+            </T>
           ) : (
-            <T>No HTML pages found in available environments.</T>
+            <T>
+              Nothing here yet in available environments. Ask an agent for a visual page, report, or
+              file and it shows up here.
+            </T>
           )}
         </p>
       ) : view.hasMore && !pending ? (
@@ -757,8 +763,11 @@ function LibraryFilesResults({
   const refresh = useStableCallback(async () => {
     const signal = startRequest();
     setPending(true);
-    const loaded = await loadLibraryFiles(initialFiles, mode, (environmentId, input) =>
-      readSource(environmentId, input, signal),
+    const loaded = await loadLibraryFiles(
+      initialFiles,
+      mode,
+      (environmentId, input) => readSource(environmentId, input, signal),
+      { signal },
     );
     if (signal.aborted) return;
     setFiles(loaded);
@@ -768,8 +777,11 @@ function LibraryFilesResults({
   const loadMore = useStableCallback(async (current: typeof files) => {
     const signal = startRequest();
     setPending(true);
-    const loaded = await loadLibraryFiles(current, mode, (environmentId, input) =>
-      readSource(environmentId, input, signal),
+    const loaded = await loadLibraryFiles(
+      current,
+      mode,
+      (environmentId, input) => readSource(environmentId, input, signal),
+      { signal },
     );
     if (signal.aborted) return;
     setFiles(loaded);
@@ -856,21 +868,20 @@ function LibraryFilesResults({
         <p role="status" className="py-6 text-sm text-muted-foreground">
           {pending ? (
             <T>Loading files…</T>
-          ) : view.hasMore ? (
-            <T>Keep searching to see more results.</T>
           ) : view.unavailable.length === 0 ? (
-            <T>No files found.</T>
+            <T>
+              Nothing here yet. Ask an agent for a visual page, report, or file and it shows up
+              here.
+            </T>
           ) : (
-            <T>No files found in available environments.</T>
+            <T>
+              Nothing here yet in available environments. Ask an agent for a visual page, report, or
+              file and it shows up here.
+            </T>
           )}
         </p>
       )}
-      {!empty && view.hasMore && !pending ? (
-        <p role="status" className="py-3 text-sm text-muted-foreground">
-          <T>Keep searching to see more results.</T>
-        </p>
-      ) : null}
-      {view.hasMore && !(pending && empty) ? (
+      {!empty && view.hasMore ? (
         <div className="mt-3">
           <Button
             variant="outline"
@@ -919,7 +930,7 @@ function HtmlLibraryContent({
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <LibraryIcon className="size-4 shrink-0 text-muted-foreground" />
             <h1 className="truncate text-sm font-medium text-foreground">
-              {group ? group.displayName : <T>HTML Library</T>}
+              {group ? group.displayName : <T>Library</T>}
             </h1>
           </div>
           {projectKey ? <ProjectViewTabs projectKey={projectKey} active="library" /> : null}
@@ -978,7 +989,7 @@ function HtmlLibraryContent({
               )
             ) : (
               <p role="status" className="py-6 text-sm text-muted-foreground">
-                {view === "files" ? <T>Loading files…</T> : <T>Loading HTML pages…</T>}
+                {view === "files" ? <T>Loading files…</T> : <T>Loading pages…</T>}
               </p>
             )}
           </div>
