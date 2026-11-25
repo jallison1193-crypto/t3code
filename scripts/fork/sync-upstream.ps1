@@ -66,10 +66,12 @@ try {
     $lines = if ($conflicts.Count -gt 0) {
       @("Merging $newCommits upstream commits ($upstreamSha) conflicts in:", "") + ($conflicts | ForEach-Object { "- ``$_``" })
     } else {
-      @("Merging $newCommits upstream commits ($upstreamSha) failed without conflicts. git said:", "", '```') + ($mergeOut | Select-Object -Last 20) + @('```')
+      @("Merging $newCommits upstream commits ($upstreamSha) failed before any conflict (a git or clone problem). git said:", "", '```') + ($mergeOut | Select-Object -Last 20) + @('```')
     }
     $tail = if ($leftDirty) { @("", "Restoring the sync worktree failed; it needs a manual cleanup:", "") + ($restoreOut | ForEach-Object { "    $_" }) } else { @("", "$Branch unchanged and the sync worktree is clean; resolve by hand.") }
-    Write-Report "merge conflict" ($lines + $tail) 2
+    # No conflicted files means git itself failed (for example a missing object), not a content conflict.
+    if ($conflicts.Count -gt 0) { Write-Report "merge conflict" ($lines + $tail) 2 }
+    Write-Report "setup error" ($lines + $tail) 4
   }
 
   & git diff --quiet $pre HEAD -- pnpm-lock.yaml
