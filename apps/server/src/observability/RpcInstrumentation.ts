@@ -131,6 +131,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.botsCreate]: "bots",
   [WS_METHODS.botsUpdate]: "bots",
   [WS_METHODS.botsDelete]: "bots",
+  [WS_METHODS.botsRun]: "bots",
   [WS_METHODS.secretsAnswerRequest]: "secrets",
   [WS_METHODS.agentFeedbackAnswerRequest]: "agentFeedback",
   [WS_METHODS.guestShareCreate]: "guest-share",

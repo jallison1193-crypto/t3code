@@ -5,10 +5,6 @@ import {
   scopeProjectRef,
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
-import {
-  projectThreadBoardColumn,
-  type ProjectThreadBoardColumn,
-} from "@t3tools/client-runtime/project-thread-board";
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import type { SidebarModeFilter as Mode } from "@t3tools/contracts/settings";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -31,6 +27,7 @@ import { isElectron } from "~/env";
 import { cn } from "~/lib/utils";
 import { useHiddenThreadKeys, useQuietThreadShells } from "~/state/entities";
 import { ProjectFavicon, type ProjectFaviconProject } from "../ProjectFavicon";
+import { ThreadStatusDot } from "../ThreadStatusDot";
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import {
@@ -64,14 +61,6 @@ import {
 } from "./threadFoldersState";
 import { useSidebarModeTabs } from "./useSidebarModeTabs";
 
-const THREAD_DOT_CLASS: Record<ProjectThreadBoardColumn, string> = {
-  review: "bg-emerald-500 dark:bg-emerald-300/90",
-  waiting: "bg-amber-500 dark:bg-amber-300/90",
-  working: "bg-sky-500 dark:bg-sky-300/80",
-  idle: "bg-muted-foreground/60",
-  done: "bg-border",
-};
-
 const ATTENTION_DOT_CLASS = {
   waiting: "bg-amber-500 dark:bg-amber-300/90",
   review: "bg-emerald-500 dark:bg-emerald-300/90",
@@ -100,14 +89,13 @@ function ThreadNavRow({
   readonly onChangeFolder: () => void;
   readonly onSelect: (thread: ProjectsSidebarThread) => void;
 }) {
-  const column = projectThreadBoardColumn(thread);
   const button = (
     <SidebarMenuButton
       size={nested ? "sm" : "default"}
       isActive={isActive}
       onClick={() => onSelect(thread)}
     >
-      <span aria-hidden className={cn("size-2 shrink-0 rounded-full", THREAD_DOT_CLASS[column])} />
+      <ThreadStatusDot thread={thread} />
       {project ? <ProjectFavicon project={project} className="size-3.5 shrink-0" /> : null}
       <span className="min-w-0 flex-1 truncate">{thread.title}</span>
     </SidebarMenuButton>
@@ -340,7 +328,12 @@ export function ProjectsSidebar() {
                               {!isExpanded && attentionTone && attentionCount > 0 ? (
                                 <span className="flex shrink-0 items-center gap-1 text-xs tabular-nums text-sidebar-muted-foreground">
                                   <span
-                                    aria-hidden
+                                    role="img"
+                                    aria-label={
+                                      attentionTone === "waiting"
+                                        ? gt("Waiting on you")
+                                        : gt("Ready for review")
+                                    }
                                     className={cn(
                                       "size-1.5 rounded-full",
                                       ATTENTION_DOT_CLASS[attentionTone],

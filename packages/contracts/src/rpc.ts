@@ -94,6 +94,8 @@ import {
   BotGetUsageInput,
   BotOperationError,
   BotRecord,
+  BotRunInput,
+  BotRunResult,
   BotUpdateInput,
   BotUsageResult,
 } from "./bot.ts";
@@ -708,6 +710,7 @@ export const WS_METHODS = {
   botsCreate: "bots.create",
   botsUpdate: "bots.update",
   botsDelete: "bots.delete",
+  botsRun: "bots.run",
 
   cloudGetRelayClientStatus: "cloud.getRelayClientStatus",
   cloudInstallRelayClient: "cloud.installRelayClient",
@@ -2593,6 +2596,12 @@ const WsBotsDeleteRpc = Rpc.make(WS_METHODS.botsDelete, {
   error: Schema.Union([BotOperationError, EnvironmentAuthorizationError]),
 });
 
+const WsBotsRunRpc = Rpc.make(WS_METHODS.botsRun, {
+  payload: BotRunInput,
+  success: BotRunResult,
+  error: Schema.Union([BotOperationError, EnvironmentAuthorizationError]),
+});
+
 const WsSubscribeAuthAccessRpc = Rpc.make(WS_METHODS.subscribeAuthAccess, {
   payload: Schema.Struct({}),
   success: AuthAccessStreamEvent,
@@ -2720,6 +2729,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsBotsCreateRpc,
   WsBotsUpdateRpc,
   WsBotsDeleteRpc,
+  WsBotsRunRpc,
   WsServerReportClientActivityRpc,
   WsCloudGetRelayClientStatusRpc,
   WsCloudInstallRelayClientRpc,

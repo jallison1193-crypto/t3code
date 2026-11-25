@@ -167,7 +167,7 @@ section is off. Each device keeps its own choice.
 
 Turn on **Settings → General → Projects sidebar** (or run **Switch to projects sidebar** in the
 command palette) to list projects first, with a **Needs you** section at the top for threads
-waiting on approvals or input, expandable working, waiting, and ready-for-review threads under each
+waiting on approvals or input and failed threads you have not opened, expandable working, waiting, and ready-for-review threads under each
 project (and an **Open Threads** link when a project has none), **Pinned**, and up to 10 **Other
 threads** outside your project groups. Each device keeps its own choice.
 

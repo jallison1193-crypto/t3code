@@ -2033,6 +2033,11 @@ export function createServerEnvironmentAtoms<R, E>(
       scheduler: configScheduler,
       concurrency: configConcurrency,
     }),
+    // Off the config lane, like scheduled-task run-now: a slow launch must not stall settings.
+    runBot: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:bots:run",
+      tag: WS_METHODS.botsRun,
+    }),
     createGuestShare: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:guest-share:create",
       tag: WS_METHODS.guestShareCreate,

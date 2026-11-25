@@ -394,41 +394,27 @@ describe("bots client logic", () => {
   });
 
   it("computes Run now availability and derives the Bots sidebar tab on bot routes", () => {
-    expect(
-      resolveBotRunNowState({
-        botsEnabled: false,
-        paused: false,
-        connected: true,
-        canOperate: true,
-      }),
-    ).toEqual({ disabled: true, reason: "bots_off" });
-    expect(
-      resolveBotRunNowState({ botsEnabled: true, paused: true, connected: true, canOperate: true }),
-    ).toEqual({ disabled: true, reason: "paused" });
-    expect(
-      resolveBotRunNowState({
-        botsEnabled: true,
-        paused: false,
-        connected: false,
-        canOperate: true,
-      }),
-    ).toEqual({ disabled: true, reason: "disconnected" });
-    expect(
-      resolveBotRunNowState({
-        botsEnabled: true,
-        paused: false,
-        connected: true,
-        canOperate: false,
-      }),
-    ).toEqual({ disabled: true, reason: "no_permission" });
-    expect(
-      resolveBotRunNowState({
-        botsEnabled: true,
-        paused: false,
-        connected: true,
-        canOperate: true,
-      }),
-    ).toEqual({ disabled: false, reason: null });
+    const ready = {
+      botsEnabled: true,
+      paused: false,
+      connected: true,
+      canOperate: true,
+      dirty: false,
+      blockedByPolicy: undefined,
+    };
+    // Each case also carries a later blocker, so the order of the reasons is covered.
+    const cases = [
+      [{ botsEnabled: false, paused: true }, "bots_off"],
+      [{ paused: true, connected: false }, "paused"],
+      [{ connected: false, canOperate: false }, "disconnected"],
+      [{ canOperate: false, dirty: true }, "no_permission"],
+      [{ dirty: true, blockedByPolicy: "Daily run limit reached" }, "unsaved"],
+      [{ blockedByPolicy: "Daily run limit reached" }, "blocked"],
+    ] as const;
+    for (const [overrides, reason] of cases) {
+      expect(resolveBotRunNowState({ ...ready, ...overrides })).toEqual({ disabled: true, reason });
+    }
+    expect(resolveBotRunNowState(ready)).toEqual({ disabled: false, reason: null });
 
     const groups = [makeGroup(ORDINARY_PROJECT, "App"), makeGroup(BOT_PROJECT, "PR Digest")];
     const getSettings = () => makeSettings(true);

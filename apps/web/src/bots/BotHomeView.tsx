@@ -1,6 +1,8 @@
 import { useAtomValue } from "@effect/atom-react";
-import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { PROJECT_THREAD_BOARD_COLUMNS } from "@t3tools/client-runtime/project-thread-board";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -14,23 +16,32 @@ import {
   resolveBotLimits,
   type ScheduledTask,
 } from "@t3tools/contracts";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouter } from "@tanstack/react-router";
 import * as Equal from "effect/Equal";
 import { T, useGT, useMessages } from "gt-react";
-import { BotIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import {
+  BotIcon,
+  MoreHorizontalIcon,
+  PauseIcon,
+  PlayIcon,
+  PlusIcon,
+  Trash2Icon,
+} from "lucide-react";
 import { useState } from "react";
 
-import { ProjectThreadBoardContent } from "~/components/projectHome/ProjectThreadsView";
 import { useProjectThreadBoard } from "~/components/projectHome/useProjectThreadBoard";
 import {
   ScheduledTaskEditorDialog,
   ScheduledTaskRow,
 } from "~/components/settings/ScheduledTasksSettings";
+import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
+import { resolveThreadStatusDisplay } from "~/components/ThreadStatusDot";
 import { WorkspacePageHeader } from "~/components/WorkspacePageHeader";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import {
   Select,
   SelectItem,
@@ -41,17 +52,19 @@ import {
 import { SidebarInset } from "~/components/ui/sidebar";
 import { Textarea } from "~/components/ui/textarea";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
-import { useComposerDraftStore } from "~/composerDraftStore";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { requestConfirmDialog } from "~/confirmDialog";
 import { isElectron } from "~/env";
-import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
 import { providerInstanceEntriesFor } from "~/providerInstances";
 import type { SidebarProjectSnapshot } from "~/sidebarProjectGrouping";
+import { waitForThreadShell } from "~/state/entities";
 import { useEnvironment } from "~/state/environments";
 import { useEnvironmentQuery } from "~/state/query";
 import { EMPTY_SERVER_PROVIDERS, serverEnvironment } from "~/state/server";
 import { useEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
+import { buildThreadRouteParams } from "~/threadRoutes";
+import { formatRelativeTimeLabel } from "~/timestampFormat";
 import { BotModelPicker } from "./BotModelPicker";
 import {
   formatBotTokenCount,
@@ -71,6 +84,7 @@ export function BotHomeView({
   const gt = useGT();
   const messages = useMessages();
   const navigate = useNavigate();
+  const router = useRouter();
   const member = projectGroup.memberProjects[0]!;
   const environmentId = member.environmentId;
   const projectId = member.id;
@@ -99,20 +113,12 @@ export function BotHomeView({
     environmentDefaultModelSelection: settings?.defaultModelSelection,
     instanceEntries,
   });
-  const runNowState = resolveBotRunNowState({
-    botsEnabled,
-    paused,
-    connected,
-    canOperate: canOperateTasks,
-  });
-  const runNowDisabledReason =
-    runNowState.reason === "bots_off"
-      ? gt("Bots are off")
-      : runNowState.reason === "paused"
-        ? gt("Bot is paused")
-        : null;
-  const handleNewThread = useNewThreadHandler();
+  const canRunBot = useAtomValue(serverEnvironment.runBot.permissionAtom(environmentId));
 
+  const runBot = useAtomCommand(serverEnvironment.runBot, {
+    label: "bot run",
+    reportFailure: false,
+  });
   const updateBot = useAtomCommand(serverEnvironment.updateBot, {
     label: "bot update",
     reportFailure: false,
@@ -173,7 +179,7 @@ export function BotHomeView({
     limitsDirty;
 
   const [saving, setSaving] = useState(false);
-  const [openingRun, setOpeningRun] = useState(false);
+  const [startingRun, setStartingRun] = useState(false);
   const [togglingPause, setTogglingPause] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [triggerEditor, setTriggerEditor] = useState<{
@@ -190,6 +196,23 @@ export function BotHomeView({
   );
   const triggers = (tasksQuery.data?.tasks ?? []).filter((task) => task.projectId === projectId);
   const todayUsage = usageQuery.data?.usage ?? null;
+  const blockedByPolicy = usageQuery.data?.blockedByPolicy;
+  const runNowState = resolveBotRunNowState({
+    botsEnabled,
+    paused,
+    connected,
+    canOperate: canRunBot,
+    dirty: canUpdateBot && isDirty,
+    blockedByPolicy,
+  });
+  const runNowDisabledReason =
+    runNowState.reason === "bots_off"
+      ? gt("Bots are off")
+      : runNowState.reason === "paused"
+        ? gt("Bot is paused")
+        : runNowState.reason === "blocked"
+          ? (blockedByPolicy ?? null)
+          : null;
 
   const limitModeLabels: Record<BotLimitMode, string> = {
     runs_and_tokens: gt("Runs and tokens"),
@@ -218,7 +241,10 @@ export function BotHomeView({
               tokens: formatBotTokenCount(todayUsage.tokens),
             });
 
-  const { columns, openCount, digest } = useProjectThreadBoard(projectKey);
+  const { columns } = useProjectThreadBoard(projectKey);
+  const runs = PROJECT_THREAD_BOARD_COLUMNS.flatMap((column) => columns[column]).toSorted(
+    (left, right) => right.updatedAt.localeCompare(left.updatedAt),
+  );
 
   const reportError = (title: string, error: unknown) => {
     const description =
@@ -258,26 +284,38 @@ export function BotHomeView({
       return;
     }
     setEditDraft({ key: projectKey });
+    usageQuery.refresh();
   };
 
   const handleRunNow = async () => {
-    if (openingRun || runNowState.disabled) return;
-    setOpeningRun(true);
-    try {
-      const opened = await handleNewThread(scopeProjectRef(environmentId, projectId), {
-        envMode: "local",
+    if (startingRun || runNowState.disabled) return;
+    setStartingRun(true);
+    const startedFrom = router.latestLocation;
+    const result = await runBot({
+      environmentId,
+      input: {
+        projectId,
         prompt: gt("Do your goal now."),
-      });
-      if (opened !== null && effectiveModel.selection !== null) {
-        useComposerDraftStore
-          .getState()
-          .setModelSelection(opened.draftId, effectiveModel.selection, {
-            explicit: true,
-            replaceOptions: true,
-          });
+        ...(effectiveModel.selection === null
+          ? {}
+          : { fallbackModelSelection: effectiveModel.selection }),
+      },
+    });
+    if (result._tag === "Failure") {
+      setStartingRun(false);
+      usageQuery.refresh();
+      if (!isAtomCommandInterrupted(result)) {
+        reportError(gt("Could not start run"), squashAtomCommandFailure(result));
       }
-    } finally {
-      setOpeningRun(false);
+      return;
+    }
+    const ref = scopeThreadRef(environmentId, result.value.threadId);
+    const arrived = await waitForThreadShell(ref);
+    setStartingRun(false);
+    usageQuery.refresh();
+    // Opening the run must not pull the user back from wherever they went while it started.
+    if (arrived && router.latestLocation === startedFrom) {
+      void navigate({ to: "/$environmentId/$threadId", params: buildThreadRouteParams(ref) });
     }
   };
 
@@ -292,6 +330,7 @@ export function BotHomeView({
       },
     });
     setTogglingPause(false);
+    usageQuery.refresh();
     if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
       reportError(
         paused ? gt("Could not resume bot") : gt("Could not pause bot"),
@@ -321,6 +360,20 @@ export function BotHomeView({
     void navigate({ to: "/", replace: true });
   };
 
+  const fieldsDisabled = !canUpdateBot || !connected || saving;
+  const runNowButton = (
+    <Button
+      type="button"
+      size="xs"
+      disabled={runNowState.disabled || startingRun || togglingPause || deleting}
+      aria-describedby={runNowDisabledReason !== null ? "bot-run-now-reason" : undefined}
+      onClick={() => void handleRunNow()}
+    >
+      <PlayIcon className="size-3.5" />
+      <T>Run now</T>
+    </Button>
+  );
+
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
@@ -335,21 +388,60 @@ export function BotHomeView({
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            {runNowDisabledReason !== null ? (
-              <span id="bot-run-now-reason" className="text-xs text-muted-foreground">
-                {runNowDisabledReason}
-              </span>
+            {canUpdateBot && isDirty ? (
+              <>
+                <span className="hidden text-xs text-muted-foreground md:inline" role="status">
+                  <T>Unsaved changes</T>
+                </span>
+                <span className="hidden sm:inline-flex">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    disabled={saving}
+                    onClick={() => setEditDraft({ key: projectKey })}
+                  >
+                    <T>Discard</T>
+                  </Button>
+                </span>
+                <Button
+                  type="button"
+                  size="xs"
+                  disabled={saving || !connected || draftName.trim().length === 0 || !limitsValid}
+                  onClick={() => void handleSave()}
+                >
+                  {saving ? <T>Saving…</T> : <T>Save changes</T>}
+                </Button>
+              </>
             ) : null}
-            <Button
-              type="button"
-              size="xs"
-              disabled={runNowState.disabled || openingRun || togglingPause || deleting}
-              aria-describedby={runNowDisabledReason !== null ? "bot-run-now-reason" : undefined}
-              onClick={() => void handleRunNow()}
-            >
-              <PlayIcon className="size-3.5" />
-              <T>Run now</T>
-            </Button>
+            {runNowDisabledReason !== null ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span
+                      id="bot-run-now-reason"
+                      className="max-w-56 truncate text-xs text-muted-foreground"
+                      tabIndex={0}
+                    />
+                  }
+                >
+                  {runNowDisabledReason}
+                </TooltipTrigger>
+                <TooltipPopup>{runNowDisabledReason}</TooltipPopup>
+              </Tooltip>
+            ) : null}
+            {runNowState.reason === "unsaved" ? (
+              <Tooltip>
+                <TooltipTrigger render={<span className="inline-flex" tabIndex={0} />}>
+                  {runNowButton}
+                </TooltipTrigger>
+                <TooltipPopup>
+                  <T>Save changes first</T>
+                </TooltipPopup>
+              </Tooltip>
+            ) : (
+              runNowButton
+            )}
             {canUpdateBot ? (
               <Button
                 variant="outline"
@@ -371,110 +463,105 @@ export function BotHomeView({
               </Button>
             ) : null}
             {canDeleteBot ? (
-              <Button
-                variant="destructive-outline"
-                size="xs"
-                disabled={!connected || deleting || togglingPause}
-                onClick={() => void handleDelete()}
-              >
-                <Trash2Icon className="size-3.5" />
-                <T>Delete</T>
-              </Button>
+              <Menu>
+                <MenuTrigger
+                  render={
+                    <Button
+                      size="icon-xs"
+                      variant="ghost"
+                      disabled={!connected || deleting || togglingPause}
+                      aria-label={gt("Actions for {title}", { title: savedName })}
+                    />
+                  }
+                >
+                  <MoreHorizontalIcon className="size-4" />
+                </MenuTrigger>
+                <MenuPopup align="end">
+                  <MenuItem onClick={() => void handleDelete()}>
+                    <Trash2Icon />
+                    <T>Delete</T>
+                  </MenuItem>
+                </MenuPopup>
+              </Menu>
             ) : null}
           </div>
         </WorkspacePageHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
           <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-5 sm:px-6">
-            <section
-              aria-label={gt("Bot settings")}
-              className="space-y-4 rounded-xl border bg-card p-4"
-            >
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="bot-home-name">
-                    <T>Name</T>
-                  </Label>
-                  <Input
-                    id="bot-home-name"
-                    disabled={!canUpdateBot || !connected || saving}
-                    maxLength={120}
-                    value={draftName}
-                    onChange={(event) =>
-                      setEditDraft({ ...currentDraft, name: event.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>
-                    <T>Model</T>
-                  </Label>
+            <SettingsSection title={gt("Bot settings")}>
+              <SettingsRow
+                title={gt("Name")}
+                control={
+                  <div className="w-full @min-[32rem]/settings-row:w-72">
+                    <Input
+                      aria-label={gt("Name")}
+                      disabled={fieldsDisabled}
+                      maxLength={120}
+                      value={draftName}
+                      onChange={(event) =>
+                        setEditDraft({ ...currentDraft, name: event.target.value })
+                      }
+                    />
+                  </div>
+                }
+              />
+              <SettingsRow
+                title={gt("Model")}
+                control={
                   <BotModelPicker
                     environmentId={environmentId}
                     projectId={projectId}
                     value={draftModelSelection}
-                    disabled={!canUpdateBot || !connected || saving}
+                    disabled={fieldsDisabled}
                     onChange={(next) =>
-                      setEditDraft({
-                        ...currentDraft,
-                        modelSelection: next,
-                        modelDirty: true,
-                      })
+                      setEditDraft({ ...currentDraft, modelSelection: next, modelDirty: true })
+                    }
+                  />
+                }
+              />
+              <SettingsRow title={gt("Goal")}>
+                <div className="py-2">
+                  <Textarea
+                    aria-label={gt("Goal")}
+                    disabled={fieldsDisabled}
+                    rows={3}
+                    placeholder={gt("Describe what this bot should do on every run.")}
+                    value={draftGoal}
+                    onChange={(event) =>
+                      setEditDraft({ ...currentDraft, goal: event.target.value })
                     }
                   />
                 </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="bot-home-goal">
-                  <T>Goal</T>
-                </Label>
-                <Textarea
-                  id="bot-home-goal"
-                  disabled={!canUpdateBot || !connected || saving}
-                  rows={3}
-                  placeholder={gt("Describe what this bot should do on every run.")}
-                  value={draftGoal}
-                  onChange={(event) => setEditDraft({ ...currentDraft, goal: event.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2 border-t border-border pt-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Label htmlFor="bot-home-limits-mode">
-                    <T>Limits</T>
-                  </Label>
-                  {todaySummary !== null ? (
-                    <p className="text-xs text-muted-foreground">{todaySummary}</p>
-                  ) : null}
-                </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="bot-home-limits-mode">
-                      <T>Daily cap</T>
-                    </Label>
-                    <Select
-                      value={draftLimitMode}
-                      disabled={!canUpdateBot || !connected || saving}
-                      onValueChange={(next) => {
-                        if (next === "runs_and_tokens" || next === "runs_only" || next === "none") {
-                          setEditDraft({ ...currentDraft, limitMode: next });
-                        }
-                      }}
-                    >
-                      <SelectTrigger id="bot-home-limits-mode">
-                        <SelectValue>{limitModeLabels[draftLimitMode]}</SelectValue>
-                      </SelectTrigger>
-                      <SelectPopup>
-                        <SelectItem value="runs_and_tokens">
-                          {limitModeLabels.runs_and_tokens}
-                        </SelectItem>
-                        <SelectItem value="runs_only">{limitModeLabels.runs_only}</SelectItem>
-                        <SelectItem value="none">{limitModeLabels.none}</SelectItem>
-                      </SelectPopup>
-                    </Select>
-                  </div>
-                  {draftLimitMode !== "none" ? (
+              </SettingsRow>
+              <SettingsRow
+                title={gt("Daily limits")}
+                description={todaySummary}
+                control={
+                  <Select
+                    value={draftLimitMode}
+                    disabled={fieldsDisabled}
+                    onValueChange={(next) => {
+                      if (next === "runs_and_tokens" || next === "runs_only" || next === "none") {
+                        setEditDraft({ ...currentDraft, limitMode: next });
+                      }
+                    }}
+                  >
+                    <SelectTrigger aria-label={gt("Daily limits")}>
+                      <SelectValue>{limitModeLabels[draftLimitMode]}</SelectValue>
+                    </SelectTrigger>
+                    <SelectPopup>
+                      <SelectItem value="runs_and_tokens">
+                        {limitModeLabels.runs_and_tokens}
+                      </SelectItem>
+                      <SelectItem value="runs_only">{limitModeLabels.runs_only}</SelectItem>
+                      <SelectItem value="none">{limitModeLabels.none}</SelectItem>
+                    </SelectPopup>
+                  </Select>
+                }
+              >
+                {draftLimitMode === "none" ? null : (
+                  <div className="grid gap-3 pt-3 pb-2 sm:grid-cols-2">
                     <div className="space-y-1">
                       <Label htmlFor="bot-home-runs-limit">
                         <T>Runs per day</T>
@@ -484,7 +571,7 @@ export function BotHomeView({
                         type="number"
                         min={1}
                         step={1}
-                        disabled={!canUpdateBot || !connected || saving}
+                        disabled={fieldsDisabled}
                         aria-invalid={parsedRunsPerDay === null}
                         value={draftRunsPerDayText}
                         onChange={(event) =>
@@ -492,63 +579,40 @@ export function BotHomeView({
                         }
                       />
                     </div>
-                  ) : null}
-                  {draftLimitMode === "runs_and_tokens" ? (
-                    <div className="space-y-1">
-                      <Label htmlFor="bot-home-tokens-limit">
-                        <T>Tokens per day</T>
-                      </Label>
-                      <Input
-                        id="bot-home-tokens-limit"
-                        type="number"
-                        min={1}
-                        step={100000}
-                        disabled={!canUpdateBot || !connected || saving}
-                        aria-invalid={parsedTokensPerDay === null}
-                        value={draftTokensPerDayText}
-                        onChange={(event) =>
-                          setEditDraft({ ...currentDraft, tokensPerDayText: event.target.value })
-                        }
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              </div>
+                    {draftLimitMode === "runs_and_tokens" ? (
+                      <div className="space-y-1">
+                        <Label htmlFor="bot-home-tokens-limit">
+                          <T>Tokens per day</T>
+                        </Label>
+                        <Input
+                          id="bot-home-tokens-limit"
+                          type="number"
+                          min={1}
+                          step={100000}
+                          disabled={fieldsDisabled}
+                          aria-invalid={parsedTokensPerDay === null}
+                          aria-describedby="bot-home-tokens-hint"
+                          value={draftTokensPerDayText}
+                          onChange={(event) =>
+                            setEditDraft({ ...currentDraft, tokensPerDayText: event.target.value })
+                          }
+                        />
+                        <p id="bot-home-tokens-hint" className="text-xs text-muted-foreground">
+                          {parsedTokensPerDay === null
+                            ? null
+                            : formatBotTokenCount(parsedTokensPerDay)}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </SettingsRow>
+            </SettingsSection>
 
-              {canUpdateBot && isDirty ? (
-                <div className="flex items-center justify-end gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="xs"
-                    disabled={saving}
-                    onClick={() => setEditDraft({ key: projectKey })}
-                  >
-                    <T>Discard</T>
-                  </Button>
-                  <Button
-                    type="button"
-                    size="xs"
-                    disabled={saving || !connected || draftName.trim().length === 0 || !limitsValid}
-                    onClick={() => void handleSave()}
-                  >
-                    {saving ? <T>Saving…</T> : <T>Save changes</T>}
-                  </Button>
-                </div>
-              ) : null}
-            </section>
-
-            <section aria-label={gt("Triggers")} className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <h2 className="text-sm font-medium text-foreground">
-                    <T>Triggers</T>
-                  </h2>
-                  <p className="text-xs text-muted-foreground">
-                    <T>Schedules and webhooks that start a new run for this bot.</T>
-                  </p>
-                </div>
-                {canOperateTasks ? (
+            <SettingsSection
+              title={gt("Triggers")}
+              headerAction={
+                canOperateTasks ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -559,67 +623,63 @@ export function BotHomeView({
                     <PlusIcon className="size-3.5" />
                     <T>Add trigger</T>
                   </Button>
-                ) : null}
-              </div>
-
+                ) : null
+              }
+            >
               {!connected ? (
-                <p className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">
-                  <T>Reconnect this environment to manage triggers.</T>
-                </p>
-              ) : tasksQuery.error ? (
-                <p className="rounded-xl border bg-card px-4 py-3 text-sm text-destructive">
-                  {tasksQuery.error}
-                </p>
-              ) : tasksQuery.data === null ? (
-                <p className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">
-                  <T>Loading triggers…</T>
-                </p>
-              ) : triggers.length === 0 ? (
-                <div className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">
-                  <T>No triggers yet. Add a schedule or webhook to run this bot automatically.</T>
-                </div>
-              ) : (
-                <div className="divide-y divide-border overflow-hidden rounded-xl border bg-card">
-                  {triggers.map((task) => (
-                    <ScheduledTaskRow
-                      key={task.id}
-                      environmentId={environmentId}
-                      task={task}
-                      timeZone={tasksQuery.data?.timeZone}
-                      showWebhookUrl
-                      onEdit={() => setTriggerEditor({ task })}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-
-            <section aria-label={gt("Runs")} className="flex min-h-72 flex-col space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-medium text-foreground">
-                  <T>Runs</T>
-                </h2>
-              </div>
-              <div className="flex min-h-72 flex-1 flex-col overflow-hidden rounded-xl border bg-card/40">
-                <ProjectThreadBoardContent
-                  columns={columns}
-                  openCount={openCount}
-                  digest={digest}
-                  onOpenThread={(thread) => {
-                    void navigate({
-                      to: "/$environmentId/$threadId",
-                      params: { environmentId: thread.environmentId, threadId: thread.id },
-                    });
-                  }}
-                  emptyTitle={<T>No runs yet</T>}
-                  emptyDescription={
-                    <T>
-                      Each trigger run starts its own thread here so you can review or reply to it.
-                    </T>
-                  }
+                <SettingsRow
+                  title={gt("Environment disconnected")}
+                  description={gt("Reconnect this environment to manage triggers.")}
                 />
-              </div>
-            </section>
+              ) : tasksQuery.error ? (
+                <SettingsRow
+                  title={gt("Could not load scheduled tasks")}
+                  description={tasksQuery.error}
+                />
+              ) : tasksQuery.data === null ? (
+                <SettingsRow title={gt("Loading triggers…")} role="status" />
+              ) : triggers.length === 0 ? (
+                <SettingsRow
+                  title={gt("No triggers yet")}
+                  description={gt("Add a schedule or webhook to run this bot automatically.")}
+                />
+              ) : (
+                triggers.map((task) => (
+                  <ScheduledTaskRow
+                    key={task.id}
+                    environmentId={environmentId}
+                    task={task}
+                    timeZone={tasksQuery.data?.timeZone}
+                    botPage
+                    onEdit={() => setTriggerEditor({ task })}
+                  />
+                ))
+              )}
+            </SettingsSection>
+
+            <SettingsSection title={gt("Runs")}>
+              {runs.length === 0 ? (
+                <SettingsRow
+                  title={gt("No runs yet")}
+                  description={gt(
+                    "Each run starts its own thread here so you can review or reply to it.",
+                  )}
+                />
+              ) : (
+                runs.map((thread) => (
+                  <BotRunRow
+                    key={thread.id}
+                    thread={thread}
+                    onOpen={() => {
+                      void navigate({
+                        to: "/$environmentId/$threadId",
+                        params: { environmentId: thread.environmentId, threadId: thread.id },
+                      });
+                    }}
+                  />
+                ))
+              )}
+            </SettingsSection>
           </div>
         </div>
       </div>
@@ -637,5 +697,29 @@ export function BotHomeView({
         />
       ) : null}
     </SidebarInset>
+  );
+}
+
+function BotRunRow({
+  thread,
+  onOpen,
+}: {
+  readonly thread: EnvironmentThreadShell;
+  readonly onOpen: () => void;
+}) {
+  const messages = useMessages();
+  const status = resolveThreadStatusDisplay(thread);
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none sm:px-4"
+    >
+      <span className="min-w-0 flex-1 truncate text-sm text-foreground">{thread.title}</span>
+      <span className={`shrink-0 text-xs ${status.colorClass}`}>{messages(status.label)}</span>
+      <span className="shrink-0 text-xs text-muted-foreground">
+        {formatRelativeTimeLabel(thread.updatedAt)}
+      </span>
+    </button>
   );
 }

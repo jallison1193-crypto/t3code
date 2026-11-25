@@ -4,6 +4,7 @@ import {
   NonNegativeInt,
   PositiveInt,
   ProjectId,
+  ThreadId,
   TrimmedNonEmptyString,
   TrimmedString,
 } from "./baseSchemas.ts";
@@ -79,6 +80,8 @@ export const BotUsageResult = Schema.Struct({
   projectId: ProjectId,
   limits: BotLimits,
   usage: BotDailyUsage,
+  /** Why Run now is refused right now. */
+  blockedByPolicy: Schema.optionalKey(Schema.String),
 });
 export type BotUsageResult = typeof BotUsageResult.Type;
 
@@ -136,6 +139,21 @@ export const BotDeleteResult = Schema.Struct({
 });
 export type BotDeleteResult = typeof BotDeleteResult.Type;
 
+export const BotRunInput = Schema.Struct({
+  projectId: ProjectId,
+  /** First message of the run. The bot's goal is already part of its instructions. */
+  prompt: TrimmedNonEmptyString,
+  /** Used only when neither the bot nor the environment has a default model. */
+  fallbackModelSelection: Schema.optionalKey(ModelSelection),
+});
+export type BotRunInput = typeof BotRunInput.Type;
+
+export const BotRunResult = Schema.Struct({
+  projectId: ProjectId,
+  threadId: ThreadId,
+});
+export type BotRunResult = typeof BotRunResult.Type;
+
 export const BotErrorReason = Schema.Literals([
   "bots_disabled",
   "not_found",
@@ -145,13 +163,16 @@ export const BotErrorReason = Schema.Literals([
   "project_failed",
   "settings_failed",
   "scheduled_tasks_failed",
+  "blocked",
+  "no_model",
+  "run_failed",
 ]);
 export type BotErrorReason = typeof BotErrorReason.Type;
 
 export class BotOperationError extends Schema.TaggedError<BotOperationError>()(
   "BotOperationError",
   {
-    operation: Schema.Literals(["list", "get", "getUsage", "create", "update", "delete"]),
+    operation: Schema.Literals(["list", "get", "getUsage", "create", "update", "delete", "run"]),
     reason: BotErrorReason,
     projectId: Schema.optional(ProjectId),
     detail: Schema.optional(Schema.String),
@@ -176,6 +197,12 @@ export class BotOperationError extends Schema.TaggedError<BotOperationError>()(
         return this.detail ?? "Could not save bot settings.";
       case "scheduled_tasks_failed":
         return this.detail ?? "Could not remove the bot's scheduled tasks.";
+      case "blocked":
+        return this.detail ?? "This bot can't run right now.";
+      case "no_model":
+        return "Choose a model for this bot before running it.";
+      case "run_failed":
+        return this.detail ?? "Could not start the run.";
     }
   }
 }
