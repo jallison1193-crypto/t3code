@@ -157,6 +157,13 @@ Asked for by Josh 2026-11-24, after B2 and before T3ther is called done. Walk ev
 - Empty states say what to do next; labels use plain words; every action has a way back.
 - Each feature works end to end, including restart and a second client.
 
+Walk done 2026-11-25 (Plugins not walked in the app: the sandbox had no plugins). Fixes in two slices:
+
+1. F1 bots: triggers follow the bot's model; Run now on the bot home (opens a prefilled draft); warning when the bot's model is on a provider bots can't use; bot wording in the trigger editor (New trigger, hide Project, Workspace, Destination and Model); webhook URL with Copy on the trigger card; bot pages keep the Bots tab and a Settings gear.
+2. F2 everything else: Bots and Work tabs reachable without the Projects sidebar setting; Work mode explains what it hides and shows that it is on; the Work tab hides projects with no Work threads; a Plugins on/off switch and an up-to-date empty state ("ask any agent"); Library called Library everywhere with an empty state that says what to do; distinct folder icons and an empty folders hint; the coordinator's empty state explains what it is for; the sidebar's "No active threads" points to the project's Threads board.
+
+Left as is: the Threads board's Idle and Done columns (finished runs show as Idle until settled, same as every project).
+
 ## Going public
 
 Asked for 2026-11-18; do it when the fork goes public, and ask Josh before the repo rename or making anything public.
