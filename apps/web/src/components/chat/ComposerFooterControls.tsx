@@ -1,9 +1,11 @@
 import type { ModelSelection, ProviderInstanceId, RuntimeMode } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import { T, useGT, useMessages } from "gt-react";
+import { ShieldCheckIcon } from "lucide-react";
 import { type ComponentProps, memo, useId, useRef, useState } from "react";
 
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
+import { cn } from "~/lib/utils";
 import { Menu, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ComposerControl, ComposerControlIcon } from "./ComposerControl";
@@ -13,6 +15,45 @@ import { resolveModelPickerSelectedModel } from "./ModelPickerContent";
 import { ProviderModelPicker } from "./ProviderModelPicker";
 import { resolveRuntimeModeOption, runtimeModeConfig } from "./runtimeModeConfig";
 import { useComposerMenuState } from "./useComposerMenuState";
+
+export function BotSafetyGateLabel(props: {
+  size?: "sm" | "xs";
+  accessDisplay?: "label" | "icon";
+  className?: string;
+}) {
+  const size = props.size ?? "sm";
+  const accessDisplay = props.accessDisplay ?? "label";
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span
+            tabIndex={0}
+            data-composer-bot-safety-gate="true"
+            className={cn(
+              "inline-flex shrink-0 cursor-default items-center whitespace-nowrap rounded-(--control-radius) text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+              size === "xs"
+                ? "h-7 gap-1 px-1.75 text-sm sm:h-6 sm:text-xs"
+                : "h-7 gap-1.5 ps-1.5 pe-2 font-medium text-sm",
+              props.className,
+            )}
+          />
+        }
+      >
+        <ComposerControlIcon icon={ShieldCheckIcon} size={size} />
+        <span
+          data-composer-control-label
+          className={accessDisplay === "icon" ? "sr-only" : undefined}
+        >
+          <T>Bot safety gate</T>
+        </span>
+      </TooltipTrigger>
+      <TooltipPopup side="top">
+        <T>Bots always ask before sending, deleting, or changing agent settings.</T>
+      </TooltipPopup>
+    </Tooltip>
+  );
+}
 
 export type RuntimeModeOption = {
   mode: RuntimeMode;
@@ -27,6 +68,7 @@ export const ComposerFooterModeControls = memo(function ComposerFooterModeContro
   accessDisplay?: "label" | "icon" | "hidden";
   /** Draw the icon in the label color, not muted (the mode differs from the user's default). */
   emphasized?: boolean;
+  isBotThread?: boolean;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
 }) {
   const gt = useGT();
@@ -95,7 +137,9 @@ export const ComposerFooterModeControls = memo(function ComposerFooterModeContro
     </Menu>
   );
 
-  return accessDisplay === "hidden" ? null : permissionsChip;
+  if (accessDisplay === "hidden") return null;
+  if (props.isBotThread) return <BotSafetyGateLabel size={size} accessDisplay={accessDisplay} />;
+  return permissionsChip;
 });
 
 /**

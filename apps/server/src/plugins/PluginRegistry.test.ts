@@ -18,11 +18,13 @@ import { MCP_APP_MAX_HTML_BYTES } from "@t3tools/shared/mcpApp";
 import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 import { assert, describe, it } from "@effect/vitest";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Scope from "effect/Scope";
@@ -130,11 +132,21 @@ const withPluginRegistry = <A, E>(
     }
 
     const settingsRef = yield* Ref.make(initialSettings);
+    const settingsChanges = yield* PubSub.unbounded<ServerSettings>();
+    const settingsSubscribed = yield* Deferred.make<void>();
     const settingsLayer = Layer.mock(ServerSettingsService)({
       getSettings: Ref.get(settingsRef),
       updateSettings: (patch) =>
-        Ref.updateAndGet(settingsRef, (current) => applyServerSettingsPatch(current, patch)),
-      streamChanges: Stream.empty,
+        Ref.updateAndGet(settingsRef, (current) => applyServerSettingsPatch(current, patch)).pipe(
+          Effect.tap((next) => PubSub.publish(settingsChanges, next)),
+        ),
+      streamChanges: Stream.unwrap(
+        Effect.gen(function* () {
+          const subscription = yield* PubSub.subscribe(settingsChanges);
+          yield* Deferred.succeed(settingsSubscribed, undefined);
+          return Stream.fromSubscription(subscription);
+        }),
+      ),
     });
     const projectStoreLayer = Layer.mock(ProjectStore.ProjectStoreV2)({
       get: (projectId) =>
@@ -153,7 +165,8 @@ const withPluginRegistry = <A, E>(
       projectRows.length > 0
         ? PluginRegistry.layer.pipe(Layer.provide(projectStoreLayer))
         : PluginRegistry.layer;
-    return yield* body.pipe(
+    return yield* Deferred.await(settingsSubscribed).pipe(
+      Effect.andThen(body),
       Effect.provide(
         basePluginLayer.pipe(
           Layer.provideMerge(ServerConfig.layerTest(process.cwd(), baseDir)),
@@ -1763,6 +1776,150 @@ describe("PluginRegistry", () => {
                     "",
                     "Produce a concise plan.",
                   ].join("\n"),
+                },
+              },
+            },
+          },
+        ],
+      );
+    },
+  );
+
+  it.effect(
+    "gates active plugins, panels, workers, MCP specs, and turn context on pluginsEnabled while keeping list intact",
+    () => {
+      const projectA = ProjectId.make("project-master-switch");
+      return withPluginRegistry(
+        {
+          "full-plugin": {
+            manifest: JSON.stringify({
+              name: "full-plugin",
+              displayName: "Full Plugin",
+              css: "./plugin.css",
+              panels: [{ id: "board", title: "Board", entry: "./board.html" }],
+              worker: { entry: "./worker.mjs" },
+            }),
+            files: {
+              "plugin.css": "body { --test-plugin: 1; }",
+              "board.html": "<!doctype html><html><body>Board</body></html>",
+              "worker.mjs": "export default function () {}",
+              "AGENTS.md": "User plugin rule.",
+              "skills/ping/SKILL.md": "---\ndescription: Ping command\n---\nPong!",
+              ".mcp.json": JSON.stringify({
+                docs: { command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/srv.mjs"] },
+              }),
+            },
+          },
+        },
+        Effect.gen(function* () {
+          const registry = yield* PluginRegistry.PluginRegistry;
+          const settings = yield* ServerSettingsService;
+
+          const initialList = yield* registry.list;
+          const userPlugin = initialList.plugins.find((plugin) => plugin.id === "full-plugin");
+          const repoPlugin = initialList.repoPlugins?.find((plugin) => plugin.id === "repo-cmd");
+          assert.isDefined(userPlugin);
+          assert.isDefined(repoPlugin);
+          if (!userPlugin || !repoPlugin || repoPlugin.revision === undefined) {
+            return assert.fail("Expected user and repo plugins to be discovered");
+          }
+
+          yield* registry.setEnabled("full-plugin", true, {
+            approveWorker: true,
+            approveExternal: true,
+            revision: userPlugin.revision,
+          });
+          yield* registry.setEnabled("repo-cmd", true, {
+            projectId: projectA,
+            revision: repoPlugin.revision,
+          });
+
+          const activeQueue = yield* Queue.unbounded<ReadonlyArray<EnvironmentPlugin>>();
+          const workerQueue =
+            yield* Queue.unbounded<ReadonlyArray<PluginRegistry.PluginWorkerDesiredSpec>>();
+          const mcpQueue =
+            yield* Queue.unbounded<ReadonlyArray<PluginRegistry.PluginMcpServerDesiredSpec>>();
+          yield* Stream.runForEach(registry.streamChanges, (value) =>
+            Queue.offer(activeQueue, value),
+          ).pipe(Effect.forkScoped);
+          yield* Stream.runForEach(registry.streamWorkerDesiredState, (value) =>
+            Queue.offer(workerQueue, value),
+          ).pipe(Effect.forkScoped);
+          yield* Stream.runForEach(registry.streamMcpDesiredState, (value) =>
+            Queue.offer(mcpQueue, value),
+          ).pipe(Effect.forkScoped);
+
+          const initialActive = yield* Queue.take(activeQueue);
+          const initialWorkers = yield* Queue.take(workerQueue);
+          const initialMcp = yield* Queue.take(mcpQueue);
+          assert.deepEqual(
+            initialActive.map((plugin) => plugin.id),
+            ["full-plugin", "repo-cmd"],
+          );
+          assert.strictEqual(initialWorkers.length, 1);
+          assert.strictEqual(initialWorkers[0]?.runnable, true);
+          assert.strictEqual(initialMcp.length, 1);
+          assert.strictEqual(initialMcp[0]?.serverName, "docs");
+          const resolvedBefore = yield* registry.resolvePanelEntry("full-plugin", "board");
+          assert.isTrue(resolvedBefore.endsWith("board.html"));
+          const turnBefore = yield* registry.getTurnContext(projectA);
+          assert.strictEqual(turnBefore.commands.length, 2);
+          assert.strictEqual(turnBefore.contextPlugins.length, 2);
+
+          // Turn all plugins off: live streams clear, panels and turn context empty, list remains.
+          yield* settings.updateSettings({ pluginsEnabled: false });
+          assert.deepEqual(yield* Queue.take(activeQueue), []);
+          assert.deepEqual(yield* Queue.take(workerQueue), []);
+          assert.deepEqual(yield* Queue.take(mcpQueue), []);
+
+          const panelOffErr = yield* registry
+            .resolvePanelEntry("full-plugin", "board")
+            .pipe(Effect.flip);
+          assert.strictEqual(panelOffErr.reason, "not_found");
+          const turnOff = yield* registry.getTurnContext(projectA);
+          assert.deepEqual(turnOff, {
+            contextPlugins: [],
+            commands: [],
+            hooks: {},
+            agents: [],
+          });
+
+          const listWhileOff = yield* registry.list;
+          assert.strictEqual(listWhileOff.plugins.length, 1);
+          assert.strictEqual(listWhileOff.plugins[0]?.id, "full-plugin");
+          assert.strictEqual(listWhileOff.repoPlugins?.length, 1);
+          assert.strictEqual(listWhileOff.repoPlugins?.[0]?.id, "repo-cmd");
+
+          // Turn plugins back on: everything active restores live.
+          yield* settings.updateSettings({ pluginsEnabled: true });
+          const restoredActive = yield* Queue.take(activeQueue);
+          const restoredWorkers = yield* Queue.take(workerQueue);
+          const restoredMcp = yield* Queue.take(mcpQueue);
+          assert.deepEqual(
+            restoredActive.map((plugin) => plugin.id),
+            ["full-plugin", "repo-cmd"],
+          );
+          assert.strictEqual(restoredWorkers.length, 1);
+          assert.strictEqual(restoredWorkers[0]?.runnable, true);
+          assert.strictEqual(restoredMcp.length, 1);
+          assert.strictEqual(restoredMcp[0]?.serverName, "docs");
+          const resolvedAfter = yield* registry.resolvePanelEntry("full-plugin", "board");
+          assert.isTrue(resolvedAfter.endsWith("board.html"));
+          const turnAfter = yield* registry.getTurnContext(projectA);
+          assert.strictEqual(turnAfter.commands.length, 2);
+          assert.strictEqual(turnAfter.contextPlugins.length, 2);
+        }),
+        DEFAULT_SERVER_SETTINGS,
+        [
+          {
+            projectId: projectA,
+            title: "Project Master Switch",
+            plugins: {
+              "repo-cmd": {
+                manifest: JSON.stringify({ name: "repo-cmd" }),
+                files: {
+                  "AGENTS.md": "Repo rule.",
+                  "commands/deploy.md": "Run deploy.",
                 },
               },
             },

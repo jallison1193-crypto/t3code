@@ -1,7 +1,7 @@
 import type { RuntimeMode } from "@t3tools/contracts";
-import { useGT } from "gt-react";
+import { T, useGT } from "gt-react";
 import { memo, useRef } from "react";
-import { EllipsisIcon } from "lucide-react";
+import { EllipsisIcon, ShieldCheckIcon } from "lucide-react";
 import { Menu, MenuPopup, MenuTrigger } from "../ui/menu";
 import { ComposerControl, ComposerControlIcon } from "./ComposerControl";
 import { focusRequestedPermission, useComposerMenuProps } from "./composerEventScope";
@@ -12,6 +12,7 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
   runtimeMode: RuntimeMode;
   runtimeModeOptions: ReadonlyArray<RuntimeModeOption>;
   showPermissions: boolean;
+  isBotThread?: boolean;
   size?: "sm" | "xs";
   /** Close the portaled popup when its trigger hides. */
   hidden?: boolean;
@@ -36,7 +37,9 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
             size={size}
             className="shrink-0"
             aria-label={gt("More composer controls")}
-            data-composer-shortcut={props.showPermissions ? "composer.mode" : undefined}
+            data-composer-shortcut={
+              props.showPermissions && !props.isBotThread ? "composer.mode" : undefined
+            }
           />
         }
       >
@@ -44,11 +47,23 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
       </MenuTrigger>
       <MenuPopup align="start" {...composerFloatingLayerProps}>
         {props.showPermissions ? (
-          <ComposerPermissionsSection
-            runtimeMode={props.runtimeMode}
-            runtimeModeOptions={props.runtimeModeOptions}
-            onRuntimeModeChange={props.onRuntimeModeChange}
-          />
+          props.isBotThread ? (
+            <div className="grid w-72 gap-1 px-2 py-1.5">
+              <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                <ShieldCheckIcon aria-hidden="true" className="size-3.5 text-muted-foreground" />
+                <T>Bot safety gate</T>
+              </div>
+              <p className="text-xs leading-4 text-muted-foreground">
+                <T>Bots always ask before sending, deleting, or changing agent settings.</T>
+              </p>
+            </div>
+          ) : (
+            <ComposerPermissionsSection
+              runtimeMode={props.runtimeMode}
+              runtimeModeOptions={props.runtimeModeOptions}
+              onRuntimeModeChange={props.onRuntimeModeChange}
+            />
+          )
         ) : null}
       </MenuPopup>
     </Menu>

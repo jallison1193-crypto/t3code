@@ -24,7 +24,11 @@ import {
 import { Switch } from "../ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import type { ComposerControlSize } from "./ComposerControl";
-import { ComposerPermissionsSection, type RuntimeModeOption } from "./ComposerFooterControls";
+import {
+  BotSafetyGateLabel,
+  ComposerPermissionsSection,
+  type RuntimeModeOption,
+} from "./ComposerFooterControls";
 import { composerFloatingLayerProps, focusCheckedPermission } from "./composerEventScope";
 import { EffortGlyph, FastBolt, resolveEffortGlyph } from "./EffortGlyph";
 import { DockedPickerContext } from "./ProviderModelPicker";
@@ -723,17 +727,22 @@ export function ComposerPickerFooter(props: {
   traits: TraitsSelectionInput | null;
   runtimeMode: RuntimeMode;
   runtimeModeOptions: ReadonlyArray<RuntimeModeOption>;
+  isBotThread?: boolean;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2 border-t border-border/70 bg-muted/40 px-3 py-2">
       {props.traits ? <SpeedControl traits={props.traits} /> : null}
       {props.traits ? <UltracodeControl traits={props.traits} /> : null}
-      <PermissionsMenu
-        runtimeMode={props.runtimeMode}
-        options={props.runtimeModeOptions}
-        onChange={props.onRuntimeModeChange}
-      />
+      {props.isBotThread ? (
+        <BotSafetyGateLabel size="xs" className="ms-auto" />
+      ) : (
+        <PermissionsMenu
+          runtimeMode={props.runtimeMode}
+          options={props.runtimeModeOptions}
+          onChange={props.onRuntimeModeChange}
+        />
+      )}
     </div>
   );
 }

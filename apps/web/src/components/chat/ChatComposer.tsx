@@ -425,6 +425,7 @@ export interface ChatComposerProps {
 
   runtimeMode: RuntimeMode;
   defaultRuntimeMode?: RuntimeMode;
+  isBotThread?: boolean;
 
   lockedProvider: ProviderDriverKind | null;
   providerStatuses: ServerProvider[];
@@ -2720,6 +2721,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       composerControlsCollapsed={composerControlsCollapsed}
       effortDisplay={settings.effortDisplay}
       permissionsShownInStrip={props.permissionsShownInStrip}
+      isBotThread={props.isBotThread === true}
       composerControlsHidden={composerControlsHidden}
       restingHiddenBlockCount={restingHiddenBlockCount}
       iconOnlyBlockCount={iconOnlyBlockCount}

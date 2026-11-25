@@ -12672,7 +12672,6 @@
   ],
   "119fdf3a37955ebd": "Conecta un entorno para gestionar sus plugins.",
   "582e155f909e9bc4": "Cargando plugins…",
-  "d82c581217d84120": "Los plugins se guardan en la carpeta de plugins de abajo; pronto los agentes también podrán crearlos aquí.",
   "cc0e82d6578ff61e": "Desinstalar",
   "86c29ba4da470da1": [
     "Carpeta de plugins:",
@@ -13047,5 +13046,13 @@
   "06aa52561efb5fa6": "Modo Trabajo",
   "437cbbd5e7ba6160": "Cambiar a Código",
   "e1aacebc11885164": "No hay coincidencias en los archivos recientes.",
-  "837e46cbcd50eeef": "Buscar archivos más antiguos"
+  "837e46cbcd50eeef": "Buscar archivos más antiguos",
+  "8d1b9870705daa45": "Control de seguridad del bot",
+  "510835e3a26c97d5": "Los bots siempre piden confirmación antes de enviar, eliminar o cambiar los ajustes del agente.",
+  "9517fffdb26a8aed": "No se actualizó el ajuste de plugins",
+  "3d9ee193e785ce3c": "No se pudo actualizar el ajuste de plugins.",
+  "e0a411bf7000279f": "Cada entorno tiene sus propios plugins. Aquí se muestra y se cambia el que elegiste arriba.",
+  "a96a6a1d3f2d498a": "Ejecuta en este entorno los plugins de usuario y de repositorio instalados. Si lo desactivas, todos los plugins se pausan sin desinstalarse.",
+  "da4cc80c87a85b11": "Los plugins están desactivados. Los plugins instalados siguen instalados, pero no hacen nada hasta que los vuelvas a activar.",
+  "289da94c4b01df5a": "Aún no hay plugins. Pide a cualquier agente que cree uno: describe lo que quieres y construirá el plugin en tu carpeta de plugins."
 }

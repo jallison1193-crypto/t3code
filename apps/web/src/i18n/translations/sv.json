@@ -12684,7 +12684,6 @@
   ],
   "119fdf3a37955ebd": "Anslut en miljö för att hantera dess tillägg.",
   "582e155f909e9bc4": "Läser in tillägg…",
-  "d82c581217d84120": "Tillägg ligger i tilläggsmappen nedan; snart kan agenter också bygga dem här.",
   "cc0e82d6578ff61e": "Avinstallera",
   "86c29ba4da470da1": [
     "Tilläggsmapp:",
@@ -13059,5 +13058,13 @@
   "06aa52561efb5fa6": "Arbetsläge",
   "437cbbd5e7ba6160": "Byt till Kod",
   "e1aacebc11885164": "Inga träffar bland de senaste filerna.",
-  "837e46cbcd50eeef": "Sök i äldre filer"
+  "837e46cbcd50eeef": "Sök i äldre filer",
+  "8d1b9870705daa45": "Botens säkerhetsspärr",
+  "510835e3a26c97d5": "Botar frågar alltid innan de skickar, raderar eller ändrar agentinställningar.",
+  "9517fffdb26a8aed": "Plugin-inställningen uppdaterades inte",
+  "3d9ee193e785ce3c": "Det gick inte att uppdatera plugin-inställningen.",
+  "e0a411bf7000279f": "Varje miljö har sina egna plugins. Den miljö du valt ovan är den som visas och ändras här.",
+  "a96a6a1d3f2d498a": "Kör installerade användar- och repo-plugins i den här miljön. Om du stänger av det pausas alla plugins utan att avinstalleras.",
+  "da4cc80c87a85b11": "Plugins är avstängda. Installerade plugins finns kvar men gör ingenting förrän du slår på dem igen.",
+  "289da94c4b01df5a": "Inga plugins ännu. Be vilken agent som helst att skapa ett: beskriv vad du vill ha, så bygger den pluginet i din plugin-mapp."
 }

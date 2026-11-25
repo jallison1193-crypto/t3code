@@ -12677,7 +12677,6 @@
   ],
   "119fdf3a37955ebd": "Connectez un environnement pour gérer ses plugins.",
   "582e155f909e9bc4": "Chargement des plugins…",
-  "d82c581217d84120": "Les plugins se trouvent dans le dossier ci-dessous ; les agents pourront bientôt en créer ici aussi.",
   "cc0e82d6578ff61e": "Désinstaller",
   "86c29ba4da470da1": [
     "Dossier des plugins :",
@@ -13052,5 +13051,13 @@
   "06aa52561efb5fa6": "Mode Travail",
   "437cbbd5e7ba6160": "Passer en Code",
   "e1aacebc11885164": "Aucun résultat dans les fichiers récents.",
-  "837e46cbcd50eeef": "Rechercher dans les fichiers plus anciens"
+  "837e46cbcd50eeef": "Rechercher dans les fichiers plus anciens",
+  "8d1b9870705daa45": "Garde-fou du bot",
+  "510835e3a26c97d5": "Les bots demandent toujours une confirmation avant d'envoyer, de supprimer ou de modifier les réglages de l'agent.",
+  "9517fffdb26a8aed": "Réglage des plugins non mis à jour",
+  "3d9ee193e785ce3c": "Impossible de mettre à jour le réglage des plugins.",
+  "e0a411bf7000279f": "Chaque environnement a ses propres plugins. Celui choisi ci-dessus est celui affiché et modifié ici.",
+  "a96a6a1d3f2d498a": "Exécute les plugins utilisateur et de dépôt installés sur cet environnement. Si tu le désactives, tous les plugins sont mis en pause sans être désinstallés.",
+  "da4cc80c87a85b11": "Les plugins sont désactivés. Les plugins installés restent installés mais ne font rien tant que tu ne les réactives pas.",
+  "289da94c4b01df5a": "Aucun plugin pour l'instant. Demande à n'importe quel agent d'en créer un : décris ce que tu veux et il construit le plugin dans ton dossier de plugins."
 }

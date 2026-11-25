@@ -12677,7 +12677,6 @@
   ],
   "119fdf3a37955ebd": "Verbinde eine Umgebung, um deren Plugins zu verwalten.",
   "582e155f909e9bc4": "Plugins werden geladen…",
-  "d82c581217d84120": "Plugins liegen im folgenden Plugins-Ordner; bald können auch Agenten sie hier erstellen.",
   "cc0e82d6578ff61e": "Deinstallieren",
   "86c29ba4da470da1": [
     "Plugins-Ordner:",
@@ -13054,5 +13053,13 @@
   "06aa52561efb5fa6": "Arbeitsmodus",
   "437cbbd5e7ba6160": "Zu Code wechseln",
   "e1aacebc11885164": "Keine Treffer in den letzten Dateien.",
-  "837e46cbcd50eeef": "Ältere Dateien durchsuchen"
+  "837e46cbcd50eeef": "Ältere Dateien durchsuchen",
+  "8d1b9870705daa45": "Bot-Sicherheitsschranke",
+  "510835e3a26c97d5": "Bots fragen immer nach, bevor sie etwas senden, löschen oder Agent-Einstellungen ändern.",
+  "9517fffdb26a8aed": "Plugin-Einstellung nicht aktualisiert",
+  "3d9ee193e785ce3c": "Die Plugin-Einstellung konnte nicht aktualisiert werden.",
+  "e0a411bf7000279f": "Jede Umgebung hat ihre eigenen Plugins. Die oben ausgewählte wird hier angezeigt und geändert.",
+  "a96a6a1d3f2d498a": "Installierte Benutzer- und Repo-Plugins in dieser Umgebung ausführen. Wenn du das ausschaltest, werden alle Plugins pausiert, ohne sie zu deinstallieren.",
+  "da4cc80c87a85b11": "Plugins sind ausgeschaltet. Installierte Plugins bleiben installiert, tun aber nichts, bis du sie wieder einschaltest.",
+  "289da94c4b01df5a": "Noch keine Plugins. Bitte einen beliebigen Agenten, eines zu erstellen: Beschreibe, was du möchtest, und er baut das Plugin in deinem Plugin-Ordner."
 }

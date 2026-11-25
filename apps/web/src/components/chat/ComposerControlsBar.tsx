@@ -57,6 +57,7 @@ export function ComposerControlsBar(props: {
   effortDisplay: EffortDisplay;
   /** The strip under a new thread names the permissions, so the row does not repeat them. */
   permissionsShownInStrip: boolean;
+  isBotThread?: boolean;
   compatibleRuntimeMode: RuntimeMode;
   defaultRuntimeMode: RuntimeMode | undefined;
   compatibleRuntimeModeOptions: ReadonlyArray<RuntimeModeOption>;
@@ -132,6 +133,7 @@ export function ComposerControlsBar(props: {
     modelPickerIconClassName,
     getModelDisabledReason,
   } = props;
+  const isBotThread = props.isBotThread === true;
   const accessMatchesDefault = compatibleRuntimeMode === defaultRuntimeMode;
   const {
     accessDisplay,
@@ -139,12 +141,13 @@ export function ComposerControlsBar(props: {
     hiddenBlockCount: restingHiddenBlockCount,
     hiddenBlockIds: hiddenRestingBlockIds,
     overflowShowsPermissions,
-    pickerOwnsModeShortcut,
+    pickerOwnsModeShortcut: rawPickerOwnsModeShortcut,
   } = resolveComposerControlsOwnership({
-    matchesDefault: accessMatchesDefault || props.permissionsShownInStrip,
+    matchesDefault: !isBotThread && (accessMatchesDefault || props.permissionsShownInStrip),
     collapsed: composerControlsCollapsed,
     measuredHiddenBlockCount,
   });
+  const pickerOwnsModeShortcut = !isBotThread && rawPickerOwnsModeShortcut;
   const controlSize = composerControlsCollapsed ? "xs" : "sm";
   const gt = useGT();
   const m = useMessages();
@@ -177,6 +180,7 @@ export function ComposerControlsBar(props: {
               hidden={composerControlsHidden || restingHiddenBlockCount > 0}
               accessDisplay={accessDisplay}
               emphasized={!accessMatchesDefault}
+              isBotThread={isBotThread}
               onRuntimeModeChange={handleRuntimeModeChange}
             />
           ),
@@ -230,6 +234,7 @@ export function ComposerControlsBar(props: {
           traits={traitsInput}
           runtimeMode={compatibleRuntimeMode}
           runtimeModeOptions={compatibleRuntimeModeOptions}
+          isBotThread={isBotThread}
           onRuntimeModeChange={handleRuntimeModeChange}
         />
       }
@@ -306,6 +311,7 @@ export function ComposerControlsBar(props: {
             hidden={composerControlsHidden || hiddenRestingBlockIds.length === 0}
             // Permissions join the overflow only when their normal home is in it.
             showPermissions={overflowShowsPermissions}
+            isBotThread={isBotThread}
             onRuntimeModeChange={handleRuntimeModeChange}
           />
         </div>
