@@ -36,6 +36,8 @@ import { T, useGT } from "gt-react";
 import { AlertCircleIcon, BotIcon, FolderIcon, LockIcon, WifiOffIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { BotHomeView } from "~/bots/BotHomeView";
+import { isBotEnvironmentEnabled, isBotProjectGroup } from "~/bots/bots.logic";
 import { isElectron } from "~/env";
 import { useStableCallback } from "~/hooks/useStableCallback";
 import { useThreadActions } from "~/hooks/useThreadActions";
@@ -105,12 +107,23 @@ function resolveCoordinatorCreateDefaults(environmentId: EnvironmentId, projectI
 export function ProjectHomeView({ projectKey }: { readonly projectKey: string }) {
   const gt = useGT();
   const navigate = useNavigate();
-  const projectGroups = useSettingsProjectGroups();
+  const projectGroups = useSettingsProjectGroups({ includeBots: true });
   const { isReady: environmentsReady, presentationById } = useEnvironments();
   const projectGroup = projectGroups.find((group) => group.projectKey === projectKey) ?? null;
 
+  const isBotGroup =
+    projectGroup !== null &&
+    isBotProjectGroup(
+      projectGroup,
+      (environmentId) => presentationById.get(environmentId)?.serverConfig?.settings,
+    );
+  const botEnvironment = isBotGroup
+    ? presentationById.get(projectGroup.memberProjects[0]!.environmentId)
+    : undefined;
+  const botEnabledHere = isBotEnvironmentEnabled(botEnvironment?.serverConfig?.settings);
+
   const memberSelection =
-    projectGroup === null
+    projectGroup === null || isBotGroup
       ? { kind: "disconnected" as const }
       : selectProjectHomeMember(projectGroup.memberProjects, (environmentId) =>
           presentationById.get(environmentId),
@@ -306,6 +319,48 @@ export function ProjectHomeView({ projectKey }: { readonly projectKey: string })
   const handleRetryCreation = () => {
     setCreationError(null);
   };
+
+  if (projectGroup !== null && isBotGroup) {
+    if (botEnabledHere) {
+      return <BotHomeView projectKey={projectKey} projectGroup={projectGroup} />;
+    }
+    return (
+      <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+          <WorkspacePageHeader electron={isElectron} className="bg-background">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <BotIcon className="size-4 shrink-0 text-muted-foreground" />
+              <h1 className="truncate text-sm font-medium text-foreground">
+                <T>Bots</T>
+              </h1>
+            </div>
+          </WorkspacePageHeader>
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <BotIcon />
+              </EmptyMedia>
+              <EmptyTitle>
+                <T>Bots are turned off</T>
+              </EmptyTitle>
+              <EmptyDescription>
+                <T>Turn Bots on in Settings to view and run this bot.</T>
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void navigate({ to: "/settings/general" })}
+              >
+                <T>Open Settings</T>
+              </Button>
+            </EmptyContent>
+          </Empty>
+        </div>
+      </SidebarInset>
+    );
+  }
 
   let body: React.ReactNode;
   if (projectGroup === null) {

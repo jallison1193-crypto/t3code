@@ -129,6 +129,9 @@ export class ManagedProjectFolders extends Context.Service<
       },
       NamedProjectError
     >;
+    readonly createBotFolder: (input: {
+      readonly name: string;
+    }) => Effect.Effect<{ readonly workspaceRoot: string }, NamedProjectFolderError>;
   }
 >()("t3/project/ManagedProjectFolders") {}
 
@@ -391,37 +394,39 @@ const make = Effect.gen(function* () {
   });
 
   const namedProjectsRoot = path.resolve(config.baseDir, "projects");
+  const botsRoot = path.resolve(config.baseDir, "bots");
 
-  const claimNamedFolder = Effect.fn("ManagedProjectFolders.claimNamedFolder")(function* (
+  const claimManagedFolder = Effect.fn("ManagedProjectFolders.claimManagedFolder")(function* (
+    root: string,
     name: string,
   ) {
     yield* fileSystem
-      .makeDirectory(namedProjectsRoot, { recursive: true })
-      .pipe(
-        Effect.mapError(
-          (cause) => new NamedProjectFolderError({ folder: namedProjectsRoot, cause }),
-        ),
-      );
+      .makeDirectory(root, { recursive: true })
+      .pipe(Effect.mapError((cause) => new NamedProjectFolderError({ folder: root, cause })));
     const folderName = newProjectFolderName(name);
     const claimed = yield* claimFreeFolder(
       (attempt) =>
         Effect.succeed(
           attempt > MAX_NAMED_FOLDER_ATTEMPTS
             ? Option.none()
-            : Option.some(
-                path.join(
-                  namedProjectsRoot,
-                  attempt === 1 ? folderName : `${folderName}-${attempt}`,
-                ),
-              ),
+            : Option.some(path.join(root, attempt === 1 ? folderName : `${folderName}-${attempt}`)),
         ),
       (folder, cause) => new NamedProjectFolderError({ folder, cause }),
     );
     if (Option.isSome(claimed)) return claimed.value;
     return yield* new NamedProjectFolderError({
-      folder: path.join(namedProjectsRoot, folderName),
+      folder: path.join(root, folderName),
       cause: `Every folder name for "${folderName}" is taken.`,
     });
+  });
+
+  const claimNamedFolder = (name: string) => claimManagedFolder(namedProjectsRoot, name);
+
+  const createBotFolder: ManagedProjectFolders["Service"]["createBotFolder"] = Effect.fn(
+    "ManagedProjectFolders.createBotFolder",
+  )(function* (input) {
+    const workspaceRoot = yield* claimManagedFolder(botsRoot, input.name);
+    return { workspaceRoot };
   });
 
   const scaffoldRepository = Effect.fn("ManagedProjectFolders.scaffoldRepository")(function* (
@@ -515,6 +520,7 @@ const make = Effect.gen(function* () {
     folderForThread,
     namedProjectsRoot,
     createNamedProject,
+    createBotFolder,
   });
 });
 

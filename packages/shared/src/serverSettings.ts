@@ -360,6 +360,7 @@ function mergeProjectSettingsOverridesPatch(
       continue;
     }
     const storedProviderInstances = current[projectId]?.providerInstances;
+    const storedBot = current[projectId]?.bot;
     next.set(projectId, {
       // Preserve downgraded storage, but reject new unknown writes so clients can detect unsupported settings.
       ...pickOverrideKeys(current[projectId], false),
@@ -367,6 +368,7 @@ function mergeProjectSettingsOverridesPatch(
       ...(Object.hasOwn(entry, "providerInstances") || storedProviderInstances === undefined
         ? {}
         : { providerInstances: storedProviderInstances }),
+      ...(Object.hasOwn(entry, "bot") || storedBot === undefined ? {} : { bot: storedBot }),
     });
   }
   return Object.fromEntries(next);

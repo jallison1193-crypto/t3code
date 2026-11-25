@@ -102,7 +102,8 @@ function toLibraryEntry(
   }
   const tags = Option.getOrUndefined(decodeTags(row.tags));
   const threadMode = tags?.includes(WORK_MODE_TAG) ? "work" : "code";
-  if (mode !== "all" && mode !== threadMode) return null;
+  const effectiveMode = mode === "bots" ? "all" : mode;
+  if (effectiveMode !== "all" && effectiveMode !== threadMode) return null;
 
   const item = Option.getOrUndefined(decodeToolItem(row.payload));
   const reference = item === undefined ? undefined : htmlRenderFromToolItem(item);

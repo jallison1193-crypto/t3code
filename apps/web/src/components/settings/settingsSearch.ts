@@ -551,6 +551,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["work mode code app mode new threads"],
   },
   {
+    id: "bots-enabled",
+    title: msg("Bots"),
+    to: "/settings/general",
+    searchTerms: [msg("bots agents automations triggers schedules webhooks pause disable")],
+  },
+  {
     id: "boring-sidebar",
     title: msg("Boring sidebar (group by project)"),
     to: "/settings/labs",

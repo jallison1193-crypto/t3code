@@ -5577,5 +5577,9 @@
   "ac10cafdeea93121": "{count, plural, one {Plugin écrit {count} fois} other {Plugin écrit {count} fois}}",
   "52b987ceaa1e9498": "{count, plural, one {Tentative d'écrire un plugin {count} fois} other {Tentative d'écrire un plugin {count} fois}}",
   "2450a6722d95b646": "{status, select, inProgress {Lecture des plugins} completed {Plugins lus} failed {Impossible de lire les plugins} declined {Refus de lire les plugins} stopped {Arrêt de la lecture des plugins} other {Lecture des plugins}}",
-  "3c08c0c95a3b07e2": "{status, select, inProgress {Écriture d'un plugin} completed {Plugin écrit} failed {Impossible d'écrire le plugin} declined {Refus d'écrire le plugin} stopped {Arrêt de l'écriture du plugin} other {Écriture d'un plugin}}"
+  "3c08c0c95a3b07e2": "{status, select, inProgress {Écriture d'un plugin} completed {Plugin écrit} failed {Impossible d'écrire le plugin} declined {Refus d'écrire le plugin} stopped {Arrêt de l'écriture du plugin} other {Écriture d'un plugin}}",
+  "009f5e6f7c064faa": "{count, plural, one {Bots vérifiés {count} fois} other {Bots vérifiés {count} fois}}",
+  "c78f0a513623a3c4": "{count, plural, one {Tentative de vérification des bots {count} fois} other {Tentative de vérification des bots {count} fois}}",
+  "ccb358e98ac6702c": "{count, plural, one {Bot mis à jour {count} fois} other {Bot mis à jour {count} fois}}",
+  "e8b01d0152209242": "{count, plural, one {Tentative de mise à jour d’un bot {count} fois} other {Tentative de mise à jour d’un bot {count} fois}}"
 }

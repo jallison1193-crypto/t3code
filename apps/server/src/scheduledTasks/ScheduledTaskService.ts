@@ -1,4 +1,5 @@
 import {
+  botTriggerBlockReason,
   CommandId,
   MessageId,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
@@ -6,6 +7,7 @@ import {
   ScheduledTask,
   ScheduledTaskError,
   ScheduledTaskId,
+  type ServerSettings as ServerSettingsValue,
   ThreadId,
   ScheduledTaskWebhookDeliveryId,
   type ScheduledTaskDeleteInput,
@@ -58,6 +60,7 @@ import { OrchestratorDispatchError } from "../orchestration-v2/Orchestrator.ts";
 import { userFacingDispatchErrorMessage } from "../orchestration-v2/UserFacingErrors.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as DueHint from "../scheduling/DueHint.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import { latestRootProviderFailure } from "@t3tools/shared/orchestrationV2ThreadError";
@@ -494,16 +497,34 @@ export const layer = Layer.effect(
     const scheduler = yield* Scheduler.Scheduler;
     const readWebhookOrigin = yield* ScheduledTaskWebhookOrigin;
     const managedPolicy = yield* ManagedPolicy.ManagedPolicy;
+    const serverSettingsOption = yield* Effect.serviceOption(ServerSettings.ServerSettingsService);
+    const readServerSettings = (): Effect.Effect<ServerSettingsValue | undefined> =>
+      Option.match(serverSettingsOption, {
+        onNone: () => Effect.undefined,
+        onSome: (service) => service.getSettings.pipe(Effect.orElseSucceed(() => undefined)),
+      });
     const webhookPolicyOrganization = ManagedPolicy.deniedBy(managedPolicy, "webhookTasks");
     // Existing webhook tasks stay stored but report why they do not run.
     const webhookPolicyBlock =
       webhookPolicyOrganization === undefined
         ? undefined
         : managedPolicyDeniedMessage(webhookPolicyOrganization, "webhook tasks");
-    const withPolicy = (task: ScheduledTask): ScheduledTask =>
-      webhookPolicyBlock !== undefined && task.schedule.type === "webhook"
-        ? { ...task, blockedByPolicy: webhookPolicyBlock }
-        : task;
+    const taskBlockReason = (
+      task: Pick<ScheduledTask, "projectId" | "schedule">,
+      settings: ServerSettingsValue | undefined,
+    ): string | undefined => {
+      if (webhookPolicyBlock !== undefined && task.schedule.type === "webhook") {
+        return webhookPolicyBlock;
+      }
+      return botTriggerBlockReason(settings, task.projectId);
+    };
+    const withPolicy = (
+      task: ScheduledTask,
+      settings: ServerSettingsValue | undefined,
+    ): ScheduledTask => {
+      const reason = taskBlockReason(task, settings);
+      return reason !== undefined ? { ...task, blockedByPolicy: reason } : task;
+    };
     const webhookPermits = yield* Ref.make<ReadonlyMap<ScheduledTaskId, Semaphore.Semaphore>>(
       new Map(),
     );
@@ -566,9 +587,10 @@ export const layer = Layer.effect(
     const listRows = Effect.fn("ScheduledTaskService.listRows")(function* () {
       const rows = yield* selectAllRows();
       const origin = yield* readWebhookOrigin;
+      const settings = yield* readServerSettings();
       return yield* Effect.forEach(
         rows,
-        (row) => decodeRow(row, origin).pipe(Effect.map(withPolicy)),
+        (row) => decodeRow(row, origin).pipe(Effect.map((task) => withPolicy(task, settings))),
         { concurrency: 1 },
       );
     });
@@ -611,7 +633,8 @@ export const layer = Layer.effect(
       );
       const row = rows[0];
       if (row === undefined) return null;
-      return withPolicy(yield* decodeRow(row, yield* readWebhookOrigin));
+      const settings = yield* readServerSettings();
+      return withPolicy(yield* decodeRow(row, yield* readWebhookOrigin), settings);
     });
 
     const findWebhookCredentials = (id: ScheduledTaskId) =>
@@ -1015,6 +1038,12 @@ export const layer = Layer.effect(
         ) {
           return { task: active, threadId: null, dispatchFailed: false };
         }
+        const settings = yield* readServerSettings();
+        const blockReason = taskBlockReason(active, settings);
+        if (trigger === "scheduled" && blockReason !== undefined) {
+          yield* rescheduleMissedRun(active, startedAt, "blocked");
+          return { task: withPolicy(active, settings), threadId: null, dispatchFailed: false };
+        }
         // A thread that stays busy would otherwise collect one copy of the
         // prompt per interval. A failed read falls through to the normal send.
         if (
@@ -1043,8 +1072,8 @@ export const layer = Layer.effect(
               ? "The task was replaced before this delivery ran."
               : active.schedule.type !== "webhook"
                 ? "The task's trigger changed before this delivery ran."
-                : webhookPolicyBlock !== undefined
-                  ? webhookPolicyBlock
+                : blockReason !== undefined
+                  ? blockReason
                   : !active.enabled
                     ? "The task was paused before this delivery ran."
                     : null;
@@ -1333,22 +1362,26 @@ export const layer = Layer.effect(
       const tasks = yield* listDueTasks(now).pipe(
         Effect.mapError((cause) => taskError("Could not list schedule tasks.", { cause })),
       );
+      const settings = yield* readServerSettings();
       const due = tasks.flatMap((task) =>
         task.nextRunAt === null ? [] : [{ task, dueAt: DateTime.makeUnsafe(task.nextRunAt) }],
       );
       yield* Effect.forEach(
         due,
         ({ task, dueAt }) =>
-          Effect.suspend(() =>
-            isMissedFixedTimeRun(task.schedule, dueAt, now)
+          Effect.suspend(() => {
+            if (taskBlockReason(task, settings) !== undefined) {
+              return rescheduleMissedRun(task, now, "blocked");
+            }
+            return isMissedFixedTimeRun(task.schedule, dueAt, now)
               ? rescheduleMissedRun(
                   task,
                   now,
                   "missed",
                   "Missed a scheduled run because the server was not running at that time.",
                 )
-              : runTask(task, "scheduled"),
-          ).pipe(
+              : runTask(task, "scheduled");
+          }).pipe(
             Effect.catch((cause) =>
               Effect.logWarning("Scheduled task run failed", { taskId: task.id, cause }),
             ),
@@ -1411,6 +1444,60 @@ export const layer = Layer.effect(
     );
 
     yield* scheduler.register("scheduled-tasks", runDueTasks());
+
+    // Advance past-due bot tasks when a bot becomes unblocked between scheduler ticks so
+    // turning Bots back on (or resuming a bot) never fires a backlog, and notify live UIs.
+    if (Option.isSome(serverSettingsOption)) {
+      let previousSettings = yield* readServerSettings();
+      yield* serverSettingsOption.value.streamChanges.pipe(
+        Stream.runForEach((nextSettings) =>
+          Effect.gen(function* () {
+            const prev = previousSettings;
+            previousSettings = nextSettings;
+            const projectIds = new Set<string>([
+              ...Object.keys(prev?.projectSettingsOverrides ?? {}),
+              ...Object.keys(nextSettings.projectSettingsOverrides),
+            ]);
+            const unblockedProjects = new Set<string>();
+            let blockStateChanged = prev?.botsEnabled !== nextSettings.botsEnabled;
+            for (const projectId of projectIds) {
+              const prevBlock = botTriggerBlockReason(prev, projectId);
+              const nextBlock = botTriggerBlockReason(nextSettings, projectId);
+              if (prevBlock !== nextBlock) {
+                blockStateChanged = true;
+                if (prevBlock !== undefined && nextBlock === undefined) {
+                  unblockedProjects.add(projectId);
+                }
+              }
+            }
+            if (unblockedProjects.size > 0) {
+              const now = yield* localNow;
+              const due = yield* listDueTasks(now).pipe(Effect.orElseSucceed(() => []));
+              yield* Effect.forEach(
+                due.filter((task) => unblockedProjects.has(task.projectId)),
+                (task) =>
+                  rescheduleMissedRun(task, now, "blocked").pipe(
+                    Effect.catch((cause) =>
+                      Effect.logWarning("Could not advance unblocked bot schedule task", {
+                        taskId: task.id,
+                        cause,
+                      }),
+                    ),
+                  ),
+                { concurrency: 1, discard: true },
+              );
+            }
+            if (blockStateChanged) {
+              yield* notifyChanged;
+            }
+          }),
+        ),
+        Effect.catchCause((cause) =>
+          Effect.logWarning("ScheduledTaskService bot settings watcher ended", { cause }),
+        ),
+        Effect.forkIn(serviceScope),
+      );
+    }
 
     const list: ScheduledTaskService["Service"]["list"] = () =>
       listRows().pipe(
@@ -1764,6 +1851,9 @@ export const layer = Layer.effect(
       "ScheduledTaskService.runNow",
     )(function* (input: ScheduledTaskRunNowInput) {
       const task = yield* loadTask(input.id);
+      if (task.blockedByPolicy !== undefined) {
+        return yield* taskError(task.blockedByPolicy, { taskId: input.id });
+      }
       if (task.schedule.type === "webhook") {
         return yield* taskError("Webhook tasks run when their URL receives a request.", {
           taskId: input.id,
@@ -2213,6 +2303,11 @@ export const layer = Layer.effect(
       yield* Effect.annotateCurrentSpan({ "scheduled_task.id": task.id });
       const schedule = task.schedule;
       if (schedule.type !== "webhook") return yield* notFound;
+      if (taskBlockReason(task, yield* readServerSettings()) !== undefined) {
+        return yield* observeDelivery(request, "blocked_by_policy", undefined, undefined).pipe(
+          Effect.as({ _tag: "blocked_by_policy" as const }),
+        );
+      }
 
       const now = yield* localNow;
       // Anyone can reach the tunnel directly and set the relay's header, so

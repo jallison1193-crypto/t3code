@@ -1190,6 +1190,40 @@ export function summarizeT3ToolCalls(
           );
       break;
     }
+    case "bot-read": {
+      const count = selected.length;
+      label = done
+        ? resolve(
+            msg(
+              "{count, plural, one {Checked bots {count} time} other {Checked bots {count} times}}",
+              { count },
+            ),
+          )
+        : resolve(
+            msg(
+              "{count, plural, one {Tried to check bots {count} time} other {Tried to check bots {count} times}}",
+              { count },
+            ),
+          );
+      break;
+    }
+    case "bot-update": {
+      const count = selected.length;
+      label = done
+        ? resolve(
+            msg(
+              "{count, plural, one {Updated a bot {count} time} other {Updated a bot {count} times}}",
+              { count },
+            ),
+          )
+        : resolve(
+            msg(
+              "{count, plural, one {Tried to update a bot {count} time} other {Tried to update a bot {count} times}}",
+              { count },
+            ),
+          );
+      break;
+    }
     case "environment-links": {
       const count = selected.length;
       label = done

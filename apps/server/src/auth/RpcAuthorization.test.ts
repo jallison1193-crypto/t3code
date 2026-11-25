@@ -56,6 +56,12 @@ describe("RPC authorization scopes", () => {
     }
   });
 
+  it("keeps bot mutations behind settings write scope", () => {
+    for (const method of [WS_METHODS.botsCreate, WS_METHODS.botsUpdate, WS_METHODS.botsDelete]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthSettingsWriteScope);
+    }
+  });
+
   it("lets only a session that operates threads approve sending a feedback report", () => {
     // Guest links have no RPC session, and read-only sessions lack this scope.
     expect(requiredScopeForRpcMethod(WS_METHODS.agentFeedbackAnswerRequest)).toBe(

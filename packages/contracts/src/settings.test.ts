@@ -8,6 +8,13 @@ import {
   ProviderInstanceId,
 } from "./providerInstance.ts";
 import {
+  BOT_PAUSED_REASON,
+  BOTS_DISABLED_REASON,
+  botTriggerBlockReason,
+  isBotPaused,
+  isBotProject,
+} from "./bot.ts";
+import {
   ClientSettingsSchema,
   ClientSettingsPatch,
   ClientServerSettingsPatch,
@@ -20,6 +27,7 @@ import {
   resolveIdleCompaction,
   resolveProjectProviderInstanceEnabled,
   resolveProviderInstanceEnabled,
+  resolveSidebarModeFilter,
   ServerSettings,
   ServerSettingsPatch,
   withIdleCompaction,
@@ -674,7 +682,58 @@ describe("ClientSettings.appMode and sidebarModeFilter", () => {
     expect(decodeClientSettingsPatch({ sidebarModeFilter: "work" })).toEqual({
       sidebarModeFilter: "work",
     });
+    expect(decodeClientSettings({ sidebarModeFilter: "bots" }).sidebarModeFilter).toBe("bots");
+    expect(decodeClientSettingsPatch({ sidebarModeFilter: "bots" })).toEqual({
+      sidebarModeFilter: "bots",
+    });
+    expect(resolveSidebarModeFilter("bots", true)).toBe("bots");
+    expect(resolveSidebarModeFilter("bots", false)).toBe("all");
+    expect(resolveSidebarModeFilter("work", false)).toBe("work");
     expect(() => decodeClientSettingsPatch({ appMode: "invalid" })).toThrow();
     expect(() => decodeClientSettingsPatch({ sidebarModeFilter: "invalid" })).toThrow();
+  });
+});
+
+describe("bot settings and overrides", () => {
+  it("defaults botsEnabled to true and decodes bot overrides while keeping old payloads valid", () => {
+    const legacy = decodeServerSettings({});
+    expect(legacy.botsEnabled).toBe(true);
+    expect(legacy.projectSettingsOverrides).toEqual({});
+
+    const projectId = ProjectId.make("bot-project-1");
+    const decoded = decodeServerSettings({
+      botsEnabled: false,
+      projectSettingsOverrides: {
+        [projectId]: {
+          bot: { paused: true },
+          projectInstructions: "Summarize open PRs",
+        },
+      },
+    });
+    expect(decoded.botsEnabled).toBe(false);
+    expect(decoded.projectSettingsOverrides[projectId]?.bot).toEqual({ paused: true });
+    expect(isBotProject(decoded, projectId)).toBe(true);
+    expect(isBotPaused(decoded, projectId)).toBe(true);
+    expect(botTriggerBlockReason(decoded, projectId)).toBe(BOTS_DISABLED_REASON);
+    expect(botTriggerBlockReason({ ...decoded, botsEnabled: true }, projectId)).toBe(
+      BOT_PAUSED_REASON,
+    );
+    expect(
+      botTriggerBlockReason(
+        {
+          botsEnabled: true,
+          projectSettingsOverrides: { [projectId]: { bot: {} } },
+        },
+        projectId,
+      ),
+    ).toBeUndefined();
+    expect(botTriggerBlockReason(decoded, ProjectId.make("ordinary-project"))).toBeUndefined();
+
+    expect(decodeClientServerSettingsPatch({ botsEnabled: false })).toEqual({ botsEnabled: false });
+    expect(
+      decodeClientServerSettingsPatch({
+        projectSettingsOverrides: { [projectId]: { bot: { paused: false } } },
+      }).projectSettingsOverrides?.[projectId]?.bot,
+    ).toEqual({ paused: false });
   });
 });

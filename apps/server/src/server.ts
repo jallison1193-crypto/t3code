@@ -119,6 +119,7 @@ import * as PluginMcpProxy from "./plugins/PluginMcpProxy.ts";
 import * as PluginRegistry from "./plugins/PluginRegistry.ts";
 import * as PluginStateStore from "./plugins/PluginStateStore.ts";
 import * as PluginWorkerSupervisor from "./plugins/PluginWorkerSupervisor.ts";
+import * as BotService from "./bots/BotService.ts";
 import * as ProjectMemoryStore from "./projectMemory/ProjectMemoryStore.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
@@ -772,6 +773,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   ReplayMarkers.layer,
   PluginWorkerSupervisor.layer,
   PluginMcpProxy.layer,
+  BotService.layer,
   Layer.effectDiscard(ProjectSettingsOverrideSweep.sweep),
 ).pipe(
   Layer.provideMerge(layerOrchestrationApplication),

@@ -2,13 +2,23 @@ import { coordinatorThreadIdOf } from "@t3tools/client-runtime/coordinator-threa
 import {
   groupProjectBoardThreadsForMembers,
   projectThreadBoardColumn,
-  type ProjectGroupServerSettingsLookup,
 } from "@t3tools/client-runtime/project-thread-board";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import { filterThreadsByMode } from "@t3tools/client-runtime/state/thread-mode";
 import { toSortableTimestamp } from "@t3tools/client-runtime/state/thread-sort";
-import { isListedThreadLineage, type EnvironmentId, type ProjectId } from "@t3tools/contracts";
+import {
+  isBotProject,
+  isListedThreadLineage,
+  type EnvironmentId,
+  type ProjectId,
+} from "@t3tools/contracts";
 import type { SidebarModeFilter } from "@t3tools/contracts/settings";
+
+import {
+  isBotProjectGroup,
+  isBotThreadVisibleInNeedsYou,
+  type BotSettingsLookup,
+} from "../../bots/bots.logic";
 
 export const OTHER_THREADS_LIMIT = 10;
 const PROJECTS_SIDEBAR_EXPANDED_STORAGE_KEY = "t3code:projects-sidebar-expanded-projects";
@@ -93,7 +103,7 @@ export function buildProjectsSidebarSections<
 >(input: {
   readonly projectGroups: ReadonlyArray<TGroup>;
   readonly threads: ReadonlyArray<TThread>;
-  readonly getServerSettings: ProjectGroupServerSettingsLookup;
+  readonly getServerSettings: BotSettingsLookup;
   readonly modeFilter?: SidebarModeFilter;
 }): ProjectsSidebarSections<TGroup, TThread> {
   const knownProjectMemberKeys = new Set<string>();
@@ -102,6 +112,7 @@ export function buildProjectsSidebarSections<
 
   for (const group of input.projectGroups) {
     if (isScratchProjectGroup(group)) continue;
+    if (isBotProjectGroup(group, input.getServerSettings)) continue;
     for (const member of group.memberProjects) {
       knownProjectMemberKeys.add(`${member.environmentId}:${member.id}`);
     }
@@ -132,9 +143,14 @@ export function buildProjectsSidebarSections<
     .toSorted(compareThreadsNewestFirst);
 
   const needsYou = eligibleThreads.filter(
-    (thread) => projectThreadBoardColumn(thread) === "waiting",
+    (thread) =>
+      projectThreadBoardColumn(thread) === "waiting" &&
+      isBotThreadVisibleInNeedsYou(input.getServerSettings(thread.environmentId), thread.projectId),
   );
-  const modeEligibleThreads = filterThreadsByMode(eligibleThreads, input.modeFilter ?? "all");
+  const nonBotEligibleThreads = eligibleThreads.filter(
+    (thread) => !isBotProject(input.getServerSettings(thread.environmentId), thread.projectId),
+  );
+  const modeEligibleThreads = filterThreadsByMode(nonBotEligibleThreads, input.modeFilter ?? "all");
   const pinned = modeEligibleThreads.filter((thread) => thread.pinnedAt !== null);
   const otherThreads = modeEligibleThreads
     .filter((thread) => !knownProjectMemberKeys.has(`${thread.environmentId}:${thread.projectId}`))

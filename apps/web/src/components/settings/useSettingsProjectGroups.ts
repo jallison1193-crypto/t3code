@@ -1,10 +1,11 @@
+import { filterNonBotProjects } from "../../bots/bots.logic";
 import { useClientSettings } from "../../hooks/useSettings";
 import { buildSidebarProjectSnapshots } from "../../sidebarProjectGrouping";
 import { useEnvironments, usePrimaryEnvironmentId } from "../../state/environments";
 import { useProjects } from "../../state/entities";
 
-export function useSettingsProjectGroups() {
-  const projects = useProjects();
+export function useSettingsProjectGroups(options?: { readonly includeBots?: boolean }) {
+  const allProjects = useProjects();
   // Avoid object selector identities that rebuild groups and every settings row on each write.
   const sidebarProjectGroupingMode = useClientSettings(
     (settings) => settings.sidebarProjectGroupingMode,
@@ -13,7 +14,14 @@ export function useSettingsProjectGroups() {
     (settings) => settings.sidebarProjectGroupingOverrides,
   );
   const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const { environments } = useEnvironments();
+  const { environments, presentationById } = useEnvironments();
+  const projects =
+    options?.includeBots === true
+      ? allProjects
+      : filterNonBotProjects(
+          allProjects,
+          (environmentId) => presentationById.get(environmentId)?.serverConfig?.settings,
+        );
   const labels = new Map(environments.map((entry) => [entry.environmentId, entry.label]));
   return buildSidebarProjectSnapshots({
     projects,

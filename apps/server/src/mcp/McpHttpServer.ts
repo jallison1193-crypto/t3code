@@ -68,6 +68,8 @@ import { PluginToolkit } from "./toolkits/plugin/tools.ts";
 import * as PluginHandlers from "./toolkits/plugin/handlers.ts";
 import { FolderToolkit } from "./toolkits/folder/tools.ts";
 import * as FolderHandlers from "./toolkits/folder/handlers.ts";
+import { BotToolkit } from "./toolkits/bot/tools.ts";
+import * as BotHandlers from "./toolkits/bot/handlers.ts";
 import { LibraryToolkit } from "./toolkits/library/tools.ts";
 import * as LibraryHandlers from "./toolkits/library/handlers.ts";
 import { ProjectToolkit } from "./toolkits/project/tools.ts";
@@ -1348,6 +1350,7 @@ const layerPluginToolkit = toolkitRegistration(PluginToolkit, PluginHandlers.lay
   Layer.provide(ThreadCommandExecutor.layer),
 );
 const layerFolderToolkit = toolkitRegistration(FolderToolkit, FolderHandlers.layer);
+const layerBotToolkit = toolkitRegistration(BotToolkit, BotHandlers.layer);
 const layerLibraryToolkit = toolkitRegistration(LibraryToolkit, LibraryHandlers.layer);
 
 export const layerProjectRegistration = toolkitRegistration(ProjectToolkit, ProjectHandlers.layer);
@@ -1435,6 +1438,7 @@ export const layerTools = Layer.mergeAll(
   layerThemeToolkit,
   layerPluginToolkit,
   layerFolderToolkit,
+  layerBotToolkit,
   layerLibraryToolkit,
   layerPreviewControlsRegistration,
   layerWorktreeToolkitRegistration,
