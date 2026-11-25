@@ -1,4 +1,4 @@
-import { ScopedThreadRef } from "@t3tools/contracts";
+import { DesktopCompanionComputerUse, ScopedThreadRef } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -50,5 +50,23 @@ export const openCompanionThreadInMain = DesktopIpc.makeIpcMethod({
   result: Schema.Void,
   handler: Effect.fn("desktop.ipc.companion.openInMain")(function* (thread) {
     yield* withCompanionWindow((service) => service.openInMain(thread));
+  }),
+});
+
+export const setCompanionComputerUse = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.COMPANION_COMPUTER_USE_CHANNEL,
+  payload: Schema.NullOr(DesktopCompanionComputerUse),
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.companion.setComputerUse")(function* (computerUse) {
+    yield* withCompanionWindow((service) => service.setComputerUse(computerUse));
+  }),
+});
+
+export const toggleCompanionClickThrough = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.COMPANION_TOGGLE_CLICK_THROUGH_CHANNEL,
+  payload: Schema.Void,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.companion.toggleClickThrough")(function* () {
+    yield* withCompanionWindow((service) => service.toggleClickThrough);
   }),
 });

@@ -15,6 +15,8 @@ import {
   minimizeCompanion,
   openCompanion,
   openCompanionThreadInMain,
+  setCompanionComputerUse,
+  toggleCompanionClickThrough,
 } from "./methods/companion.ts";
 import { getConnectionCatalog, setConnectionCatalog } from "./methods/connectionCatalog.ts";
 import {
@@ -181,6 +183,8 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(closeCompanion);
   yield* ipc.handle(minimizeCompanion);
   yield* ipc.handle(openCompanionThreadInMain);
+  yield* ipc.handle(setCompanionComputerUse);
+  yield* ipc.handle(toggleCompanionClickThrough);
   yield* ipc.handle(syncHtmlFullscreen);
   yield* ipc.handle(probeRemoteEditors);
   yield* ipc.handle(getUpdateState);

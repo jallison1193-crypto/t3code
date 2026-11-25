@@ -1018,6 +1018,27 @@ export const SETTINGS_SEARCH_ITEMS = [
     desktopOnly: true,
   },
   {
+    id: "companion-window-auto-open",
+    title: msg("Open during computer use"),
+    to: "/settings/general",
+    searchTerms: [msg("companion window automatic open show computer use agent")],
+    desktopOnly: true,
+  },
+  {
+    id: "companion-window-auto-hide",
+    title: msg("Hide after computer use"),
+    to: "/settings/general",
+    searchTerms: [msg("companion window automatic hide close computer use agent")],
+    desktopOnly: true,
+  },
+  {
+    id: "companion-window-click-through",
+    title: msg("Click-through during computer use"),
+    to: "/settings/general",
+    searchTerms: [msg("companion window ghost transparent clicks pass through computer use")],
+    desktopOnly: true,
+  },
+  {
     id: "text-generation-model",
     title: msg("Text generation model"),
     to: "/settings/threads",

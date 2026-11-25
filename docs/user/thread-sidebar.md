@@ -416,9 +416,18 @@ It comes in three sizes: **Small** shows only whether the thread is working, don
 (click it to expand), **Medium** adds the conversation and composer, and **Large** shows the full
 thread. Its header switches sizes, opens the thread in T3 Code, minimizes and closes.
 
+It also follows computer use. When an agent on this computer starts controlling it, the companion
+opens on that thread without taking focus, turns see-through and lets clicks pass to the app
+underneath. A few seconds after the agent stops, it closes again if it opened by itself and you have
+not clicked into it. It takes clicks while the thread waits for your approval or answer. To switch
+click-through by hand, use **Toggle companion click-through** in the command palette, or give it a
+shortcut under **Settings → Keybindings**; your choice lasts until computer use next starts or stops.
+Agents on other computers don't open it, and neither do subagents a provider runs inside its own
+turn.
+
 Under **Settings → General → Companion window** you can turn it off, choose whether it stays on
-top, and set its position and size. You can drag it elsewhere; it returns to the chosen position
-the next time you open it.
+top, set its position and size, and turn each computer-use behavior off. On Windows and macOS, if
+you drag or resize it, it comes back there until you choose a new position or size.
 
 On Windows it is left out of screenshots and screen recordings, so an agent that controls your
 computer does not see it. On macOS this depends on the capture tool, and Linux can't hide it.

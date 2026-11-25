@@ -1,15 +1,19 @@
 import {
   type ClientSettings,
   DEFAULT_CLIENT_SETTINGS,
+  type DesktopCompanionComputerUse,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 
 import * as Electron from "electron";
@@ -29,7 +33,15 @@ import { m } from "../i18n/messages.ts";
 import { CLIENT_SETTINGS_CHANGED_CHANNEL, COMPANION_SHOW_THREAD_CHANNEL } from "../ipc/channels.ts";
 import * as DesktopClientSettings from "../settings/DesktopClientSettings.ts";
 import * as DesktopRendererHistory from "../telemetry/DesktopRendererHistory.ts";
-import { boundsDiffer, companionBounds, keepInWorkArea } from "./DesktopCompanionWindow.logic.ts";
+import {
+  boundsDiffer,
+  companionBounds,
+  companionClickThrough,
+  keepInWorkArea,
+  type SavedCompanionBounds,
+  SavedCompanionBoundsJson,
+  savedBoundsFor,
+} from "./DesktopCompanionWindow.logic.ts";
 import * as DesktopWindow from "./DesktopWindow.ts";
 
 // Other always-on-top windows can stack above this one without any event to react to.
@@ -38,6 +50,11 @@ const GUARD_DEBOUNCE = "150 millis";
 // Restoring inside the minimize event leaves Chromium not drawing: the window comes back black.
 const RESTORE_DELAY = "150 millis";
 const LOAD_ABORTED = -3;
+// See-through enough to read what is under it while clicks pass to that.
+const CLICK_THROUGH_OPACITY = 0.5;
+
+const decodeSavedBounds = Schema.decodeEffect(SavedCompanionBoundsJson);
+const encodeSavedBounds = Schema.encodeEffect(SavedCompanionBoundsJson);
 
 const { logWarning } = makeComponentLogger("desktop-companion-window");
 
@@ -49,6 +66,7 @@ type Placement = Pick<
 interface Companion {
   readonly window: Electron.BrowserWindow;
   readonly apply: (placement: Placement) => void;
+  readonly setClickThrough: (clickThrough: boolean) => void;
   readonly show: () => void;
   readonly minimize: () => void;
 }
@@ -66,6 +84,21 @@ export class DesktopCompanionWindow extends Context.Service<
     >;
     readonly close: Effect.Effect<void>;
     readonly minimize: Effect.Effect<void>;
+    /**
+     * Follows computer use: opens the window on the thread doing it and lets clicks through
+     * meanwhile. Null ends it, closing a window this opened.
+     */
+    readonly setComputerUse: (
+      computerUse: DesktopCompanionComputerUse | null,
+    ) => Effect.Effect<
+      void,
+      | ElectronWindow.ElectronWindowCreateError
+      | DesktopClientSettings.DesktopClientSettingsReadError
+    >;
+    readonly toggleClickThrough: Effect.Effect<
+      void,
+      DesktopClientSettings.DesktopClientSettingsReadError
+    >;
     /** Raises the main window on `thread`. */
     readonly openInMain: (
       thread: ScopedThreadRef,
@@ -89,12 +122,59 @@ const make = Effect.gen(function* () {
   const electronTheme = yield* ElectronTheme.ElectronTheme;
   const electronWindow = yield* ElectronWindow.ElectronWindow;
   const desktopWindow = yield* DesktopWindow.DesktopWindow;
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
   const rendererHistory = yield* DesktopRendererHistory.DesktopRendererHistory;
   const context = yield* Effect.context<never>();
   const runFork = Effect.runForkWith(context);
   const runPromise = Effect.runPromiseWith(context);
   const openMutex = yield* Semaphore.make(1);
+  const boundsMutex = yield* Semaphore.make(1);
+  const boundsPath = path.join(environment.stateDir, "companion-window.json");
   let companion: Companion | undefined;
+  let computerUse: DesktopCompanionComputerUse | null = null;
+  let clickThroughOverride: boolean | null = null;
+  // Only a window that computer use opened, and the user has not taken over, closes by itself.
+  let autoOpened = false;
+
+  const readSettings = clientSettings.get.pipe(
+    Effect.map(Option.getOrElse(() => DEFAULT_CLIENT_SETTINGS)),
+  );
+
+  const wantsClickThrough = (settings: ClientSettings) =>
+    companionClickThrough({
+      override: clickThroughOverride,
+      enabled: settings.companionWindowClickThrough,
+      computerUse,
+    });
+
+  const syncClickThrough = (settings: ClientSettings) =>
+    Effect.sync(() => companion?.setClickThrough(wantsClickThrough(settings)));
+
+  // With nothing saved, or a file that cannot be read, the settings place the window.
+  const readSavedBounds = fileSystem
+    .readFileString(boundsPath)
+    .pipe(Effect.flatMap(decodeSavedBounds), Effect.option);
+
+  const writeSavedBounds = Effect.fn("desktop.companionWindow.writeSavedBounds")(
+    function* (saved: SavedCompanionBounds) {
+      yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
+      yield* fileSystem.writeFileString(boundsPath, yield* encodeSavedBounds(saved));
+    },
+    boundsMutex.withPermits(1),
+    Effect.catch((cause) => logWarning("could not save the companion window position", { cause })),
+  );
+
+  // Removed rather than only ignored, so choosing the old Position again does not bring it back.
+  const forgetStaleBounds = Effect.fn("desktop.companionWindow.forgetStaleBounds")(
+    function* (placement: Placement) {
+      const saved = yield* readSavedBounds;
+      if (Option.isNone(saved) || savedBoundsFor(saved.value, placement) !== null) return;
+      yield* fileSystem.remove(boundsPath, { force: true });
+    },
+    boundsMutex.withPermits(1),
+    Effect.catch((cause) => logWarning("could not reset the companion window position", { cause })),
+  );
 
   const cancel = (fiber: Fiber.Fiber<unknown> | undefined) => {
     if (fiber !== undefined) runFork(Fiber.interrupt(fiber));
@@ -111,10 +191,12 @@ const make = Effect.gen(function* () {
     window: Electron.BrowserWindow,
     initialPlacement: Placement,
     initialBounds: Electron.Rectangle,
+    restored: boolean,
   ): Companion => {
     let placement = initialPlacement;
     let home = initialBounds;
-    let userPlaced = false;
+    let userPlaced = restored;
+    let clickThrough = false;
     let userAdjusting = false;
     let userMinimized = false;
     let shown = false;
@@ -159,9 +241,19 @@ const make = Effect.gen(function* () {
     };
 
     const rememberUserBounds = () => {
+      // macOS also reports moves the app made itself, and those are not worth saving.
+      const byUser = userAdjusting;
       userAdjusting = false;
       userPlaced = true;
       home = window.getBounds();
+      if (!byUser) return;
+      void runPromise(
+        writeSavedBounds({
+          position: placement.companionWindowPosition,
+          size: placement.companionWindowSize,
+          ...home,
+        }),
+      );
     };
 
     const onDisplaysChanged = () => {
@@ -222,6 +314,7 @@ const make = Effect.gen(function* () {
       Electron.screen.removeListener("display-removed", onDisplaysChanged);
       Electron.screen.removeListener("display-metrics-changed", onDisplaysChanged);
       companion = undefined;
+      autoOpened = false;
       void runPromise(companionWindow.clear(window));
     });
 
@@ -244,6 +337,15 @@ const make = Effect.gen(function* () {
             workArea: workAreaFor(home),
           }),
         );
+      },
+      setClickThrough: (next) => {
+        if (next === clickThrough || window.isDestroyed()) return;
+        clickThrough = next;
+        window.setIgnoreMouseEvents(next, { forward: true });
+        // After the mouse call, which can rewrite the window style that holds the opacity.
+        window.setOpacity(next ? CLICK_THROUGH_OPACITY : 1);
+        // Keys the agent types must not land here.
+        if (next && window.isFocused()) window.blur();
       },
       show: () => {
         const firstShow = !shown;
@@ -313,10 +415,18 @@ const make = Effect.gen(function* () {
       onNone: () => Electron.screen.getPrimaryDisplay(),
       onSome: (window) => Electron.screen.getDisplayMatching(window.getBounds()),
     });
-    const bounds = companionBounds({
-      position: placement.companionWindowPosition,
-      size: placement.companionWindowSize,
-      workArea: display.workArea,
+    const saved = Option.flatMapNullishOr(yield* readSavedBounds, (value) =>
+      savedBoundsFor(value, placement),
+    );
+    const bounds = Option.match(saved, {
+      onNone: () =>
+        companionBounds({
+          position: placement.companionWindowPosition,
+          size: placement.companionWindowSize,
+          workArea: display.workArea,
+        }),
+      // The display it was dragged to may be gone.
+      onSome: (value) => keepInWorkArea(value, workAreaFor(value)),
     });
     const window = yield* electronWindow.create(
       {
@@ -350,8 +460,12 @@ const make = Effect.gen(function* () {
     yield* rendererHistory.register(window.webContents, { surface: "companion" });
     // Desktop IPC must trust the window before its preload runs.
     yield* companionWindow.set(window);
-    const created = attach(window, placement, bounds);
+    const created = attach(window, placement, bounds, Option.isSome(saved));
     companion = created;
+    // Clicking into it takes it over: it must not close under a half-typed message.
+    window.on("focus", () => {
+      autoOpened = false;
+    });
 
     const contents = window.webContents;
     contents.setWindowOpenHandler(({ url: target }) => {
@@ -424,22 +538,64 @@ const make = Effect.gen(function* () {
       }
     });
 
+  /** Puts the window on `thread` without taking focus, creating it if there is none. */
+  const showThread = Effect.fn("desktop.companionWindow.showThread")(function* (
+    thread: ScopedThreadRef,
+    settings: ClientSettings,
+  ) {
+    const applicationUrl = getDesktopUrl(environment.isDevelopment);
+    const url = `${applicationUrl}#/companion/${encodeURIComponent(thread.environmentId)}/${encodeURIComponent(thread.threadId)}`;
+    if (companion === undefined || companion.window.isDestroyed()) {
+      yield* create(url, applicationUrl, settings);
+      return;
+    }
+    const { window } = companion;
+    if (window.webContents.getURL() !== url) void window.loadURL(url).catch(() => undefined);
+    // A window still loading for the first time shows itself when it has painted.
+    if (window.isVisible() || window.isMinimized()) companion.show();
+  });
+
   return DesktopCompanionWindow.of({
     open: Effect.fn("desktop.companionWindow.open")(function* (thread) {
       if (yield* Ref.get(desktopState.quitting)) return;
-      const settings = Option.getOrElse(yield* clientSettings.get, () => DEFAULT_CLIENT_SETTINGS);
+      const settings = yield* readSettings;
       if (!settings.companionWindowEnabled) return;
-      const applicationUrl = getDesktopUrl(environment.isDevelopment);
-      const url = `${applicationUrl}#/companion/${encodeURIComponent(thread.environmentId)}/${encodeURIComponent(thread.threadId)}`;
-      if (companion === undefined || companion.window.isDestroyed()) {
-        yield* create(url, applicationUrl, settings);
-        return;
-      }
-      const { window } = companion;
-      if (window.webContents.getURL() !== url) void window.loadURL(url).catch(() => undefined);
-      // A window still loading for the first time shows itself when it has painted.
-      if (window.isVisible() || window.isMinimized()) companion.show();
+      // Asked for by hand: it takes clicks, and stays until closed.
+      clickThroughOverride = false;
+      autoOpened = false;
+      yield* showThread(thread, settings);
+      yield* syncClickThrough(settings);
     }, openMutex.withPermits(1)),
+    setComputerUse: Effect.fn("desktop.companionWindow.setComputerUse")(function* (next) {
+      if (yield* Ref.get(desktopState.quitting)) return;
+      const previous = computerUse;
+      computerUse = next;
+      // A toggle lasts until a phase starts or ends.
+      if ((previous === null) !== (next === null)) clickThroughOverride = null;
+      const settings = yield* readSettings;
+      if (next === null) {
+        if (autoOpened && settings.companionWindowAutoHide) yield* close;
+      } else if (
+        settings.companionWindowEnabled &&
+        settings.companionWindowAutoOpen &&
+        // Not on every report, so that closing it during a phase sticks.
+        (previous?.thread.threadId !== next.thread.threadId ||
+          previous.thread.environmentId !== next.thread.environmentId)
+      ) {
+        const absent = companion === undefined || companion.window.isDestroyed();
+        yield* showThread(next.thread, settings);
+        if (absent) autoOpened = true;
+      }
+      yield* syncClickThrough(settings);
+    }, openMutex.withPermits(1)),
+    toggleClickThrough: Effect.gen(function* () {
+      const settings = yield* readSettings;
+      clickThroughOverride = !wantsClickThrough(settings);
+      yield* syncClickThrough(settings);
+    }).pipe(
+      openMutex.withPermits(1),
+      Effect.withSpan("desktop.companionWindow.toggleClickThrough"),
+    ),
     close,
     minimize: Effect.sync(() => {
       if (companion !== undefined && !companion.window.isDestroyed()) companion.minimize();
@@ -450,9 +606,11 @@ const make = Effect.gen(function* () {
     }),
     applyClientSettings: Effect.fn("desktop.companionWindow.applyClientSettings")(
       function* (settings, senderId) {
+        yield* forgetStaleBounds(settings);
         if (!settings.companionWindowEnabled) yield* close;
         else if (companion !== undefined && !companion.window.isDestroyed()) {
           companion.apply(settings);
+          yield* syncClickThrough(settings);
         }
         const windows = [yield* electronWindow.main, yield* companionWindow.current];
         for (const window of windows) {

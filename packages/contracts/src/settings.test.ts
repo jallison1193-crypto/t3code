@@ -442,8 +442,17 @@ describe("ClientSettings companion window", () => {
       companionWindowAlwaysOnTop: true,
       companionWindowPosition: "bottom-right",
       companionWindowSize: "medium",
+      companionWindowAutoOpen: true,
+      companionWindowAutoHide: true,
+      companionWindowClickThrough: true,
     });
-    const patch = { companionWindowPosition: "left", companionWindowSize: "small" };
+    const patch = {
+      companionWindowPosition: "left",
+      companionWindowSize: "small",
+      companionWindowAutoOpen: false,
+      companionWindowAutoHide: false,
+      companionWindowClickThrough: false,
+    };
     expect(decodeClientSettings(patch)).toMatchObject(patch);
     expect(decodeClientSettingsPatch(patch)).toEqual(patch);
   });

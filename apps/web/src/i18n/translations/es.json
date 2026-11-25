@@ -13101,5 +13101,22 @@
   "f5e072d714be38ce": "mini flotante pequeña seguir hilo uso del ordenador",
   "0ca9f7f6995e6820": "ventana complementaria encima de otras ventanas fijar flotar",
   "e11f9eed554b0966": "ventana complementaria esquina lado izquierda derecha abajo",
-  "82ff774acc131b6e": "ventana complementaria pequeña mediana grande burbuja"
+  "82ff774acc131b6e": "ventana complementaria pequeña mediana grande burbuja",
+  "bf0e8c8648ca1c4b": "Alternar clics a través de la ventana complementaria",
+  "9fe41a4ab51547a3": "Restablecer «abrir al usar el equipo» al valor predeterminado",
+  "d7cfe867a57690a8": "Abrir la ventana complementaria cuando se use el equipo",
+  "9d57d7718ef1ca76": "Restablecer «ocultar tras usar el equipo» al valor predeterminado",
+  "56f39513476c0df4": "Ocultar la ventana complementaria tras usar el equipo",
+  "ecaeeb39f13d5dfb": "Restablecer «clics a través al usar el equipo» al valor predeterminado",
+  "6a9987690209384c": "Dejar pasar los clics por la ventana complementaria mientras se usa el equipo",
+  "28e4f6483f3e2667": "La abre en el hilo cuyo agente está usando este equipo, sin quitar el foco.",
+  "d36cd4f56825ab1f": "La cierra unos segundos después de que el agente termine, si se abrió sola.",
+  "56b261727a702a0d": "Los clics la atraviesan y llegan a la aplicación de debajo mientras un agente usa el equipo.",
+  "d5ecb8014b3dd00a": "Ventana complementaria: alternar clics a través",
+  "45e7407f6f7fa909": "Abrir al usar el equipo",
+  "328982d0828d5a38": "Ocultar tras usar el equipo",
+  "21fa71719e873654": "Clics a través al usar el equipo",
+  "031263628128f352": "ventana complementaria automática abrir mostrar uso del equipo agente",
+  "79b504a21a34200d": "ventana complementaria automática ocultar cerrar uso del equipo agente",
+  "c511f3b80dd427b1": "ventana complementaria fantasma transparente clics atraviesan uso del equipo"
 }

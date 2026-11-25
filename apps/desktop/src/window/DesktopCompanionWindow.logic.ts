@@ -1,4 +1,10 @@
-import type { CompanionWindowPosition, CompanionWindowSize } from "@t3tools/contracts";
+import {
+  CompanionWindowPosition,
+  CompanionWindowSize,
+  type DesktopCompanionComputerUse,
+} from "@t3tools/contracts";
+import { fromLenientJson } from "@t3tools/shared/schemaJson";
+import * as Schema from "effect/Schema";
 import type { Rectangle } from "electron";
 
 const MARGIN = 16;
@@ -50,4 +56,41 @@ export function boundsDiffer(left: Rectangle, right: Rectangle): boolean {
     Math.abs(left.width - right.width) > MOVE_TOLERANCE ||
     Math.abs(left.height - right.height) > MOVE_TOLERANCE
   );
+}
+
+/** Whether clicks pass through the window. A manual toggle wins over computer use. */
+export function companionClickThrough(input: {
+  readonly override: boolean | null;
+  readonly enabled: boolean;
+  readonly computerUse: DesktopCompanionComputerUse | null;
+}): boolean {
+  const { override, enabled, computerUse } = input;
+  return override ?? (enabled && computerUse !== null && !computerUse.waitingOnUser);
+}
+
+/** Where the user last dragged the window, with the settings in force at the time. */
+const SavedCompanionBounds = Schema.Struct({
+  position: CompanionWindowPosition,
+  size: CompanionWindowSize,
+  x: Schema.Int,
+  y: Schema.Int,
+  width: Schema.Int,
+  height: Schema.Int,
+});
+export type SavedCompanionBounds = typeof SavedCompanionBounds.Type;
+
+export const SavedCompanionBoundsJson = fromLenientJson(SavedCompanionBounds);
+
+/** The dragged bounds, unless Position or Size was chosen anew since. */
+export function savedBoundsFor(
+  saved: SavedCompanionBounds,
+  placement: {
+    readonly companionWindowPosition: CompanionWindowPosition;
+    readonly companionWindowSize: CompanionWindowSize;
+  },
+): Rectangle | null {
+  const { position, size, ...bounds } = saved;
+  return position === placement.companionWindowPosition && size === placement.companionWindowSize
+    ? bounds
+    : null;
 }

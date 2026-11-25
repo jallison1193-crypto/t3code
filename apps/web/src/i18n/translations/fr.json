@@ -13106,5 +13106,22 @@
   "f5e072d714be38ce": "mini flottante petite suivre fil utilisation de l'ordinateur",
   "0ca9f7f6995e6820": "fenêtre compagnon au-dessus des autres fenêtres épingler flotter",
   "e11f9eed554b0966": "fenêtre compagnon coin côté gauche droite bas",
-  "82ff774acc131b6e": "fenêtre compagnon petite moyenne grande bulle"
+  "82ff774acc131b6e": "fenêtre compagnon petite moyenne grande bulle",
+  "bf0e8c8648ca1c4b": "Activer ou désactiver le clic à travers la fenêtre compagnon",
+  "9fe41a4ab51547a3": "Réinitialiser « ouvrir pendant le contrôle de l'ordinateur » à la valeur par défaut",
+  "d7cfe867a57690a8": "Ouvrir la fenêtre compagnon pendant le contrôle de l'ordinateur",
+  "9d57d7718ef1ca76": "Réinitialiser « masquer après le contrôle de l'ordinateur » à la valeur par défaut",
+  "56f39513476c0df4": "Masquer la fenêtre compagnon après le contrôle de l'ordinateur",
+  "ecaeeb39f13d5dfb": "Réinitialiser « clic à travers pendant le contrôle de l'ordinateur » à la valeur par défaut",
+  "6a9987690209384c": "Cliquer à travers la fenêtre compagnon pendant le contrôle de l'ordinateur",
+  "28e4f6483f3e2667": "L'ouvre sur le fil dont l'agent utilise cet ordinateur, sans prendre le focus.",
+  "d36cd4f56825ab1f": "La ferme quelques secondes après l'arrêt de l'agent, si elle s'est ouverte toute seule.",
+  "56b261727a702a0d": "Les clics la traversent jusqu'à l'application en dessous pendant qu'un agent utilise l'ordinateur.",
+  "d5ecb8014b3dd00a": "Fenêtre compagnon : activer ou désactiver le clic à travers",
+  "45e7407f6f7fa909": "Ouvrir pendant le contrôle de l'ordinateur",
+  "328982d0828d5a38": "Masquer après le contrôle de l'ordinateur",
+  "21fa71719e873654": "Clic à travers pendant le contrôle de l'ordinateur",
+  "031263628128f352": "fenêtre compagnon automatique ouvrir afficher contrôle de l'ordinateur agent",
+  "79b504a21a34200d": "fenêtre compagnon automatique masquer fermer contrôle de l'ordinateur agent",
+  "c511f3b80dd427b1": "fenêtre compagnon fantôme transparente clics traversent contrôle de l'ordinateur"
 }

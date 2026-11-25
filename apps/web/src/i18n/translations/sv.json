@@ -13113,5 +13113,22 @@
   "f5e072d714be38ce": "mini flytande litet följa tråd datoranvändning",
   "0ca9f7f6995e6820": "följefönster ovanför andra fönster fäst flyta",
   "e11f9eed554b0966": "följefönster hörn sida vänster höger nederkant",
-  "82ff774acc131b6e": "följefönster litet mellan stort bubbla"
+  "82ff774acc131b6e": "följefönster litet mellan stort bubbla",
+  "bf0e8c8648ca1c4b": "Växla genomklickning för följefönstret",
+  "9fe41a4ab51547a3": "Återställ ”öppna vid datorstyrning” till standard",
+  "d7cfe867a57690a8": "Öppna följefönstret vid datorstyrning",
+  "9d57d7718ef1ca76": "Återställ ”dölj efter datorstyrning” till standard",
+  "56f39513476c0df4": "Dölj följefönstret efter datorstyrning",
+  "ecaeeb39f13d5dfb": "Återställ ”genomklickning vid datorstyrning” till standard",
+  "6a9987690209384c": "Klicka genom följefönstret vid datorstyrning",
+  "28e4f6483f3e2667": "Öppnar det på tråden vars agent styr den här datorn, utan att ta fokus.",
+  "d36cd4f56825ab1f": "Stänger det några sekunder efter att agenten slutat, om det öppnades av sig självt.",
+  "56b261727a702a0d": "Klick går igenom fönstret till appen under medan en agent styr datorn.",
+  "d5ecb8014b3dd00a": "Följefönster: växla genomklickning",
+  "45e7407f6f7fa909": "Öppna vid datorstyrning",
+  "328982d0828d5a38": "Dölj efter datorstyrning",
+  "21fa71719e873654": "Genomklickning vid datorstyrning",
+  "031263628128f352": "följefönster automatiskt öppna visa datorstyrning agent",
+  "79b504a21a34200d": "följefönster automatiskt dölja stänga datorstyrning agent",
+  "c511f3b80dd427b1": "följefönster spöke genomskinligt klick går igenom datorstyrning"
 }

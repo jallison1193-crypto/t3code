@@ -169,6 +169,86 @@ export function CompanionWindowSettings() {
           </Select>
         }
       />
+      <SettingsRow
+        {...setting("companion-window-auto-open")}
+        description={
+          <T>Opens it on the thread whose agent is using this computer, without taking focus.</T>
+        }
+        resetAction={
+          settings.companionWindowAutoOpen !== DEFAULT_UNIFIED_SETTINGS.companionWindowAutoOpen ? (
+            <SettingResetButton
+              ariaLabel={gt("Reset open during computer use to default")}
+              onClick={() =>
+                updateSettings({
+                  companionWindowAutoOpen: DEFAULT_UNIFIED_SETTINGS.companionWindowAutoOpen,
+                })
+              }
+            />
+          ) : null
+        }
+        control={
+          <Switch
+            checked={settings.companionWindowAutoOpen}
+            onCheckedChange={(checked) =>
+              updateSettings({ companionWindowAutoOpen: Boolean(checked) })
+            }
+            aria-label={gt("Open the companion window during computer use")}
+          />
+        }
+      />
+      <SettingsRow
+        {...setting("companion-window-auto-hide")}
+        description={<T>Closes it a few seconds after the agent stops, if it opened by itself.</T>}
+        resetAction={
+          settings.companionWindowAutoHide !== DEFAULT_UNIFIED_SETTINGS.companionWindowAutoHide ? (
+            <SettingResetButton
+              ariaLabel={gt("Reset hide after computer use to default")}
+              onClick={() =>
+                updateSettings({
+                  companionWindowAutoHide: DEFAULT_UNIFIED_SETTINGS.companionWindowAutoHide,
+                })
+              }
+            />
+          ) : null
+        }
+        control={
+          <Switch
+            checked={settings.companionWindowAutoHide}
+            onCheckedChange={(checked) =>
+              updateSettings({ companionWindowAutoHide: Boolean(checked) })
+            }
+            aria-label={gt("Hide the companion window after computer use")}
+          />
+        }
+      />
+      <SettingsRow
+        {...setting("companion-window-click-through")}
+        description={
+          <T>Clicks pass through it to the app underneath while an agent uses the computer.</T>
+        }
+        resetAction={
+          settings.companionWindowClickThrough !==
+          DEFAULT_UNIFIED_SETTINGS.companionWindowClickThrough ? (
+            <SettingResetButton
+              ariaLabel={gt("Reset click-through during computer use to default")}
+              onClick={() =>
+                updateSettings({
+                  companionWindowClickThrough: DEFAULT_UNIFIED_SETTINGS.companionWindowClickThrough,
+                })
+              }
+            />
+          ) : null
+        }
+        control={
+          <Switch
+            checked={settings.companionWindowClickThrough}
+            onCheckedChange={(checked) =>
+              updateSettings({ companionWindowClickThrough: Boolean(checked) })
+            }
+            aria-label={gt("Click through the companion window during computer use")}
+          />
+        }
+      />
     </SettingsSection>
   );
 }
