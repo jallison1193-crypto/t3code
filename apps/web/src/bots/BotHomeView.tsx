@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   isAtomCommandInterrupted,
@@ -40,16 +41,25 @@ import {
 import { SidebarInset } from "~/components/ui/sidebar";
 import { Textarea } from "~/components/ui/textarea";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
+import { useComposerDraftStore } from "~/composerDraftStore";
 import { requestConfirmDialog } from "~/confirmDialog";
 import { isElectron } from "~/env";
+import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
+import { providerInstanceEntriesFor } from "~/providerInstances";
 import type { SidebarProjectSnapshot } from "~/sidebarProjectGrouping";
 import { useEnvironment } from "~/state/environments";
 import { useEnvironmentQuery } from "~/state/query";
-import { serverEnvironment } from "~/state/server";
+import { EMPTY_SERVER_PROVIDERS, serverEnvironment } from "~/state/server";
 import { useEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { BotModelPicker } from "./BotModelPicker";
-import { formatBotTokenCount, parseBotPositiveInt } from "./bots.logic";
+import {
+  formatBotTokenCount,
+  isBotEnvironmentEnabled,
+  parseBotPositiveInt,
+  resolveBotEffectiveModelSelection,
+  resolveBotRunNowState,
+} from "./bots.logic";
 
 export function BotHomeView({
   projectKey,
@@ -78,6 +88,30 @@ export function BotHomeView({
   const canOperateTasks = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
   const connected =
     environment?.connection.phase === "connected" && environment.serverConfig !== null;
+  const botsEnabled = isBotEnvironmentEnabled(settings);
+  const providers =
+    useAtomValue(serverEnvironment.providersValueAtom(environmentId)) ?? EMPTY_SERVER_PROVIDERS;
+  const instanceEntries = settings
+    ? providerInstanceEntriesFor(providers, settings, projectId)
+    : [];
+  const effectiveModel = resolveBotEffectiveModelSelection({
+    botModelSelection: savedModelSelection,
+    environmentDefaultModelSelection: settings?.defaultModelSelection,
+    instanceEntries,
+  });
+  const runNowState = resolveBotRunNowState({
+    botsEnabled,
+    paused,
+    connected,
+    canOperate: canOperateTasks,
+  });
+  const runNowDisabledReason =
+    runNowState.reason === "bots_off"
+      ? gt("Bots are off")
+      : runNowState.reason === "paused"
+        ? gt("Bot is paused")
+        : null;
+  const handleNewThread = useNewThreadHandler();
 
   const updateBot = useAtomCommand(serverEnvironment.updateBot, {
     label: "bot update",
@@ -139,6 +173,7 @@ export function BotHomeView({
     limitsDirty;
 
   const [saving, setSaving] = useState(false);
+  const [openingRun, setOpeningRun] = useState(false);
   const [togglingPause, setTogglingPause] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [triggerEditor, setTriggerEditor] = useState<{
@@ -225,6 +260,27 @@ export function BotHomeView({
     setEditDraft({ key: projectKey });
   };
 
+  const handleRunNow = async () => {
+    if (openingRun || runNowState.disabled) return;
+    setOpeningRun(true);
+    try {
+      const opened = await handleNewThread(scopeProjectRef(environmentId, projectId), {
+        envMode: "local",
+        prompt: gt("Do your goal now."),
+      });
+      if (opened !== null && effectiveModel.selection !== null) {
+        useComposerDraftStore
+          .getState()
+          .setModelSelection(opened.draftId, effectiveModel.selection, {
+            explicit: true,
+            replaceOptions: true,
+          });
+      }
+    } finally {
+      setOpeningRun(false);
+    }
+  };
+
   const handleTogglePause = async () => {
     if (togglingPause || !canUpdateBot || !connected) return;
     setTogglingPause(true);
@@ -279,6 +335,21 @@ export function BotHomeView({
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
+            {runNowDisabledReason !== null ? (
+              <span id="bot-run-now-reason" className="text-xs text-muted-foreground">
+                {runNowDisabledReason}
+              </span>
+            ) : null}
+            <Button
+              type="button"
+              size="xs"
+              disabled={runNowState.disabled || openingRun || togglingPause || deleting}
+              aria-describedby={runNowDisabledReason !== null ? "bot-run-now-reason" : undefined}
+              onClick={() => void handleRunNow()}
+            >
+              <PlayIcon className="size-3.5" />
+              <T>Run now</T>
+            </Button>
             {canUpdateBot ? (
               <Button
                 variant="outline"
@@ -515,6 +586,7 @@ export function BotHomeView({
                       environmentId={environmentId}
                       task={task}
                       timeZone={tasksQuery.data?.timeZone}
+                      showWebhookUrl
                       onEdit={() => setTriggerEditor({ task })}
                     />
                   ))}

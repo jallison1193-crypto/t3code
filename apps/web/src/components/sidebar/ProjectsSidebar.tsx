@@ -9,7 +9,7 @@ import {
   projectThreadBoardColumn,
   type ProjectThreadBoardColumn,
 } from "@t3tools/client-runtime/project-thread-board";
-import { resolveSidebarModeFilter, type ScopedThreadRef } from "@t3tools/contracts";
+import type { ScopedThreadRef } from "@t3tools/contracts";
 import type { SidebarModeFilter as Mode } from "@t3tools/contracts/settings";
 import { useMatch, useNavigate } from "@tanstack/react-router";
 import { T, useGT } from "gt-react";
@@ -24,14 +24,20 @@ import {
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
-import { deriveBotSidebarEntries, filterNonBotThreads } from "~/bots/bots.logic";
+import {
+  deriveBotSidebarEntries,
+  filterNonBotThreads,
+  isBotSidebarRoute,
+  resolveBotRouteSidebarMode,
+} from "~/bots/bots.logic";
 import { useAnyBotsEnabled } from "~/bots/useBots";
 import { openCommandPalette } from "~/commandPaletteBus";
+import { useComposerDraftStore } from "~/composerDraftStore";
 import { isElectron } from "~/env";
 import { useClientSettings } from "~/hooks/useSettings";
 import { useShownThreadRouteTarget } from "~/hooks/useShownThreadRouteTarget";
 import { cn } from "~/lib/utils";
-import { useHiddenThreadKeys, useQuietThreadShells } from "~/state/entities";
+import { useHiddenThreadKeys, useQuietThreadShell, useQuietThreadShells } from "~/state/entities";
 import { useEnvironments } from "~/state/environments";
 import { ProjectFavicon, type ProjectFaviconProject } from "../ProjectFavicon";
 import { useSettingsProjectGroups } from "../settings/useSettingsProjectGroups";
@@ -166,19 +172,54 @@ export function ProjectsSidebar() {
 
   const activeThreadKey =
     shownTarget?.kind === "server" ? scopedThreadKey(shownTarget.threadRef) : null;
+  const activeServerThread = useQuietThreadShell(
+    shownTarget?.kind === "server" ? shownTarget.threadRef : null,
+  );
+  const activeDraftSession = useComposerDraftStore((state) =>
+    shownTarget?.kind === "draft" ? state.getDraftSession(shownTarget.draftId) : null,
+  );
   const activeProjectKey =
     projectHomeMatch?.params.projectKey ??
     projectThreadsMatch?.params.projectKey ??
     projectLibraryMatch?.params.projectKey ??
     null;
+  const routeKey =
+    activeProjectKey ??
+    activeThreadKey ??
+    (shownTarget?.kind === "draft" ? `draft:${shownTarget.draftId}` : "");
 
   const [expandedByProjectKey, setExpandedByProjectKey] = useState<Record<string, boolean>>(() =>
     readExpandedProjectKeys(),
   );
+  const [tabOverride, setTabOverride] = useState<{
+    readonly routeKey: string;
+    readonly mode: Mode;
+  } | null>(null);
   const sidebarModeFilter = useClientSettings((settings) => settings.sidebarModeFilter);
-  const effectiveModeFilter = resolveSidebarModeFilter(sidebarModeFilter, botsEnabled);
   const getServerSettings = (environmentId: Parameters<typeof presentationById.get>[0]) =>
     presentationById.get(environmentId)?.serverConfig?.settings;
+  const activeThreadProject =
+    activeServerThread !== null
+      ? { environmentId: activeServerThread.environmentId, projectId: activeServerThread.projectId }
+      : activeDraftSession !== null
+        ? {
+            environmentId: activeDraftSession.environmentId,
+            projectId: activeDraftSession.projectId,
+          }
+        : null;
+  const isBotRoute = isBotSidebarRoute({
+    activeProjectKey,
+    activeThreadProject,
+    projectGroups,
+    getServerSettings,
+  });
+  const effectiveModeFilter = resolveBotRouteSidebarMode({
+    savedMode: sidebarModeFilter,
+    botsEnabled,
+    isBotRoute,
+    routeOverride:
+      tabOverride !== null && tabOverride.routeKey === routeKey ? tabOverride.mode : null,
+  });
 
   const sections = buildProjectsSidebarSections({
     projectGroups,
@@ -270,7 +311,11 @@ export function ProjectsSidebar() {
           </SidebarHeaderIconButton>
         </div>
         <div className="mt-1 px-1">
-          <SidebarModeFilter label={gt("Thread mode filter")} />
+          <SidebarModeFilter
+            label={gt("Thread mode filter")}
+            activeMode={effectiveModeFilter}
+            onModeSelect={(mode) => setTabOverride({ routeKey, mode })}
+          />
         </div>
       </SidebarGroup>
       <SidebarContent>

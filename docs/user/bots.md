@@ -5,16 +5,24 @@ A bot is a named agent with its own goal, model, memory, triggers, and run histo
 ## Create a bot
 
 1. Open the **Bots** tab in the sidebar, or open the command palette and choose **New bot**.
-2. Enter a name, write the bot's goal (sent to every run of that bot), and optionally pick a model. If you leave the model on **Default model**, runs inherit your environment's default model.
+2. Enter a name, write the bot's goal (sent to every run of that bot), and pick a Claude or Codex model. New bots start with the first available Claude or Codex model when one is set up.
 3. Click **Create bot** to open the bot's page.
 
 Each bot gets its own managed folder inside T3 Code's data directory and its own run history.
+
+## Run a bot manually
+
+Click **Run now** at the top of a bot's page to open a new thread draft in that bot's project, prefilled with the bot's model and an editable prompt (`Do your goal now.`). Edit the message if needed and send it to start a run.
+
+- **Run now** is disabled while Bots are turned off or the bot is paused.
 
 ## Add a trigger
 
 On a bot's page, open the **Triggers** section and click **Add trigger**.
 
-- Choose an interval, fixed time, one-time date, or webhook trigger.
+- Choose an interval, fixed time, one-time date, or webhook trigger, and describe what to do on that trigger (the bot's goal is always included).
+- Triggers always follow the bot's model: new triggers use the bot's current model, and changing a bot's model updates all of its existing triggers.
+- Webhook triggers display their URL and a **Copy** button directly on the trigger card on the bot's page.
 - By default, each trigger run starts a new thread under the bot so runs stay separate.
 - Click any run under **Runs** (or expand the bot in the **Bots** sidebar tab) to read the run or reply to it. If a run needs your input or approval, it also appears under **Needs you**.
 

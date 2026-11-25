@@ -20,6 +20,7 @@ import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Equal from "effect/Equal";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -424,6 +425,61 @@ const make = Effect.gen(function* () {
               }),
           ),
         );
+
+      if (input.modelSelection !== undefined) {
+        const syncedModelSelection = nextModel ?? nextSettings.defaultModelSelection;
+        if (syncedModelSelection !== null) {
+          const listedTasks = yield* scheduledTasks.list().pipe(
+            Effect.mapError(
+              (cause) =>
+                new BotOperationError({
+                  operation: "update",
+                  reason: "scheduled_tasks_failed",
+                  projectId: input.projectId,
+                  detail: "Could not update the bot's triggers with the new model.",
+                  cause,
+                }),
+            ),
+          );
+          const botTasks = listedTasks.tasks.filter(
+            (task) =>
+              task.projectId === input.projectId &&
+              !Equal.equals(task.modelSelection, syncedModelSelection),
+          );
+          for (const task of botTasks) {
+            yield* scheduledTasks
+              .upsert({
+                id: task.id,
+                requireExisting: true,
+                title: task.title,
+                prompt: task.prompt,
+                enabled: task.enabled,
+                schedule: task.schedule,
+                projectId: task.projectId,
+                threadId: task.threadId,
+                ...(task.threadMode === undefined ? {} : { threadMode: task.threadMode }),
+                workspaceStrategy: task.workspaceStrategy,
+                modelSelection: syncedModelSelection,
+                runtimeMode: task.runtimeMode,
+                interactionMode: task.interactionMode,
+                createdBy: task.createdBy,
+                creationSource: task.creationSource,
+              })
+              .pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new BotOperationError({
+                      operation: "update",
+                      reason: "scheduled_tasks_failed",
+                      projectId: input.projectId,
+                      detail: "Could not update the bot's triggers with the new model.",
+                      cause,
+                    }),
+                ),
+              );
+          }
+        }
+      }
     }
 
     return toBotRecord(project, nextSettings);

@@ -13026,5 +13026,17 @@
   "c82e1f320b93fbc1": "Ejecuciones por día",
   "2996ea4e1e583d34": "Tokens por día",
   "dc53cecbcc085b27": "Todavía no es compatible con bots. Elige Claude o Codex.",
-  "5049d15df6e0fe27": "T3 no puede controlar el modelo de este bot. Elige un modelo de Claude o Codex."
+  "5809fc3ea87f6c3f": "Los bots están desactivados",
+  "2f05279f6289eddb": "El bot está en pausa",
+  "5fc9ee50f62ce033": "Ejecuta tu objetivo ahora.",
+  "c228ed50ec7715bf": "Los bots solo funcionan con Claude o Codex. Elige un modelo abajo.",
+  "0deadb4000b39337": "El disparador está incompleto",
+  "13ead388ab769a27": "Elige primero un modelo para este bot.",
+  "403b71f0c87b5893": "Añade un nombre y qué hacer en este disparador.",
+  "2102cfe9fbd2c604": "Editar disparador",
+  "0ea3c5c6f60fc214": "Nuevo disparador",
+  "9f66a4545d8fc4ba": "Qué hacer en este disparador",
+  "bfdc4af2fa62d728": "Usa el modelo del bot: {model}",
+  "eefdcfcd0b5f062a": "Guardar disparador",
+  "45b4cf556960f6f5": "El objetivo del bot siempre se incluye."
 }

@@ -16,6 +16,7 @@ import {
   ScheduledTaskId,
   type Project,
   type ScheduledTask,
+  type ScheduledTaskUpsertInput,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -72,6 +73,7 @@ const makeHarness = Effect.fn("BotServiceTest.makeHarness")(function* (initial?:
   const tasksMap = new Map<ScheduledTaskId, ScheduledTask>();
   const deletedProjectIds: ProjectId[] = [];
   const deletedTaskIds: ScheduledTaskId[] = [];
+  const upsertedTaskInputs: ScheduledTaskUpsertInput[] = [];
 
   const ordinaryProjectId = ProjectId.make("project:ordinary");
   projectsMap.set(ordinaryProjectId, {
@@ -163,6 +165,29 @@ const makeHarness = Effect.fn("BotServiceTest.makeHarness")(function* (initial?:
           tasks: [...tasksMap.values()],
           timeZone: "UTC",
         })),
+      upsert: (input) =>
+        Effect.sync(() => {
+          upsertedTaskInputs.push(input);
+          const id = input.id ?? ScheduledTaskId.make(`task:${tasksMap.size + 1}`);
+          const existing = tasksMap.get(id);
+          const base = existing ?? makeScheduledTask(id, input.projectId);
+          const updated: ScheduledTask = {
+            ...base,
+            id,
+            title: input.title,
+            prompt: input.prompt,
+            enabled: input.enabled,
+            projectId: input.projectId,
+            threadId: input.threadId ?? base.threadId,
+            ...(input.threadMode === undefined ? {} : { threadMode: input.threadMode }),
+            workspaceStrategy: input.workspaceStrategy,
+            modelSelection: input.modelSelection,
+            runtimeMode: input.runtimeMode,
+            interactionMode: input.interactionMode,
+          };
+          tasksMap.set(id, updated);
+          return { task: updated };
+        }),
       delete: ({ id }) =>
         Effect.sync(() => {
           deletedTaskIds.push(id);
@@ -187,6 +212,7 @@ const makeHarness = Effect.fn("BotServiceTest.makeHarness")(function* (initial?:
     tasksMap,
     deletedProjectIds,
     deletedTaskIds,
+    upsertedTaskInputs,
   };
 });
 
@@ -411,6 +437,75 @@ describe("BotService", () => {
           reason: BOT_UNSUPPORTED_PROVIDER_REASON,
           allowManualRun: false,
         });
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "updates every trigger of a bot when the bot's model changes without touching other projects",
+    () =>
+      Effect.gen(function* () {
+        const { service, settings, ordinaryProjectId, tasksMap, upsertedTaskInputs } =
+          yield* makeHarness();
+
+        const codexModel = {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5",
+        };
+        const haikuModel = {
+          instanceId: ProviderInstanceId.make("claudeAgent"),
+          model: "claude-haiku-4-5",
+          options: [{ id: "reasoning", value: "medium" }],
+        };
+        const envDefaultModel = {
+          instanceId: ProviderInstanceId.make("claudeAgent"),
+          model: "claude-sonnet-4-6",
+        };
+
+        const bot = yield* service.create({
+          name: "Inbox Triage",
+          goal: "Triage incoming notifications.",
+          modelSelection: codexModel,
+        });
+        const otherBot = yield* service.create({
+          name: "Other Bot",
+          goal: "Keep own model.",
+          modelSelection: codexModel,
+        });
+
+        const intervalTrigger = makeScheduledTask("task:bot-interval", bot.projectId);
+        const webhookTrigger: ScheduledTask = {
+          ...makeScheduledTask("task:bot-webhook", bot.projectId),
+          schedule: { type: "webhook", signature: null },
+          webhook: { path: "/api/hooks/task:bot-webhook/token", url: null, hasSecret: false },
+        };
+        const otherBotTrigger = makeScheduledTask("task:other-bot", otherBot.projectId);
+        const ordinaryTrigger = makeScheduledTask("task:ordinary", ordinaryProjectId);
+        tasksMap.set(intervalTrigger.id, intervalTrigger);
+        tasksMap.set(webhookTrigger.id, webhookTrigger);
+        tasksMap.set(otherBotTrigger.id, otherBotTrigger);
+        tasksMap.set(ordinaryTrigger.id, ordinaryTrigger);
+
+        // Goal-only update leaves triggers untouched.
+        yield* service.update({ projectId: bot.projectId, goal: "Updated goal" });
+        expect(upsertedTaskInputs).toEqual([]);
+
+        // Changing the bot's model updates both of its triggers to the new model.
+        yield* service.update({ projectId: bot.projectId, modelSelection: haikuModel });
+        expect(upsertedTaskInputs.map((entry) => entry.id)).toEqual([
+          intervalTrigger.id,
+          webhookTrigger.id,
+        ]);
+        expect(tasksMap.get(intervalTrigger.id)?.modelSelection).toEqual(haikuModel);
+        expect(tasksMap.get(webhookTrigger.id)?.modelSelection).toEqual(haikuModel);
+        expect(tasksMap.get(otherBotTrigger.id)?.modelSelection).toEqual(codexModel);
+        expect(tasksMap.get(ordinaryTrigger.id)?.modelSelection).toEqual(codexModel);
+
+        // Clearing the bot's model falls back to the environment default when configured.
+        yield* settings.updateSettings({ defaultModelSelection: envDefaultModel });
+        yield* service.update({ projectId: bot.projectId, modelSelection: null });
+        expect(tasksMap.get(intervalTrigger.id)?.modelSelection).toEqual(envDefaultModel);
+        expect(tasksMap.get(webhookTrigger.id)?.modelSelection).toEqual(envDefaultModel);
+        expect(tasksMap.get(otherBotTrigger.id)?.modelSelection).toEqual(codexModel);
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });
