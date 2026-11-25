@@ -10,6 +10,12 @@ import {
 import * as DesktopIpc from "./DesktopIpc.ts";
 import { installNotificationBadge } from "./methods/notificationBadge.ts";
 import { getClientSettings, setClientSettings } from "./methods/clientSettings.ts";
+import {
+  closeCompanion,
+  minimizeCompanion,
+  openCompanion,
+  openCompanionThreadInMain,
+} from "./methods/companion.ts";
 import { getConnectionCatalog, setConnectionCatalog } from "./methods/connectionCatalog.ts";
 import {
   getHostEnvironmentId,
@@ -171,6 +177,10 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(appleSpeechTranscribe);
   yield* ipc.handle(pasteAsText);
   yield* ipc.handle(revealWindow);
+  yield* ipc.handle(openCompanion);
+  yield* ipc.handle(closeCompanion);
+  yield* ipc.handle(minimizeCompanion);
+  yield* ipc.handle(openCompanionThreadInMain);
   yield* ipc.handle(syncHtmlFullscreen);
   yield* ipc.handle(probeRemoteEditors);
   yield* ipc.handle(getUpdateState);

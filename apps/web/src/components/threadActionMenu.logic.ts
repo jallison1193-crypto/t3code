@@ -30,6 +30,7 @@ export type ThreadActionMenuId =
   | "regenerate-title"
   | "mark-unread"
   | "share-guest"
+  | "open-companion"
   | "copy"
   | "copy-path"
   | "copy-branch"
@@ -132,6 +133,8 @@ export interface ThreadActionMenuState {
   readonly canShareWithGuest?: boolean;
   /** A No project thread with its own folder, on a server that can promote it. */
   readonly canTurnIntoProject?: boolean;
+  /** The desktop app has a companion window and it is turned on. */
+  readonly canOpenCompanionWindow?: boolean;
 }
 
 /** Local navigation, read markers, and copying remain available to read-only clients. */
@@ -145,6 +148,7 @@ export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean
     "project-settings",
     "mark-unread",
     "share-guest",
+    "open-companion",
     "copy",
     "copy-path",
     "copy-branch",
@@ -250,6 +254,15 @@ export function buildThreadActionMenuItems(
     { id: "mark-unread", label: resolve(msg("Mark unread")), icon: "mail-open" },
     ...(state.canShareWithGuest
       ? [{ id: "share-guest" as const, label: resolve(msg("Share with guest")), icon: "user-plus" }]
+      : []),
+    ...(state.canOpenCompanionWindow
+      ? [
+          {
+            id: "open-companion" as const,
+            label: resolve(msg("Open companion window")),
+            icon: "picture-in-picture-2",
+          },
+        ]
       : []),
     ...(state.projectFilter
       ? [

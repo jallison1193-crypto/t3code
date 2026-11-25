@@ -24,6 +24,7 @@ import { Route as ChatNewRouteImport } from './routes/_chat.new'
 import { Route as ChatLibraryRouteImport } from './routes/_chat.library'
 import { Route as ChatIssuesRouteImport } from './routes/_chat.issues'
 import { Route as ThreadsEnvironmentIdThreadIdRouteImport } from './routes/threads.$environmentId.$threadId'
+import { Route as CompanionEnvironmentIdThreadIdRouteImport } from './routes/companion.$environmentId.$threadId'
 import { Route as ChatSettingsWorktreesRouteImport } from './routes/_chat.settings.worktrees'
 import { Route as ChatSettingsVoiceRouteImport } from './routes/_chat.settings.voice'
 import { Route as ChatSettingsThreadsRouteImport } from './routes/_chat.settings.threads'
@@ -132,6 +133,12 @@ const ThreadsEnvironmentIdThreadIdRoute =
   ThreadsEnvironmentIdThreadIdRouteImport.update({
     id: '/threads/$environmentId/$threadId',
     path: '/threads/$environmentId/$threadId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const CompanionEnvironmentIdThreadIdRoute =
+  CompanionEnvironmentIdThreadIdRouteImport.update({
+    id: '/companion/$environmentId/$threadId',
+    path: '/companion/$environmentId/$threadId',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ChatSettingsWorktreesRoute = ChatSettingsWorktreesRouteImport.update({
@@ -360,6 +367,7 @@ export interface FileRoutesByFullPath {
   '/settings/threads': typeof ChatSettingsThreadsRoute
   '/settings/voice': typeof ChatSettingsVoiceRoute
   '/settings/worktrees': typeof ChatSettingsWorktreesRoute
+  '/companion/$environmentId/$threadId': typeof CompanionEnvironmentIdThreadIdRoute
   '/threads/$environmentId/$threadId': typeof ThreadsEnvironmentIdThreadIdRoute
   '/projects/$projectKey/library': typeof ChatProjectsProjectKeyLibraryRoute
   '/projects/$projectKey/threads': typeof ChatProjectsProjectKeyThreadsRoute
@@ -410,6 +418,7 @@ export interface FileRoutesByTo {
   '/settings/threads': typeof ChatSettingsThreadsRoute
   '/settings/voice': typeof ChatSettingsVoiceRoute
   '/settings/worktrees': typeof ChatSettingsWorktreesRoute
+  '/companion/$environmentId/$threadId': typeof CompanionEnvironmentIdThreadIdRoute
   '/threads/$environmentId/$threadId': typeof ThreadsEnvironmentIdThreadIdRoute
   '/projects/$projectKey/library': typeof ChatProjectsProjectKeyLibraryRoute
   '/projects/$projectKey/threads': typeof ChatProjectsProjectKeyThreadsRoute
@@ -462,6 +471,7 @@ export interface FileRoutesById {
   '/_chat/settings/threads': typeof ChatSettingsThreadsRoute
   '/_chat/settings/voice': typeof ChatSettingsVoiceRoute
   '/_chat/settings/worktrees': typeof ChatSettingsWorktreesRoute
+  '/companion/$environmentId/$threadId': typeof CompanionEnvironmentIdThreadIdRoute
   '/threads/$environmentId/$threadId': typeof ThreadsEnvironmentIdThreadIdRoute
   '/_chat/projects/$projectKey_/library': typeof ChatProjectsProjectKeyLibraryRoute
   '/_chat/projects/$projectKey_/threads': typeof ChatProjectsProjectKeyThreadsRoute
@@ -514,6 +524,7 @@ export interface FileRouteTypes {
     | '/settings/threads'
     | '/settings/voice'
     | '/settings/worktrees'
+    | '/companion/$environmentId/$threadId'
     | '/threads/$environmentId/$threadId'
     | '/projects/$projectKey/library'
     | '/projects/$projectKey/threads'
@@ -564,6 +575,7 @@ export interface FileRouteTypes {
     | '/settings/threads'
     | '/settings/voice'
     | '/settings/worktrees'
+    | '/companion/$environmentId/$threadId'
     | '/threads/$environmentId/$threadId'
     | '/projects/$projectKey/library'
     | '/projects/$projectKey/threads'
@@ -615,6 +627,7 @@ export interface FileRouteTypes {
     | '/_chat/settings/threads'
     | '/_chat/settings/voice'
     | '/_chat/settings/worktrees'
+    | '/companion/$environmentId/$threadId'
     | '/threads/$environmentId/$threadId'
     | '/_chat/projects/$projectKey_/library'
     | '/_chat/projects/$projectKey_/threads'
@@ -629,6 +642,7 @@ export interface RootRouteChildren {
   GuestRoute: typeof GuestRoute
   PairRoute: typeof PairRoute
   WelcomeRoute: typeof WelcomeRoute
+  CompanionEnvironmentIdThreadIdRoute: typeof CompanionEnvironmentIdThreadIdRoute
   ThreadsEnvironmentIdThreadIdRoute: typeof ThreadsEnvironmentIdThreadIdRoute
 }
 
@@ -737,6 +751,13 @@ declare module '@tanstack/react-router' {
       path: '/threads/$environmentId/$threadId'
       fullPath: '/threads/$environmentId/$threadId'
       preLoaderRoute: typeof ThreadsEnvironmentIdThreadIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/companion/$environmentId/$threadId': {
+      id: '/companion/$environmentId/$threadId'
+      path: '/companion/$environmentId/$threadId'
+      fullPath: '/companion/$environmentId/$threadId'
+      preLoaderRoute: typeof CompanionEnvironmentIdThreadIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_chat/settings/worktrees': {
@@ -1089,6 +1110,7 @@ const rootRouteChildren: RootRouteChildren = {
   GuestRoute: GuestRoute,
   PairRoute: PairRoute,
   WelcomeRoute: WelcomeRoute,
+  CompanionEnvironmentIdThreadIdRoute: CompanionEnvironmentIdThreadIdRoute,
   ThreadsEnvironmentIdThreadIdRoute: ThreadsEnvironmentIdThreadIdRoute,
 }
 export const routeTree = rootRouteImport

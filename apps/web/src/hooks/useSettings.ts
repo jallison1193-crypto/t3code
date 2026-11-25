@@ -157,9 +157,7 @@ async function hydrateClientSettings(): Promise<void> {
       if (persistedSettings) {
         replaceClientSettingsSnapshot({ ...DEFAULT_CLIENT_SETTINGS, ...persistedSettings });
       }
-      unsubscribeOtherTabClientSettings ??= subscribeBrowserClientSettingsWrites(
-        refreshClientSettingsFromOtherTab,
-      );
+      unsubscribeOtherTabClientSettings ??= subscribeOtherWindowClientSettings();
       setClientSettingsHydrationStatus("ready");
     } catch (error) {
       if (hydrationGeneration === clientSettingsHydrationGeneration) {
@@ -181,6 +179,21 @@ async function hydrateClientSettings(): Promise<void> {
   clientSettingsHydrationPromise = hydrationPromise;
 
   return clientSettingsHydrationPromise;
+}
+
+function subscribeOtherWindowClientSettings(): () => void {
+  const unsubscribeBrowser = subscribeBrowserClientSettingsWrites(
+    refreshClientSettingsFromOtherTab,
+  );
+  // The desktop app saves settings in the shell, which tells its other window to re-read them.
+  const unsubscribeDesktop =
+    typeof window === "undefined"
+      ? undefined
+      : window.desktopBridge?.onClientSettingsChange?.(refreshClientSettingsFromOtherTab);
+  return () => {
+    unsubscribeBrowser();
+    unsubscribeDesktop?.();
+  };
 }
 
 function refreshClientSettingsFromOtherTab(): void {

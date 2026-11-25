@@ -6,12 +6,14 @@ import { vi } from "vite-plus/test";
 
 vi.mock("electron", () => ({}));
 
+import * as ElectronCompanionWindow from "../electron/ElectronCompanionWindow.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import * as DesktopIpc from "./DesktopIpc.ts";
 
-it.effect("answers only the main window's top frame", () =>
+it.effect("answers only the top frame of the main and companion windows", () =>
   Effect.gen(function* () {
     const mainFrame = {};
+    const companionFrame = {};
     const invoke = new Map<string, DesktopIpc.DesktopIpcHandleListener>();
     const sync = new Map<string, DesktopIpc.DesktopIpcSyncListener>();
     const ipc = yield* DesktopIpc.DesktopIpc.pipe(
@@ -26,6 +28,13 @@ it.effect("answers only the main window's top frame", () =>
             Layer.mock(ElectronWindow.ElectronWindow, {
               main: Effect.succeedSome({
                 webContents: { id: 1, mainFrame },
+              } as unknown as Electron.BrowserWindow),
+            }),
+          ),
+          Layer.provide(
+            Layer.mock(ElectronCompanionWindow.ElectronCompanionWindow, {
+              current: Effect.succeedSome({
+                webContents: { id: 3, mainFrame: companionFrame },
               } as unknown as Electron.BrowserWindow),
             }),
           ),
@@ -46,6 +55,8 @@ it.effect("answers only the main window's top frame", () =>
       app: { sender: { id: 1 }, senderFrame: mainFrame },
       appSubframe: { sender: { id: 1 }, senderFrame: {} },
       previewGuest: { sender: { id: 2 }, senderFrame: {} },
+      companion: { sender: { id: 3 }, senderFrame: companionFrame },
+      companionSubframe: { sender: { id: 3 }, senderFrame: {} },
     };
     const results: Record<string, unknown> = {};
     for (const [name, sender] of Object.entries(senders)) {
@@ -62,6 +73,8 @@ it.effect("answers only the main window's top frame", () =>
       app: ["secret", "secret"],
       appSubframe: ["rejected", undefined],
       previewGuest: ["rejected", undefined],
+      companion: ["secret", "secret"],
+      companionSubframe: ["rejected", undefined],
     });
   }),
 );

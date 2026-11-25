@@ -5,6 +5,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 
+import * as ElectronCompanionWindow from "../electron/ElectronCompanionWindow.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 
 export interface DesktopIpcInvokeEvent {
@@ -184,13 +185,22 @@ export const layer = (ipcMain: DesktopIpcMain) =>
     DesktopIpc,
     Effect.gen(function* () {
       const electronWindow = yield* ElectronWindow.ElectronWindow;
+      // Absent in hosts that never open a companion window.
+      const companionWindow = yield* Effect.serviceOption(
+        ElectronCompanionWindow.ElectronCompanionWindow,
+      );
+      const appWindows = [
+        electronWindow.main,
+        ...Option.toArray(Option.map(companionWindow, (service) => service.current)),
+      ];
       return make(ipcMain, (event) =>
-        Effect.map(
-          electronWindow.main,
-          (main) =>
-            Option.isSome(main) &&
-            main.value.webContents.id === event.sender.id &&
-            main.value.webContents.mainFrame === event.senderFrame,
+        Effect.map(Effect.all(appWindows), (windows) =>
+          windows.some(
+            (window) =>
+              Option.isSome(window) &&
+              window.value.webContents.id === event.sender.id &&
+              window.value.webContents.mainFrame === event.senderFrame,
+          ),
         ),
       );
     }),

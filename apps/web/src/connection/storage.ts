@@ -44,6 +44,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { m } from "../i18n/messages";
 import { projectFaviconCache } from "../assets/projectFaviconCache";
+import { isCompanionWindow } from "../lib/companionWindow";
 
 const DATABASE_NAME = "t3code:connection-runtime";
 const DATABASE_VERSION = 5;
@@ -523,21 +524,24 @@ export function makeCatalogBackend(database: DatabaseHandle): CatalogBackend {
         catch: (cause) => catalogError("load", cause),
       }),
       write: (raw) =>
-        Effect.tryPromise({
-          try: () => bridge.setConnectionCatalog(raw),
-          catch: (cause) => catalogError("save", cause),
-        }).pipe(
-          Effect.flatMap((stored) =>
-            stored
-              ? Effect.void
-              : Effect.fail(
-                  catalogError(
-                    "save",
-                    m(msg("Desktop secure storage is unavailable in this system context.")),
-                  ),
-                ),
-          ),
-        ),
+        // The main window owns the saved catalog; a second writer would overwrite its changes.
+        isCompanionWindow
+          ? Effect.void
+          : Effect.tryPromise({
+              try: () => bridge.setConnectionCatalog(raw),
+              catch: (cause) => catalogError("save", cause),
+            }).pipe(
+              Effect.flatMap((stored) =>
+                stored
+                  ? Effect.void
+                  : Effect.fail(
+                      catalogError(
+                        "save",
+                        m(msg("Desktop secure storage is unavailable in this system context.")),
+                      ),
+                    ),
+              ),
+            ),
     };
   }
 

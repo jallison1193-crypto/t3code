@@ -406,6 +406,23 @@ unarchiving the thread brings them back.
 On mobile, a thread lists its side chats above the composer. Tap one to open it and
 answer its questions.
 
+## Companion window
+
+In the desktop app, the companion window is a small window that follows one thread, so you can
+watch it, reply or stop it while another app fills the screen. Open it with **Open companion
+window** in the command palette or the thread's menu. Opening it for another thread moves it there.
+
+It comes in three sizes: **Small** shows only whether the thread is working, done or needs you
+(click it to expand), **Medium** adds the conversation and composer, and **Large** shows the full
+thread. Its header switches sizes, opens the thread in T3 Code, minimizes and closes.
+
+Under **Settings → General → Companion window** you can turn it off, choose whether it stays on
+top, and set its position and size. You can drag it elsewhere; it returns to the chosen position
+the next time you open it.
+
+On Windows it is left out of screenshots and screen recordings, so an agent that controls your
+computer does not see it. On macOS this depends on the capture tool, and Linux can't hide it.
+
 ## Snooze until later
 
 To change the choices in the snooze menu, open **Settings → Threads → Snooze options**.

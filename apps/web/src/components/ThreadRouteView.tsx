@@ -5,6 +5,7 @@ import { visibilityParentKey } from "@t3tools/client-runtime/state/threads";
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { Navigate, useNavigate } from "@tanstack/react-router";
+import { T } from "gt-react";
 import { useEffect, useState } from "react";
 
 import ChatView from "./ChatView";
@@ -26,6 +27,7 @@ import {
   resolveThreadRouteRenderState,
   type ThreadRouteTarget,
 } from "../threadRoutes";
+import { cn } from "../lib/utils";
 
 /**
  * Keeps the family of an open thread the shell leaves out (an older settled thread) in the shell
@@ -46,17 +48,18 @@ export function useOpenThreadFamily(threadRef: ScopedThreadRef | null, missing: 
 }
 
 /**
- * Unkeyed so navigating between server threads reuses one ChatView. Rendered by the `_chat`
- * layout, since an element only survives a route swap when the same parent renders it. Draft
+ * Unkeyed so server threads share one ChatView, which survives only under one parent. Draft
  * promotion runs in the draft store; this only follows the redirect it leaves behind.
- * `background` keeps the thread mounted, inert and in place under Settings or Usage.
+ * `background` keeps it inert under Settings or Usage; `companion` stays on its thread.
  */
 export function ThreadRouteView({
   target,
   background = false,
+  companion,
 }: {
   target: ThreadRouteTarget;
   background?: boolean;
+  companion?: "medium" | "large";
 }) {
   const navigate = useNavigate();
   const draftId = target.kind === "draft" ? target.draftId : null;
@@ -148,11 +151,19 @@ export function ThreadRouteView({
     if (renderState === "missing") {
       const { clearPendingFileDropsForThread } = useSidebarPendingFileDropStore.getState();
       clearPendingFileDropsForThread(target.threadRef);
-      if (environmentHasAnyThreads && !background) {
+      if (environmentHasAnyThreads && !background && !companion) {
         void navigate({ to: "/", replace: true });
       }
     }
-  }, [background, bootstrapComplete, environmentHasAnyThreads, navigate, renderState, target]);
+  }, [
+    background,
+    bootstrapComplete,
+    companion,
+    environmentHasAnyThreads,
+    navigate,
+    renderState,
+    target,
+  ]);
 
   let view: React.ReactNode = null;
   let redirect: React.ReactNode = null;
@@ -220,19 +231,30 @@ export function ThreadRouteView({
         environmentId={target.threadRef.environmentId}
         threadId={target.threadRef.threadId}
         routeKind="server"
+        compact={companion === "medium"}
+        reserveTitleBarControlInset={companion === undefined}
+        forceExpandedMobileComposer={companion !== undefined}
       />
     );
   }
 
   return (
     <SidebarInset
-      className="h-svh min-h-0 overflow-hidden overscroll-y-none md:h-dvh"
+      className={cn(
+        "min-h-0 overflow-hidden overscroll-y-none",
+        companion ? "h-full" : "h-svh md:h-dvh",
+      )}
       inert={background}
     >
       <BackgroundThreadContext value={background}>
         <HiddenThreadContext value={background}>{view}</HiddenThreadContext>
       </BackgroundThreadContext>
-      {background ? null : redirect}
+      {companion && (renderState === "missing" || hiddenByTagFilter) ? (
+        <p className="m-auto px-4 text-center text-sm text-muted-foreground">
+          <T>This thread is no longer available.</T>
+        </p>
+      ) : null}
+      {background || companion ? null : redirect}
     </SidebarInset>
   );
 }

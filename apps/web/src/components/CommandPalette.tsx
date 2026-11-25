@@ -81,6 +81,7 @@ import {
   NetworkIcon,
   PanelLeftIcon,
   PinIcon,
+  PictureInPicture2Icon,
   PinOffIcon,
   PlugIcon,
   SquarePenIcon,
@@ -118,6 +119,7 @@ import {
   promptLinkRepositoryOf,
 } from "./promptLinks/copyPromptLink";
 import { updateClientSettings, useClientSettings } from "../hooks/useSettings";
+import { canOpenCompanionWindow, openCompanionWindow } from "../lib/companionWindow";
 import { useStableCallback } from "../hooks/useStableCallback";
 import { readLocalApi } from "../localApi";
 import { configuredHostedAppUrl } from "../hostedPairing";
@@ -479,6 +481,7 @@ function OpenCommandPaletteDialog(props: {
     setHighlightedItemValue(null);
   }
   const clientSettings = useClientSettings(selectCommandPaletteClientSettings);
+  const companionWindowEnabled = useClientSettings((s) => s.companionWindowEnabled);
   const createProject = useAtomCommand(projectEnvironment.create, {
     reportFailure: false,
   });
@@ -1556,6 +1559,21 @@ function OpenCommandPaletteDialog(props: {
       icon: <PullRequestGlyph.link className={ITEM_ICON_CLASS} />,
       run: async () => {
         useRightPanelStore.getState().open(threadRef, "pull-requests");
+      },
+    });
+  }
+
+  if (activeThread !== null && canOpenCompanionWindow(companionWindowEnabled)) {
+    const threadRef = scopeThreadRef(activeThread.environmentId, activeThread.id);
+    actionItems.push({
+      kind: "action",
+      value: "action:open-companion-window",
+      searchTerms: ["companion", "mini", "floating", "picture in picture", "window"],
+      title: gt("Open companion window"),
+      icon: <PictureInPicture2Icon className={ITEM_ICON_CLASS} />,
+      shortcutCommand: "thread.openCompanionWindow",
+      run: async () => {
+        openCompanionWindow(threadRef);
       },
     });
   }
