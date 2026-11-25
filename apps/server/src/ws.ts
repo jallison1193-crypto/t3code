@@ -2503,6 +2503,10 @@ export const layerWsRpc = (
           Effect.annotateCurrentSpan({ "bot.project_id": input.projectId }).pipe(
             Effect.andThen(bots.delete(input.projectId)),
           ),
+        [WS_METHODS.botsRun]: (input) =>
+          Effect.annotateCurrentSpan({ "bot.project_id": input.projectId }).pipe(
+            Effect.andThen(bots.run(input)),
+          ),
         [WS_METHODS.serverProbe]: (_input) =>
           Effect.map(DateTime.now, (now) => ({ serverTime: DateTime.formatIso(now) })),
         [WS_METHODS.serverGetConfig]: (_input) =>

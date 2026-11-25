@@ -14,6 +14,7 @@ import {
   ProviderInstanceId,
   resolveBotLimits,
   ScheduledTaskId,
+  ThreadId,
   type Project,
   type ScheduledTask,
   type ScheduledTaskUpsertInput,
@@ -28,6 +29,8 @@ import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as TestClock from "effect/testing/TestClock";
 
+import * as ThreadLaunchService from "../orchestration-v2/ThreadLaunchService.ts";
+import { idleThreadProjection, liveThreadShell } from "../mcp/McpToolAccess.testkit.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
@@ -74,6 +77,7 @@ const makeHarness = Effect.fn("BotServiceTest.makeHarness")(function* (initial?:
   const deletedProjectIds: ProjectId[] = [];
   const deletedTaskIds: ScheduledTaskId[] = [];
   const upsertedTaskInputs: ScheduledTaskUpsertInput[] = [];
+  const launches: ThreadLaunchService.ThreadLaunchInput[] = [];
 
   const ordinaryProjectId = ProjectId.make("project:ordinary");
   projectsMap.set(ordinaryProjectId, {
@@ -102,6 +106,18 @@ const makeHarness = Effect.fn("BotServiceTest.makeHarness")(function* (initial?:
     SqlitePersistence.layerMemory,
     serverSettingsLayer,
     NodeCrypto.layer,
+    Layer.mock(ThreadLaunchService.ThreadLaunchService)({
+      launch: (input) =>
+        Effect.sync(() => {
+          launches.push(input);
+          const threadId = ThreadId.make(`thread:run-${launches.length}`);
+          return {
+            threadId,
+            projection: idleThreadProjection(liveThreadShell(threadId)),
+            resumed: false,
+          };
+        }),
+    }),
     Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
       namedProjectsRoot: path.join(tempRoot, "projects"),
       createBotFolder: ({ name }) =>
@@ -213,6 +229,7 @@ const makeHarness = Effect.fn("BotServiceTest.makeHarness")(function* (initial?:
     deletedProjectIds,
     deletedTaskIds,
     upsertedTaskInputs,
+    launches,
   };
 });
 
@@ -325,7 +342,7 @@ describe("BotService", () => {
           tokensPerDay: DEFAULT_BOT_LIMITS.tokensPerDay,
         });
 
-        const { service, settings, sql, ordinaryProjectId } = yield* makeHarness();
+        const { service, settings, sql, ordinaryProjectId, launches } = yield* makeHarness();
         const created = yield* service.create({
           name: "Daily Bot",
           goal: "Check metrics",
@@ -416,12 +433,64 @@ describe("BotService", () => {
         `;
         expect(yield* service.triggerBlock(created.projectId)).toBe(BOT_DAILY_RUN_LIMIT_REASON);
 
+        // Run now on the bot is refused at the limit and says why.
+        const fallbackModelSelection = {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5",
+        };
+        const runInput = {
+          projectId: created.projectId,
+          prompt: "Do your goal now.",
+          fallbackModelSelection,
+        };
+        expect((yield* service.getUsage(created.projectId)).blockedByPolicy).toBe(
+          BOT_DAILY_RUN_LIMIT_REASON,
+        );
+        expect(yield* Effect.flip(service.run(runInput))).toMatchObject({
+          reason: "blocked",
+          detail: BOT_DAILY_RUN_LIMIT_REASON,
+        });
+        expect(launches).toEqual([]);
+
         // Switching to none lifts all usage limits.
         yield* service.update({
           projectId: created.projectId,
           limits: { mode: "none" },
         });
         expect(yield* service.triggerBlock(created.projectId)).toBeUndefined();
+
+        // A run starts its own thread in the bot's project, held by the approval gate.
+        expect(yield* service.run(runInput)).toEqual({
+          projectId: created.projectId,
+          threadId: ThreadId.make("thread:run-1"),
+        });
+        expect(launches[0]).toMatchObject({
+          projectId: created.projectId,
+          title: "Daily Bot",
+          modelSelection: fallbackModelSelection,
+          runtimeMode: "approval-required",
+          initialMessage: { text: "Do your goal now." },
+        });
+
+        // The bot's saved model wins over the client's fallback; pause and the off switch refuse.
+        const savedModel = {
+          instanceId: ProviderInstanceId.make("claudeAgent"),
+          model: "claude-haiku-4-5",
+        };
+        yield* service.update({ projectId: created.projectId, modelSelection: savedModel });
+        yield* service.run(runInput);
+        expect(launches[1]?.modelSelection).toEqual(savedModel);
+        yield* service.update({ projectId: created.projectId, paused: true });
+        expect(yield* Effect.flip(service.run(runInput))).toMatchObject({
+          detail: BOT_PAUSED_REASON,
+        });
+        yield* service.update({ projectId: created.projectId, paused: false });
+        yield* settings.updateSettings({ botsEnabled: false });
+        expect(yield* Effect.flip(service.run(runInput))).toMatchObject({
+          detail: BOTS_DISABLED_REASON,
+        });
+        yield* settings.updateSettings({ botsEnabled: true });
+        expect(launches).toHaveLength(2);
 
         // Unsupported provider blocks triggers before limits.
         const currentSettings = yield* settings.getSettings;

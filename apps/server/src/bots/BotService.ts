@@ -5,9 +5,12 @@ import {
   BotOperationError,
   type BotProfile,
   type BotRecord,
+  type BotRunInput,
+  type BotRunResult,
   type BotUpdateInput,
   type BotUsageResult,
   CommandId,
+  type ModelSelection,
   ProjectId,
   type Project,
   type ProjectSettingsOverrides,
@@ -26,6 +29,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as SqlClient from "effect/sql/SqlClient";
 
+import * as ThreadLaunchService from "../orchestration-v2/ThreadLaunchService.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
@@ -103,6 +107,8 @@ export class BotService extends Context.Service<
     readonly update: (input: BotUpdateInput) => Effect.Effect<BotRecord, BotOperationError>;
     readonly delete: (projectId: ProjectId) => Effect.Effect<BotDeleteResult, BotOperationError>;
     readonly triggerBlock: (projectId: ProjectId) => Effect.Effect<string | undefined>;
+    /** Starts a run by hand. Refused for every reason a trigger is, daily limits included. */
+    readonly run: (input: BotRunInput) => Effect.Effect<BotRunResult, BotOperationError>;
   }
 >()("t3/bots/BotService") {}
 
@@ -111,6 +117,7 @@ const make = Effect.gen(function* () {
   const managedFolders = yield* ManagedProjectFolders.ManagedProjectFolders;
   const serverSettings = yield* ServerSettingsService.ServerSettingsService;
   const scheduledTasks = yield* ScheduledTaskService.ScheduledTaskService;
+  const threadLaunch = yield* ThreadLaunchService.ThreadLaunchService;
   const fileSystem = yield* FileSystem.FileSystem;
   const random = yield* SecureRandom.SecureRandom;
   const sqlOption = yield* Effect.serviceOption(SqlClient.SqlClient);
@@ -126,7 +133,7 @@ const make = Effect.gen(function* () {
   });
 
   const readSettings = (
-    operation: "list" | "get" | "getUsage" | "create" | "update" | "delete",
+    operation: "list" | "get" | "getUsage" | "create" | "update" | "delete" | "run",
     projectId?: ProjectId,
   ) =>
     serverSettings.getSettings.pipe(
@@ -157,7 +164,7 @@ const make = Effect.gen(function* () {
         );
 
   const loadBotProject = Effect.fn("BotService.loadBotProject")(function* (
-    operation: "get" | "getUsage" | "update" | "delete",
+    operation: "get" | "getUsage" | "update" | "delete" | "run",
     projectId: ProjectId,
     settings: ServerSettings,
   ) {
@@ -212,6 +219,32 @@ const make = Effect.gen(function* () {
     return toBotRecord(project, settings);
   });
 
+  const resolveBlockReason = Effect.fn("BotService.resolveBlockReason")(function* (
+    projectId: ProjectId,
+    settings: ServerSettings | undefined,
+    modelSelection?: ModelSelection,
+  ) {
+    const now = yield* localNow;
+    const block = yield* resolveBotTriggerBlock({
+      settings,
+      projectId,
+      modelSelection,
+      sql: Option.getOrUndefined(sqlOption),
+      now,
+      resolveDriverKind,
+    });
+    return block?.reason;
+  });
+
+  const triggerBlock: BotService["Service"]["triggerBlock"] = Effect.fn("BotService.triggerBlock")(
+    function* (projectId) {
+      const settings = yield* serverSettings.getSettings.pipe(
+        Effect.orElseSucceed(() => undefined),
+      );
+      return yield* resolveBlockReason(projectId, settings);
+    },
+  );
+
   const getUsage: BotService["Service"]["getUsage"] = Effect.fn("BotService.getUsage")(
     function* (projectId) {
       const settings = yield* readSettings("getUsage", projectId);
@@ -225,6 +258,7 @@ const make = Effect.gen(function* () {
             tokens: 0,
             dayStartAt: DateTime.formatIso(localDayStartUtc(now)),
           };
+      const blockedByPolicy = yield* resolveBlockReason(projectId, settings);
       return {
         projectId,
         limits: {
@@ -233,6 +267,7 @@ const make = Effect.gen(function* () {
           tokensPerDay: resolvedLimits.tokensPerDay,
         },
         usage,
+        ...(blockedByPolicy === undefined ? {} : { blockedByPolicy }),
       };
     },
   );
@@ -555,22 +590,47 @@ const make = Effect.gen(function* () {
     },
   );
 
-  const triggerBlock: BotService["Service"]["triggerBlock"] = Effect.fn("BotService.triggerBlock")(
-    function* (projectId) {
-      const settings = yield* serverSettings.getSettings.pipe(
-        Effect.orElseSucceed(() => undefined),
-      );
-      const now = yield* localNow;
-      const block = yield* resolveBotTriggerBlock({
-        settings,
+  const run: BotService["Service"]["run"] = Effect.fn("BotService.run")(function* (input) {
+    const { projectId } = input;
+    const settings = yield* readSettings("run", projectId);
+    const project = yield* loadBotProject("run", projectId, settings);
+    const modelSelection =
+      settings.projectSettingsOverrides[projectId]?.defaultModelSelection ??
+      settings.defaultModelSelection ??
+      input.fallbackModelSelection;
+    const blockedReason = yield* resolveBlockReason(projectId, settings, modelSelection);
+    if (blockedReason !== undefined) {
+      return yield* new BotOperationError({
+        operation: "run",
+        reason: "blocked",
         projectId,
-        sql: Option.getOrUndefined(sqlOption),
-        now,
-        resolveDriverKind,
+        detail: blockedReason,
       });
-      return block?.reason;
-    },
-  );
+    }
+    if (modelSelection === undefined) {
+      return yield* new BotOperationError({ operation: "run", reason: "no_model", projectId });
+    }
+
+    const runFailed = (cause: unknown) =>
+      new BotOperationError({ operation: "run", reason: "run_failed", projectId, cause });
+    const commandUuid = yield* random.uuidV4().pipe(Effect.mapError(runFailed));
+    const launched = yield* threadLaunch
+      .launch({
+        commandId: CommandId.make(`bot-run:${commandUuid}`),
+        projectId,
+        title: project.title,
+        modelSelection,
+        // The bot gate holds every bot thread here; storing it also fits any managed ceiling.
+        runtimeMode: "approval-required",
+        interactionMode: "default",
+        workspaceStrategy: { type: "root" },
+        initialMessage: { text: input.prompt, attachments: [] },
+        createdBy: "user",
+        creationSource: "web",
+      })
+      .pipe(Effect.mapError(runFailed));
+    return { projectId, threadId: launched.threadId };
+  });
 
   return BotService.of({
     list,
@@ -580,6 +640,7 @@ const make = Effect.gen(function* () {
     update,
     delete: deleteBot,
     triggerBlock,
+    run,
   });
 });
 
