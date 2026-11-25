@@ -48,6 +48,7 @@ import {
   CoordinatorHeaderTabs,
   useIsProjectCoordinator,
 } from "../projectHome/CoordinatorHeaderTabs";
+import { ThreadProjectCrumb } from "../projectHome/ProjectBreadcrumb";
 
 interface ChatHeaderProps {
   activeThreadEnvironmentId: EnvironmentId;
@@ -98,6 +99,8 @@ export const ChatHeader = memo(function ChatHeader({
   const isCoordinator =
     useIsProjectCoordinator(activeThreadEnvironmentId, activeProject?.id, activeThreadId) &&
     isServerThread;
+  // The coordinator reads as its project's Conversation view, beside Threads and Library.
+  const currentLabel = isCoordinator && activeProject ? gt("Conversation") : activeThreadTitle;
   const canOperateThread = useEnvironmentScope(
     activeThreadEnvironmentId,
     AuthOrchestrationOperateScope,
@@ -268,7 +271,9 @@ export const ChatHeader = memo(function ChatHeader({
         ariaLabel={gt("Thread breadcrumb")}
         className="flex-1 overflow-clip [overflow-clip-margin:2px]"
       >
-        {activeProject && !isCoordinator ? (
+        {activeProject && (isCoordinator || !activeProject.isScratch) ? (
+          <ThreadProjectCrumb project={activeProject} isHome={isCoordinator} />
+        ) : activeProject ? (
           <>
             <WorkspaceBreadcrumbItem className="shrink">
               <Tooltip>
@@ -374,8 +379,8 @@ export const ChatHeader = memo(function ChatHeader({
                   />
                 }
               >
-                <h2 className="min-w-0" dir={textDirection(activeThreadTitle)}>
-                  <WorkspaceBreadcrumbText>{activeThreadTitle}</WorkspaceBreadcrumbText>
+                <h2 className="min-w-0" dir={textDirection(currentLabel)}>
+                  <WorkspaceBreadcrumbText>{currentLabel}</WorkspaceBreadcrumbText>
                 </h2>
                 <ChevronDownIcon
                   aria-hidden
@@ -418,10 +423,10 @@ export const ChatHeader = memo(function ChatHeader({
           ) : null}
         </WorkspaceBreadcrumbItem>
       </WorkspaceBreadcrumb>
+      {isServerThread ? <GuestShareIndicator threadRef={activeThreadRef} /> : null}
       {isCoordinator && activeProject ? (
         <CoordinatorHeaderTabs environmentId={activeThreadEnvironmentId} project={activeProject} />
       ) : null}
-      {isServerThread ? <GuestShareIndicator threadRef={activeThreadRef} /> : null}
     </div>
   );
 });

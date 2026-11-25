@@ -8,11 +8,14 @@ import {
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { T, useGT } from "gt-react";
+import { SettingsIcon } from "lucide-react";
 
 import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import { serverEnvironment } from "~/state/server";
+import { Button } from "../ui/button";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { sinceAwayDigestCount } from "./sinceAwayDigest.logic";
 import { useProjectThreadBoard } from "./useProjectThreadBoard";
 
@@ -25,7 +28,7 @@ export function useIsProjectCoordinator(
   return coordinatorThreadIdOf(serverSettings, projectId) === threadId;
 }
 
-type ProjectView = "conversation" | "threads" | "library" | "settings";
+export type ProjectView = "conversation" | "threads" | "library";
 
 export function ProjectViewTabs({
   projectKey,
@@ -40,12 +43,7 @@ export function ProjectViewTabs({
   const hasDigestActivity = sinceAwayDigestCount(digest) > 0;
   const open = (view: ProjectView) => {
     if (view === active) return;
-    if (view === "settings") {
-      void navigate({
-        to: "/settings/projects",
-        search: { project: projectKey, machine: undefined },
-      });
-    } else if (view === "threads") {
+    if (view === "threads") {
       void navigate({ to: "/projects/$projectKey/threads", params: { projectKey } });
     } else if (view === "library") {
       void navigate({ to: "/projects/$projectKey/library", params: { projectKey } });
@@ -54,7 +52,7 @@ export function ProjectViewTabs({
     }
   };
   return (
-    <div className="shrink-0 [-webkit-app-region:no-drag]">
+    <div className="flex shrink-0 items-center gap-1 [-webkit-app-region:no-drag]">
       <ToggleGroup
         aria-label={gt("Project view")}
         variant="segmented"
@@ -93,10 +91,27 @@ export function ProjectViewTabs({
         <Toggle value="library">
           <T>Library</T>
         </Toggle>
-        <Toggle value="settings">
-          <T>Settings</T>
-        </Toggle>
       </ToggleGroup>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={gt("Project settings")}
+              onClick={() =>
+                void navigate({
+                  to: "/settings/projects",
+                  search: { project: projectKey, machine: undefined },
+                })
+              }
+            />
+          }
+        >
+          <SettingsIcon />
+        </TooltipTrigger>
+        <TooltipPopup>{gt("Project settings")}</TooltipPopup>
+      </Tooltip>
     </div>
   );
 }

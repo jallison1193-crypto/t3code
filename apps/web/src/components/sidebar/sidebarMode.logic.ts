@@ -44,7 +44,9 @@ export function resolveSidebarEffectiveMode(input: {
 export function filterThreadSidebarThreads<T extends ThreadModeSource>(
   threads: ReadonlyArray<T>,
   modeFilter: SidebarModeFilter,
+  isSearching = false,
 ): ReadonlyArray<T> {
-  if (modeFilter === "bots") return [];
+  // The Bots tab lists no threads, but a search typed there still has to find them.
+  if (modeFilter === "bots") return isSearching ? threads : [];
   return filterThreadsByMode(threads, modeFilter);
 }

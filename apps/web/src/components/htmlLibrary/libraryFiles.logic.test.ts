@@ -4,6 +4,8 @@ import { expect, it, vi } from "vite-plus/test";
 import {
   libraryFileOpenPath,
   libraryFilesView,
+  libraryModeFromSearch,
+  libraryUrlWithMode,
   libraryUrlWithView,
   libraryViewFromSearch,
   loadLibraryFiles,
@@ -102,6 +104,15 @@ it("reads and updates the view search param without losing other query params", 
   );
   expect(libraryUrlWithView("/projects/demo/library", "?foo=1", "", "files")).toBe(
     "/projects/demo/library?foo=1&view=files",
+  );
+  expect(libraryModeFromSearch("")).toBe("all");
+  expect(libraryModeFromSearch("?mode=bots")).toBe("all");
+  expect(libraryModeFromSearch("?view=files&mode=work")).toBe("work");
+  expect(libraryUrlWithMode("/library", "?view=files", "", "code")).toBe(
+    "/library?view=files&mode=code",
+  );
+  expect(libraryUrlWithMode("/library", "?view=files&mode=code", "", "all")).toBe(
+    "/library?view=files",
   );
 });
 

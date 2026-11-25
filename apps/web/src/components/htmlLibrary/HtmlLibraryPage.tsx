@@ -17,26 +17,27 @@ import {
   ORCHESTRATION_V2_WS_METHODS,
   type OrchestrationV2ListHtmlLibraryInput,
   type OrchestrationV2ListLibraryFilesInput,
-  type SidebarModeFilter as Mode,
 } from "@t3tools/contracts";
 import { htmlRenderFileName } from "@t3tools/shared/htmlRender";
 import { T, useGT, useMessages, Var } from "gt-react";
 import {
   ArrowUpRightIcon,
   EllipsisIcon,
+  FileTextIcon,
+  FilterXIcon,
+  FolderIcon,
   LibraryIcon,
   MessageSquareIcon,
   PencilIcon,
   PinIcon,
   PinOffIcon,
 } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { useLongLivedAssetUrl } from "~/assets/longLivedAssetUrls";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { connectionAtomRuntime } from "~/connection/runtime";
 import { isElectron } from "~/env";
-import { useClientSettings, useClientSettingsHydrated } from "~/hooks/useSettings";
 import { useStableCallback } from "~/hooks/useStableCallback";
 import { dispatchSnapShotComposerFocus } from "~/lib/desktopSnapShot";
 import { useRightPanelStore } from "~/rightPanelStore";
@@ -47,10 +48,9 @@ import { useEnvironmentsWithScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
 import { HtmlRenderDialog } from "../chat/HtmlRenderDialog";
-import { ProjectViewTabs } from "../projectHome/CoordinatorHeaderTabs";
+import { ProjectViewHeader } from "../projectHome/ProjectViewHeader";
 import { RelativeTime } from "../RelativeTime";
 import { useSettingsProjectGroups } from "../settings/useSettingsProjectGroups";
-import { SidebarModeFilter } from "../sidebar/SidebarModeFilter";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -62,6 +62,14 @@ import {
   DialogPopup,
   DialogTitle,
 } from "../ui/dialog";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "../ui/empty";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
@@ -86,12 +94,15 @@ import {
   libraryFileEntryKey,
   libraryFileOpenPath,
   libraryFilesView,
+  libraryModeFromSearch,
+  libraryUrlWithMode,
   libraryUrlWithView,
   libraryViewFromSearch,
   loadLibraryFiles,
   splitLibraryFilePath,
   startLibraryFiles,
   type LibraryFileEntry,
+  type LibraryMode,
   type LibraryView,
 } from "./libraryFiles.logic";
 
@@ -238,6 +249,131 @@ function RenameLibraryEntryDialog({
   );
 }
 
+/** Pages and files share one row: the whole row opens it, actions sit at the end. */
+function LibraryRow({
+  title,
+  detail,
+  source,
+  updatedAt,
+  onSelect,
+  entry,
+  actions,
+}: {
+  readonly title: string;
+  readonly detail?: string | null;
+  readonly source: string;
+  readonly updatedAt: string;
+  readonly onSelect: () => void;
+  readonly entry: Pick<HtmlLibraryEntry, "environmentId" | "threadId">;
+  readonly actions?: ReactNode;
+}) {
+  const gt = useGT();
+  return (
+    <li className="flex min-w-0 items-center">
+      <button
+        type="button"
+        className="flex min-w-0 flex-1 cursor-pointer flex-col gap-0.5 rounded-md px-3 py-2 text-start hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-2"
+        onClick={onSelect}
+      >
+        <span className="flex w-full min-w-0 items-baseline gap-2">
+          <span className="truncate text-sm font-medium">{title}</span>
+          {detail ? (
+            <span className="min-w-0 truncate text-xs text-muted-foreground">{detail}</span>
+          ) : null}
+        </span>
+        <span className="flex w-full min-w-0 gap-1 text-xs text-muted-foreground">
+          {source ? (
+            <>
+              <span className="truncate">{source}</span>
+              <span aria-hidden>·</span>
+            </>
+          ) : null}
+          <span className="shrink-0">
+            <RelativeTime timestamp={updatedAt} />
+          </span>
+        </span>
+      </button>
+      <div className="flex shrink-0 items-center gap-1 px-2">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={gt("Open source thread")}
+                render={
+                  <Link
+                    to="/$environmentId/$threadId"
+                    params={{ environmentId: entry.environmentId, threadId: entry.threadId }}
+                  />
+                }
+              />
+            }
+          >
+            <ArrowUpRightIcon />
+          </TooltipTrigger>
+          <TooltipPopup>{gt("Open source thread")}</TooltipPopup>
+        </Tooltip>
+        {actions}
+      </div>
+    </li>
+  );
+}
+
+function LibraryEmpty({
+  view,
+  filtered,
+  partial,
+  onShowAll,
+}: {
+  readonly view: LibraryView;
+  readonly filtered: boolean;
+  /** Some environments could not be read, so "none" only covers the others. */
+  readonly partial: boolean;
+  readonly onShowAll: () => void;
+}) {
+  return (
+    <Empty>
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          {filtered ? <FilterXIcon /> : view === "files" ? <FolderIcon /> : <FileTextIcon />}
+        </EmptyMedia>
+        <EmptyTitle>
+          {filtered ? (
+            <T>Nothing matches this filter</T>
+          ) : view === "files" ? (
+            partial ? (
+              <T>No files in available environments</T>
+            ) : (
+              <T>No files yet</T>
+            )
+          ) : partial ? (
+            <T>No pages in available environments</T>
+          ) : (
+            <T>No pages yet</T>
+          )}
+        </EmptyTitle>
+        <EmptyDescription>
+          {filtered ? (
+            <T>Show all to include both Code and Work threads.</T>
+          ) : view === "files" ? (
+            <T>Ask an agent for a report or other file and it shows up here.</T>
+          ) : (
+            <T>Ask an agent for a visual page and it shows up here.</T>
+          )}
+        </EmptyDescription>
+      </EmptyHeader>
+      {filtered ? (
+        <EmptyContent>
+          <Button variant="outline" size="sm" onClick={onShowAll}>
+            <T>Show all</T>
+          </Button>
+        </EmptyContent>
+      ) : null}
+    </Empty>
+  );
+}
+
 function LibraryEntryRow({
   entry,
   label,
@@ -258,41 +394,14 @@ function LibraryEntryRow({
   readonly onAskForChanges: (entry: HtmlLibraryEntry) => void;
 }) {
   const gt = useGT();
-  const source = [entry.projectTitle, entry.threadTitle, label].filter(Boolean).join(" · ");
   return (
-    <li className="flex min-w-0 items-center">
-      <button
-        type="button"
-        className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-md px-3 py-2 text-start hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-2"
-        onClick={() => onSelect(entry)}
-      >
-        <span className="w-full truncate text-sm font-medium">{entry.title}</span>
-        <span className="w-full truncate text-xs text-muted-foreground">{source}</span>
-      </button>
-      <div className="flex shrink-0 items-center gap-1 px-2">
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={gt("Open source thread")}
-                render={
-                  <Link
-                    to="/$environmentId/$threadId"
-                    params={{
-                      environmentId: entry.environmentId,
-                      threadId: entry.threadId,
-                    }}
-                  />
-                }
-              />
-            }
-          >
-            <ArrowUpRightIcon />
-          </TooltipTrigger>
-          <TooltipPopup>{gt("Open source thread")}</TooltipPopup>
-        </Tooltip>
+    <LibraryRow
+      title={entry.title}
+      source={[entry.projectTitle, entry.threadTitle, label].filter(Boolean).join(" · ")}
+      updatedAt={entry.updatedAt}
+      onSelect={() => onSelect(entry)}
+      entry={entry}
+      actions={
         <Menu>
           <MenuTrigger
             render={<Button variant="ghost" size="icon-sm" aria-label={gt("Page actions")} />}
@@ -323,8 +432,8 @@ function LibraryEntryRow({
             </MenuItem>
           </MenuPopup>
         </Menu>
-      </div>
-    </li>
+      }
+    />
   );
 }
 
@@ -332,10 +441,12 @@ function LibraryResults({
   sources,
   mode,
   environments,
+  onShowAll,
 }: {
   readonly sources: Parameters<typeof startLibrary>[0];
-  readonly mode: Mode;
+  readonly mode: LibraryMode;
   readonly environments: ReturnType<typeof useEnvironments>["environments"];
+  readonly onShowAll: () => void;
 }) {
   const gt = useGT();
   const m = useMessages();
@@ -591,24 +702,17 @@ function LibraryResults({
             ))}
           </ul>
         </section>
-      ) : empty ? (
+      ) : empty && (pending || view.hasMore) ? (
         <p role="status" className="py-6 text-sm text-muted-foreground">
-          {pending ? (
-            <T>Loading pages…</T>
-          ) : view.hasMore ? (
-            <T>Keep searching to see more results.</T>
-          ) : view.unavailable.length === 0 ? (
-            <T>
-              Nothing here yet. Ask an agent for a visual page, report, or file and it shows up
-              here.
-            </T>
-          ) : (
-            <T>
-              Nothing here yet in available environments. Ask an agent for a visual page, report, or
-              file and it shows up here.
-            </T>
-          )}
+          {pending ? <T>Loading pages…</T> : <T>Keep searching to see more results.</T>}
         </p>
+      ) : empty ? (
+        <LibraryEmpty
+          view="pages"
+          filtered={mode !== "all"}
+          partial={view.unavailable.length > 0}
+          onShowAll={onShowAll}
+        />
       ) : view.hasMore && !pending ? (
         <p role="status" className="py-3 text-sm text-muted-foreground">
           <T>Keep searching to see more results.</T>
@@ -660,59 +764,20 @@ function LibraryFileRow({
   readonly showProject: boolean;
   readonly label: string | undefined;
   readonly workspaceRoot: string | undefined;
-  readonly onOpenFile: (entry: LibraryFileEntry, relativePath: string) => void;
+  readonly onOpenFile: (entry: LibraryFileEntry, relativePath: string | null) => void;
 }) {
-  const gt = useGT();
   const { fileName, parentFolder } = splitLibraryFilePath(entry.path, workspaceRoot);
-  const openPath = libraryFileOpenPath(entry, workspaceRoot);
-  const source = [showProject ? entry.projectTitle : null, entry.threadTitle, label]
-    .filter(Boolean)
-    .join(" · ");
   return (
-    <li className="flex min-w-0 items-center justify-between gap-2 px-3 py-2">
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex min-w-0 items-baseline gap-2">
-          <span className="truncate text-sm font-medium">{fileName}</span>
-          {parentFolder ? (
-            <span className="min-w-0 truncate text-xs text-muted-foreground">{parentFolder}</span>
-          ) : null}
-        </div>
-        <span className="w-full truncate text-xs text-muted-foreground">
-          {source ? `${source} · ` : null}
-          <RelativeTime timestamp={entry.updatedAt} />
-        </span>
-      </div>
-      <div className="flex shrink-0 items-center gap-1">
-        {openPath !== null ? (
-          <Button variant="outline" size="xs" onClick={() => onOpenFile(entry, openPath)}>
-            <T>Open</T>
-          </Button>
-        ) : null}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={gt("Show thread")}
-                render={
-                  <Link
-                    to="/$environmentId/$threadId"
-                    params={{
-                      environmentId: entry.environmentId,
-                      threadId: entry.threadId,
-                    }}
-                  />
-                }
-              />
-            }
-          >
-            <ArrowUpRightIcon />
-          </TooltipTrigger>
-          <TooltipPopup>{gt("Show thread")}</TooltipPopup>
-        </Tooltip>
-      </div>
-    </li>
+    <LibraryRow
+      title={fileName}
+      detail={parentFolder}
+      source={[showProject ? entry.projectTitle : null, entry.threadTitle, label]
+        .filter(Boolean)
+        .join(" · ")}
+      updatedAt={entry.updatedAt}
+      onSelect={() => onOpenFile(entry, libraryFileOpenPath(entry, workspaceRoot))}
+      entry={entry}
+    />
   );
 }
 
@@ -721,11 +786,13 @@ function LibraryFilesResults({
   mode,
   environments,
   showProject,
+  onShowAll,
 }: {
   readonly sources: Parameters<typeof startLibraryFiles>[0];
-  readonly mode: Mode;
+  readonly mode: LibraryMode;
   readonly environments: ReturnType<typeof useEnvironments>["environments"];
   readonly showProject: boolean;
+  readonly onShowAll: () => void;
 }) {
   const navigate = useNavigate();
   const connected = useConnectedEnvironmentIds();
@@ -794,14 +861,19 @@ function LibraryFilesResults({
     return () => activeRequest.current?.abort();
   }, [refresh]);
 
-  const handleOpenFile = useStableCallback((entry: LibraryFileEntry, relativePath: string) => {
-    const threadRef = scopeThreadRef(entry.environmentId, entry.threadId);
-    useRightPanelStore.getState().openFile(threadRef, relativePath);
-    void navigate({
-      to: "/$environmentId/$threadId",
-      params: { environmentId: entry.environmentId, threadId: entry.threadId },
-    });
-  });
+  // A file outside the workspace has no panel to open in, so its row opens the thread.
+  const handleOpenFile = useStableCallback(
+    (entry: LibraryFileEntry, relativePath: string | null) => {
+      if (relativePath !== null) {
+        const threadRef = scopeThreadRef(entry.environmentId, entry.threadId);
+        useRightPanelStore.getState().openFile(threadRef, relativePath);
+      }
+      void navigate({
+        to: "/$environmentId/$threadId",
+        params: { environmentId: entry.environmentId, threadId: entry.threadId },
+      });
+    },
+  );
 
   const projectWorkspaceByKey = new Map(
     projects.map((project) => [
@@ -864,24 +936,17 @@ function LibraryFilesResults({
             );
           })}
         </ul>
-      ) : (
+      ) : pending || view.hasMore ? (
         <p role="status" className="py-6 text-sm text-muted-foreground">
-          {pending ? (
-            <T>Loading files…</T>
-          ) : view.hasMore ? (
-            <T>No matches in recent files.</T>
-          ) : view.unavailable.length === 0 ? (
-            <T>
-              Nothing here yet. Ask an agent for a visual page, report, or file and it shows up
-              here.
-            </T>
-          ) : (
-            <T>
-              Nothing here yet in available environments. Ask an agent for a visual page, report, or
-              file and it shows up here.
-            </T>
-          )}
+          {pending ? <T>Loading files…</T> : <T>No matches in recent files.</T>}
         </p>
+      ) : (
+        <LibraryEmpty
+          view="files"
+          filtered={mode !== "all"}
+          partial={view.unavailable.length > 0}
+          onShowAll={onShowAll}
+        />
       )}
       {view.hasMore && !(pending && empty) ? (
         <div className="mt-3">
@@ -910,9 +975,12 @@ function HtmlLibraryContent({
   const location = useLocation();
   const navigate = useNavigate();
   const view = libraryViewFromSearch(location.searchStr);
-  const rawMode = useClientSettings((settings) => settings.sidebarModeFilter);
-  const mode = rawMode === "bots" ? "all" : rawMode;
-  const settingsReady = useClientSettingsHydrated();
+  const mode = libraryModeFromSearch(location.searchStr);
+  const showMode = (target: LibraryMode) =>
+    void navigate({
+      href: libraryUrlWithMode(location.pathname, location.searchStr, location.hash, target),
+      replace: true,
+    });
   const { environments, isReady } = useEnvironments();
   const connected = useConnectedEnvironmentIds();
   const sources = projectKey
@@ -928,15 +996,18 @@ function HtmlLibraryContent({
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-        <WorkspacePageHeader electron={isElectron} className="bg-background">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <LibraryIcon className="size-4 shrink-0 text-muted-foreground" />
-            <h1 className="truncate text-sm font-medium text-foreground">
-              {group ? group.displayName : <T>Library</T>}
-            </h1>
-          </div>
-          {projectKey ? <ProjectViewTabs projectKey={projectKey} active="library" /> : null}
-        </WorkspacePageHeader>
+        {projectKey ? (
+          <ProjectViewHeader projectKey={projectKey} group={group ?? null} view="library" />
+        ) : (
+          <WorkspacePageHeader electron={isElectron} className="bg-background">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <LibraryIcon className="size-4 shrink-0 text-muted-foreground" />
+              <h1 className="truncate text-sm font-medium text-foreground">
+                <T>Library</T>
+              </h1>
+            </div>
+          </WorkspacePageHeader>
+        )}
         <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
           <div className="mx-auto w-full max-w-3xl px-4 py-4 sm:px-6">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -966,9 +1037,28 @@ function HtmlLibraryContent({
                   <T>Files</T>
                 </Toggle>
               </ToggleGroup>
-              <SidebarModeFilter label={gt("Library mode filter")} includeBots={false} />
+              <ToggleGroup
+                aria-label={gt("Library mode filter")}
+                variant="segmented"
+                size="segmented"
+                value={[mode]}
+                onValueChange={(next) => {
+                  const target = next.find((value): value is LibraryMode => value !== mode);
+                  if (target) showMode(target);
+                }}
+              >
+                <Toggle value="all">
+                  <T>All</T>
+                </Toggle>
+                <Toggle value="code">
+                  <T>Code</T>
+                </Toggle>
+                <Toggle value="work">
+                  <T>Work</T>
+                </Toggle>
+              </ToggleGroup>
             </div>
-            {isReady && settingsReady ? (
+            {isReady ? (
               projectKey && !group ? (
                 <p role="status" className="py-6 text-sm text-muted-foreground">
                   <T>Project not found</T>
@@ -980,6 +1070,7 @@ function HtmlLibraryContent({
                   mode={mode}
                   environments={environments}
                   showProject={!projectKey}
+                  onShowAll={() => showMode("all")}
                 />
               ) : (
                 <LibraryResults
@@ -987,6 +1078,7 @@ function HtmlLibraryContent({
                   sources={sources}
                   mode={mode}
                   environments={environments}
+                  onShowAll={() => showMode("all")}
                 />
               )
             ) : (

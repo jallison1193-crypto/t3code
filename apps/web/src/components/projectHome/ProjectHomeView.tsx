@@ -33,7 +33,14 @@ import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { resolveNewThreadModelSelection } from "@t3tools/shared/usageLimits";
 import { Atom } from "effect/reactivity";
 import { T, useGT } from "gt-react";
-import { AlertCircleIcon, BotIcon, FolderIcon, LockIcon, WifiOffIcon } from "lucide-react";
+import {
+  AlertCircleIcon,
+  BotIcon,
+  FolderIcon,
+  LockIcon,
+  NetworkIcon,
+  WifiOffIcon,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { BotHomeView } from "~/bots/BotHomeView";
@@ -66,7 +73,7 @@ import {
 } from "../ui/empty";
 import { SidebarInset } from "../ui/sidebar";
 import { stackedThreadToast, toastManager } from "../ui/toast";
-import { ProjectViewTabs } from "./CoordinatorHeaderTabs";
+import { ProjectViewHeader } from "./ProjectViewHeader";
 
 const FALSE_PERMISSION_ATOM = Atom.make(false);
 const EMPTY_PROVIDERS: ReadonlyArray<ServerProvider> = [];
@@ -445,7 +452,7 @@ export function ProjectHomeView({ projectKey }: { readonly projectKey: string })
           <Empty>
             <EmptyHeader>
               <EmptyMedia variant="icon">
-                <BotIcon />
+                <NetworkIcon />
               </EmptyMedia>
               <EmptyTitle>
                 <T>Coordinator unavailable</T>
@@ -524,17 +531,18 @@ export function ProjectHomeView({ projectKey }: { readonly projectKey: string })
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-        <WorkspacePageHeader electron={isElectron} className="bg-background">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <BotIcon className="size-4 shrink-0 text-muted-foreground" />
-            <h1 className="truncate text-sm font-medium text-foreground">
-              <T>Coordinator</T>
-            </h1>
-          </div>
-          {projectGroup !== null ? (
-            <ProjectViewTabs projectKey={projectKey} active="conversation" />
-          ) : null}
-        </WorkspacePageHeader>
+        {projectGroup !== null ? (
+          <ProjectViewHeader projectKey={projectKey} group={projectGroup} view="conversation" />
+        ) : (
+          <WorkspacePageHeader electron={isElectron} className="bg-background">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <NetworkIcon className="size-4 shrink-0 text-muted-foreground" />
+              <h1 className="truncate text-sm font-medium text-foreground">
+                <T>Coordinator</T>
+              </h1>
+            </div>
+          </WorkspacePageHeader>
+        )}
         {body}
       </div>
     </SidebarInset>

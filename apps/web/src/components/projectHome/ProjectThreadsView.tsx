@@ -9,17 +9,15 @@ import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell
 import { msg, T, useMessages, Var } from "gt-react";
 import { FolderIcon, ListTodoIcon } from "lucide-react";
 
-import { isElectron } from "~/env";
 import { useAcknowledgeThreadWoke } from "~/hooks/useThreadActions";
 import { cn } from "~/lib/utils";
 import { useRightPanelStore } from "~/rightPanelStore";
 import { readEnvironment, useEnvironments } from "~/state/environments";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
-import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
 import { SidebarInset } from "../ui/sidebar";
-import { ProjectViewTabs } from "./CoordinatorHeaderTabs";
+import { ProjectViewHeader } from "./ProjectViewHeader";
 import { sinceAwayDigestCount } from "./sinceAwayDigest.logic";
 import { useProjectThreadBoard } from "./useProjectThreadBoard";
 
@@ -240,14 +238,7 @@ export function ProjectThreadsView({ projectKey }: { readonly projectKey: string
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-        <WorkspacePageHeader electron={isElectron} className="bg-background">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <h1 className="truncate text-sm font-medium text-foreground">
-              <T>Threads</T>
-            </h1>
-          </div>
-          <ProjectViewTabs projectKey={projectKey} active="threads" />
-        </WorkspacePageHeader>
+        <ProjectViewHeader projectKey={projectKey} group={group} view="threads" />
         {body}
       </div>
     </SidebarInset>

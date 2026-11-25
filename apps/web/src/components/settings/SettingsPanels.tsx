@@ -1006,6 +1006,9 @@ export function GeneralSettingsPanel() {
             />
           }
         />
+      </SettingsSection>
+
+      <SettingsSection id="workspace" title={gt("Workspace")}>
         <SettingsRow
           {...setting("work-mode")}
           description={

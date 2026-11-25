@@ -74,6 +74,7 @@ import {
   ChevronDownIcon,
   FolderIcon,
   FolderPlusIcon,
+  HouseIcon,
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
@@ -1148,18 +1149,20 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             : thread,
         );
   const sidebarMode = useSidebarModeTabs();
+  const isSearchingThreads = threadSearchQuery.trim().length > 0;
+  const showBotsPanel = sidebarMode.effectiveModeFilter === "bots" && !isSearchingThreads;
   const listedThreads = filterThreadSidebarThreads(
     filterNonBotThreads(
       rawListedThreads,
       (environmentId) => serverConfigs.get(environmentId)?.settings,
     ),
     sidebarMode.effectiveModeFilter,
+    isSearchingThreads,
   );
   const routeRowThreadKey =
     routeThreadRef === null
       ? null
       : scopedThreadKey(resolveListedAncestorThreadRef(routeThreadRef, threads));
-  const isSearchingThreads = threadSearchQuery.trim().length > 0;
   // The open draft's first send names its thread in place; a finalized draft reached by
   // navigation resolves through its redirect instead, and still reveals.
   const routeKeyInPlace = routeDraftThread?.promotedTo != null;
@@ -1275,6 +1278,15 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       });
     },
   );
+  const openProjectHome = useStableCallback((projectGroup: SidebarProjectSnapshot) => {
+    if (isMobile) setOpenMobile(false);
+    void router.navigate({
+      to: "/projects/$projectKey",
+      params: {
+        projectKey: getSidebarProjectSettingsKey(projectGroup, projectGroupingSettings, projects),
+      },
+    });
+  });
   const {
     canPinProjectGroup: canPinProject,
     setProjectGroupPinned,
@@ -1290,6 +1302,15 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       suppressNextScopeChangeRef.current = true;
       dispatchProjectScopeMenu({ type: "project-settings-opened" });
       openProjectSettings(projectGroup);
+    },
+  );
+  const handleProjectHome = useStableCallback(
+    (event: ReactMouseEvent<HTMLElement>, projectGroup: SidebarProjectSnapshot) => {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressNextScopeChangeRef.current = true;
+      dispatchProjectScopeMenu({ type: "project-settings-opened" });
+      openProjectHome(projectGroup);
     },
   );
   const startThreadInProjectFolder = useStableCallback((group: SidebarProjectSnapshot) => {
@@ -1327,13 +1348,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         if (clicked._tag === "Failure") return;
         switch (clicked.value) {
           case "project-home":
-            if (isMobile) setOpenMobile(false);
-            void router.navigate({
-              to: "/projects/$projectKey",
-              params: {
-                projectKey: getSidebarProjectSettingsKey(group, projectGroupingSettings, projects),
-              },
-            });
+            openProjectHome(group);
             return;
           case "new-thread":
             startThreadInProjectFolder(group);
@@ -3326,6 +3341,21 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                                     />
                                   ) : null
                                 }
+                                home={
+                                  project.isScratch ? null : (
+                                    <Button
+                                      size="icon-xs"
+                                      variant="ghost-muted"
+                                      tabIndex={-1}
+                                      aria-hidden="true"
+                                      title={gt("Open project home")}
+                                      onPointerDown={(event) => event.stopPropagation()}
+                                      onClick={(event) => handleProjectHome(event, project)}
+                                    >
+                                      <HouseIcon className="size-3.5" />
+                                    </Button>
+                                  )
+                                }
                                 settings={
                                   <Button
                                     size="icon-xs"
@@ -3388,7 +3418,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           </SidebarGroup>
         }
       >
-        {sidebarMode.effectiveModeFilter === "bots" ? (
+        {showBotsPanel ? (
           <ThreadSidebarBotsPanel
             projectGroups={sidebarMode.projectGroups}
             getServerSettings={sidebarMode.getServerSettings}
@@ -3397,8 +3427,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           />
         ) : null}
         <SidebarGroup
-          className={sidebarMode.effectiveModeFilter === "bots" ? "hidden" : "flex-1"}
-          hidden={sidebarMode.effectiveModeFilter === "bots"}
+          className={showBotsPanel ? "hidden" : "flex-1"}
+          hidden={showBotsPanel}
           role="presentation"
         >
           {isSearchingThreads ? (

@@ -253,12 +253,6 @@ export function PluginsSettingsPanel() {
 
   return (
     <SettingsPageContainer>
-      <p className="-mt-6 px-3 text-xs text-muted-foreground sm:px-4">
-        <T>
-          Each environment has its own plugins. The one picked above is the one shown and changed
-          here.
-        </T>
-      </p>
       {connected &&
       environment.serverConfig !== null &&
       environment.serverConfig.environment.capabilities.environmentPlugins !== true ? (
@@ -478,11 +472,11 @@ function EnvironmentPluginsSection({
         }
       >
         <SettingsRow
-          title={gt("Plugins")}
+          title={gt("Run plugins")}
           description={
             <T>
-              Run installed user and repo plugins on this environment. Turning this off pauses every
-              plugin without uninstalling them.
+              Run installed user and repo plugins on the environment picked above; each environment
+              has its own. Turning this off pauses every plugin without uninstalling them.
             </T>
           }
           status={
@@ -498,7 +492,7 @@ function EnvironmentPluginsSection({
               checked={pluginsEnabled}
               disabled={!canUpdateSettings || savingPluginsEnabled}
               onCheckedChange={(checked) => void handleTogglePluginsEnabled(Boolean(checked))}
-              aria-label={gt("Plugins")}
+              aria-label={gt("Run plugins")}
             />
           }
         />
