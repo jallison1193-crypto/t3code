@@ -5,7 +5,9 @@ import {
   type EnvironmentId,
   type ProjectId,
   type ServerSettings,
+  type SidebarProjectGroupingMode,
 } from "@t3tools/contracts";
+import { derivePhysicalProjectKey } from "@t3tools/client-runtime/state/project-grouping";
 import { toSortableTimestamp } from "@t3tools/client-runtime/state/thread-sort";
 
 import type {
@@ -70,6 +72,25 @@ export function filterNonBotProjects<
   return projects.filter(
     (project) => !isBotProject(getServerSettings(project.environmentId), project.id),
   );
+}
+
+// A bot folder can sit inside a repository; repository grouping would merge it with that repo's project.
+export function keepBotProjectsSeparate(
+  projects: ReadonlyArray<{
+    readonly environmentId: EnvironmentId;
+    readonly id: ProjectId;
+    readonly workspaceRoot: string;
+  }>,
+  overrides: Record<string, SidebarProjectGroupingMode>,
+  getServerSettings: BotSettingsLookup,
+): Record<string, SidebarProjectGroupingMode> {
+  const botProjects = projects.filter((project) =>
+    isBotProject(getServerSettings(project.environmentId), project.id),
+  );
+  if (botProjects.length === 0) return overrides;
+  const next = { ...overrides };
+  for (const project of botProjects) next[derivePhysicalProjectKey(project)] = "separate";
+  return next;
 }
 
 export function filterNonBotThreads<

@@ -5,6 +5,7 @@ import {
   ThreadId,
   type ServerSettings,
 } from "@t3tools/contracts";
+import { derivePhysicalProjectKey } from "@t3tools/client-runtime/state/project-grouping";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -17,6 +18,7 @@ import {
   filterNonBotProjects,
   filterNonBotThreads,
   isAnyBotsEnabled,
+  keepBotProjectsSeparate,
 } from "./bots.logic";
 
 const ENV_LOCAL = EnvironmentId.make("env-local");
@@ -190,6 +192,19 @@ describe("bots client logic", () => {
         getSettings,
       ),
     ).toEqual([{ environmentId: ENV_LOCAL, projectId: ORDINARY_PROJECT, id: "1" }]);
+
+    const ordinary = { environmentId: ENV_LOCAL, id: ORDINARY_PROJECT, workspaceRoot: "/repo" };
+    const bot = { environmentId: ENV_LOCAL, id: BOT_PROJECT, workspaceRoot: "/repo/.t3/bots/x" };
+    expect(
+      keepBotProjectsSeparate(
+        [ordinary, bot],
+        { [derivePhysicalProjectKey(ordinary)]: "repository" },
+        getSettings,
+      ),
+    ).toEqual({
+      [derivePhysicalProjectKey(ordinary)]: "repository",
+      [derivePhysicalProjectKey(bot)]: "separate",
+    });
 
     expect(isAnyBotsEnabled([{ serverConfig: { settings: { botsEnabled: true } } }])).toBe(true);
     expect(isAnyBotsEnabled([{ serverConfig: { settings: { botsEnabled: false } } }])).toBe(false);
