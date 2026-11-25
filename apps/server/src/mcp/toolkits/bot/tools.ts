@@ -1,4 +1,6 @@
 import {
+  BotDailyUsage,
+  BotLimits,
   IsoDateTime,
   ModelSelection,
   OrchestratorMcpFailure,
@@ -23,6 +25,7 @@ const BotSummary = Schema.Struct({
   goal: Schema.String,
   modelSelection: Schema.NullOr(ModelSelection),
   paused: Schema.Boolean,
+  limits: Schema.optionalKey(BotLimits),
 });
 
 const BotTriggerSummary = Schema.Struct({
@@ -46,6 +49,7 @@ const BotRunSummary = Schema.Struct({
 
 const BotDetail = Schema.Struct({
   ...BotSummary.fields,
+  todayUsage: BotDailyUsage,
   triggers: Schema.Array(BotTriggerSummary),
   recentRuns: Schema.Array(BotRunSummary),
 });
@@ -65,7 +69,7 @@ const shared = {
 const BotReadTool = Tool.make("t3_bot_read", {
   ...shared,
   description:
-    "List this server's bots, or pass botId to read one bot's goal, model, paused state, triggers, and recent runs.",
+    "List this server's bots, or pass botId to read one bot's goal, model, paused state, limits, today's usage, triggers, and recent runs.",
   parameters: Schema.Struct({
     botId: Schema.optional(ProjectId),
   }),
@@ -84,13 +88,14 @@ const BotReadTool = Tool.make("t3_bot_read", {
 const BotUpdateTool = Tool.make("t3_bot_update", {
   ...shared,
   description:
-    "Create, update, pause, or resume a bot. Omit modelSelection to keep or inherit the default model; pass null to clear it.",
+    "Create, update, pause, or resume a bot, or set its daily limits. Omit modelSelection to keep or inherit the default model; pass null to clear it.",
   parameters: Schema.Struct({
     action: Schema.Literals(["create", "update", "pause", "resume"]),
     botId: Schema.optional(ProjectId),
     name: Schema.optional(TrimmedNonEmptyString),
     goal: Schema.optional(TrimmedString),
     modelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
+    limits: Schema.optional(BotLimits),
   }),
   success: Schema.Struct({
     bot: BotSummary,

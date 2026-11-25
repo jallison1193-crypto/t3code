@@ -1,29 +1,36 @@
 import {
   type BotCreateInput,
   type BotDeleteResult,
+  type BotLimits,
   BotOperationError,
+  type BotProfile,
   type BotRecord,
   type BotUpdateInput,
+  type BotUsageResult,
   CommandId,
   ProjectId,
   type Project,
   type ProjectSettingsOverrides,
   type ServerSettings,
-  botTriggerBlockReason,
   isBotPaused,
   isBotProject,
+  resolveBotLimits,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as ProjectService from "../project/ProjectService.ts";
+import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as ServerSettingsService from "../serverSettings.ts";
+import { localDayStartUtc, queryBotDailyUsage, resolveBotTriggerBlock } from "./botUsage.ts";
 
 const SINGLE_LINE_BOT_NAME = /^[^\r\n\v\f\u0085\u2028\u2029]+$/u;
 const MAX_BOT_NAME_LENGTH = 120;
@@ -52,14 +59,33 @@ function validateBotName(
   return Effect.succeed(name);
 }
 
+function normalizeBotLimits(limits: BotLimits): BotLimits {
+  const resolved = resolveBotLimits({ limits });
+  if (resolved.mode === "none") return { mode: "none" };
+  if (resolved.mode === "runs_only") {
+    return { mode: "runs_only", runsPerDay: resolved.runsPerDay };
+  }
+  return {
+    mode: "runs_and_tokens",
+    runsPerDay: resolved.runsPerDay,
+    tokensPerDay: resolved.tokensPerDay,
+  };
+}
+
 function toBotRecord(project: Project, settings: ServerSettings): BotRecord {
   const overrides = settings.projectSettingsOverrides[project.id];
+  const resolvedLimits = resolveBotLimits(overrides?.bot);
   return {
     projectId: project.id,
     name: project.title,
     goal: overrides?.projectInstructions ?? "",
     modelSelection: overrides?.defaultModelSelection ?? null,
     paused: isBotPaused(settings, project.id),
+    limits: {
+      mode: resolvedLimits.mode,
+      runsPerDay: resolvedLimits.runsPerDay,
+      tokensPerDay: resolvedLimits.tokensPerDay,
+    },
     workspaceRoot: project.workspaceRoot,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
@@ -71,6 +97,7 @@ export class BotService extends Context.Service<
   {
     readonly list: () => Effect.Effect<ReadonlyArray<BotRecord>, BotOperationError>;
     readonly get: (projectId: ProjectId) => Effect.Effect<BotRecord, BotOperationError>;
+    readonly getUsage: (projectId: ProjectId) => Effect.Effect<BotUsageResult, BotOperationError>;
     readonly create: (input: BotCreateInput) => Effect.Effect<BotRecord, BotOperationError>;
     readonly update: (input: BotUpdateInput) => Effect.Effect<BotRecord, BotOperationError>;
     readonly delete: (projectId: ProjectId) => Effect.Effect<BotDeleteResult, BotOperationError>;
@@ -85,9 +112,20 @@ const make = Effect.gen(function* () {
   const scheduledTasks = yield* ScheduledTaskService.ScheduledTaskService;
   const fileSystem = yield* FileSystem.FileSystem;
   const random = yield* SecureRandom.SecureRandom;
+  const sqlOption = yield* Effect.serviceOption(SqlClient.SqlClient);
+  const providerInstancesOption = yield* Effect.serviceOption(
+    ProviderInstanceRegistry.ProviderInstanceRegistry,
+  );
+  const localNow = DateTime.withCurrentZoneLocal(DateTime.nowInCurrentZone);
+
+  const resolveDriverKind = Option.match(providerInstancesOption, {
+    onNone: () => undefined,
+    onSome: (registry) => (instanceId: Parameters<typeof registry.getInstance>[0]) =>
+      registry.getInstance(instanceId).pipe(Effect.map((instance) => instance?.driverKind)),
+  });
 
   const readSettings = (
-    operation: "list" | "get" | "create" | "update" | "delete",
+    operation: "list" | "get" | "getUsage" | "create" | "update" | "delete",
     projectId?: ProjectId,
   ) =>
     serverSettings.getSettings.pipe(
@@ -118,7 +156,7 @@ const make = Effect.gen(function* () {
         );
 
   const loadBotProject = Effect.fn("BotService.loadBotProject")(function* (
-    operation: "get" | "update" | "delete",
+    operation: "get" | "getUsage" | "update" | "delete",
     projectId: ProjectId,
     settings: ServerSettings,
   ) {
@@ -172,6 +210,31 @@ const make = Effect.gen(function* () {
     const project = yield* loadBotProject("get", projectId, settings);
     return toBotRecord(project, settings);
   });
+
+  const getUsage: BotService["Service"]["getUsage"] = Effect.fn("BotService.getUsage")(
+    function* (projectId) {
+      const settings = yield* readSettings("getUsage", projectId);
+      yield* loadBotProject("getUsage", projectId, settings);
+      const now = yield* localNow;
+      const resolvedLimits = resolveBotLimits(settings.projectSettingsOverrides[projectId]?.bot);
+      const usage = Option.isSome(sqlOption)
+        ? yield* queryBotDailyUsage(sqlOption.value, projectId, now)
+        : {
+            runs: 0,
+            tokens: 0,
+            dayStartAt: DateTime.formatIso(localDayStartUtc(now)),
+          };
+      return {
+        projectId,
+        limits: {
+          mode: resolvedLimits.mode,
+          runsPerDay: resolvedLimits.runsPerDay,
+          tokensPerDay: resolvedLimits.tokensPerDay,
+        },
+        usage,
+      };
+    },
+  );
 
   const create: BotService["Service"]["create"] = Effect.fn("BotService.create")(function* (input) {
     const settings = yield* readSettings("create");
@@ -238,8 +301,10 @@ const make = Effect.gen(function* () {
       })
       .pipe(Effect.orElseSucceed(() => createdProject));
 
+    const botProfile: BotProfile =
+      input.limits === undefined ? {} : { limits: normalizeBotLimits(input.limits) };
     const override: ProjectSettingsOverrides = {
-      bot: {},
+      bot: botProfile,
       ...(goal.length > 0 ? { projectInstructions: goal } : {}),
       ...(input.modelSelection !== undefined && input.modelSelection !== null
         ? { defaultModelSelection: input.modelSelection }
@@ -311,7 +376,8 @@ const make = Effect.gen(function* () {
     if (
       input.goal !== undefined ||
       input.modelSelection !== undefined ||
-      input.paused !== undefined
+      input.paused !== undefined ||
+      input.limits !== undefined
     ) {
       const latest = yield* readSettings("update", input.projectId);
       const currentOverride = latest.projectSettingsOverrides[input.projectId] ?? { bot: {} };
@@ -324,8 +390,13 @@ const make = Effect.gen(function* () {
 
       const nextGoal = input.goal === undefined ? currentGoal : input.goal.trim();
       const nextModel = input.modelSelection === undefined ? currentModel : input.modelSelection;
-      const nextBot =
-        input.paused === undefined ? (currentBot ?? {}) : input.paused ? { paused: true } : {};
+      const nextPaused = input.paused === undefined ? currentBot?.paused : input.paused;
+      const nextLimits =
+        input.limits === undefined ? currentBot?.limits : normalizeBotLimits(input.limits);
+      const nextBot: BotProfile = {
+        ...(nextPaused === true ? { paused: true } : {}),
+        ...(nextLimits === undefined ? {} : { limits: nextLimits }),
+      };
 
       const nextOverride: ProjectSettingsOverrides = {
         ...restOverrides,
@@ -433,13 +504,22 @@ const make = Effect.gen(function* () {
       const settings = yield* serverSettings.getSettings.pipe(
         Effect.orElseSucceed(() => undefined),
       );
-      return botTriggerBlockReason(settings, projectId);
+      const now = yield* localNow;
+      const block = yield* resolveBotTriggerBlock({
+        settings,
+        projectId,
+        sql: Option.getOrUndefined(sqlOption),
+        now,
+        resolveDriverKind,
+      });
+      return block?.reason;
     },
   );
 
   return BotService.of({
     list,
     get,
+    getUsage,
     create,
     update,
     delete: deleteBot,

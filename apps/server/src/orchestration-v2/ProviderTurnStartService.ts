@@ -886,14 +886,25 @@ export const layer: Layer.Layer<
         .pipe(Effect.result);
       if (resolvedPolicy._tag === "Failure") {
         const error = resolvedPolicy.failure;
-        if (error._tag !== "RuntimePolicyAboveCeilingError") return yield* error;
-        yield* settleStartFailure({
-          signal: "runtime-mode-above-ceiling",
-          title: "Thread mode is above the policy limit",
-          error,
-          message: error.message,
-        });
-        return;
+        if (error._tag === "RuntimePolicyAboveCeilingError") {
+          yield* settleStartFailure({
+            signal: "runtime-mode-above-ceiling",
+            title: "Thread mode is above the policy limit",
+            error,
+            message: error.message,
+          });
+          return;
+        }
+        if (error._tag === "RuntimePolicyBotProviderUnsupportedError") {
+          yield* settleStartFailure({
+            signal: "bot-provider-unsupported",
+            title: "Bot model is not supported",
+            error,
+            message: error.message,
+          });
+          return;
+        }
+        return yield* error;
       }
       const resolvedRuntimePolicy = resolvedPolicy.success;
       if (!(yield* isCurrentAttemptInStatus("starting"))) return;

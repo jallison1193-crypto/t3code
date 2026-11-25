@@ -13018,5 +13018,18 @@
   "13557bebe932512e": "Activez Bots dans les Paramètres pour afficher et exécuter ce bot.",
   "0d77317043269532": "Ouvrir les Paramètres",
   "381afab738cd3007": "bots agents automatisations déclencheurs planifications webhooks pause désactiver",
-  "bbc646fa31828539": "Aucun bot pour le moment. Créez-en un pour l’exécuter selon une planification ou un webhook."
+  "bbc646fa31828539": "Aucun bot pour le moment. Créez-en un pour l’exécuter selon une planification ou un webhook.",
+  "cf47447bfea5d2d6": "Exécutions et jetons",
+  "922db0c8d9c6ed4e": "Exécutions uniquement",
+  "72e4e8de8476f463": "Aucune limite",
+  "88f8f3e4a67b5e5f": "Aujourd'hui : {runs} / {runsLimit} exécutions · {tokens} / {tokensLimit} jetons",
+  "d5b7dbb6aa82a7c9": "Aujourd'hui : {runs} / {runsLimit} exécutions · {tokens} jetons",
+  "a917d9e606cce99e": "Aujourd'hui : {runs} exécutions · {tokens} jetons",
+  "818a2b82a6f415e7": "Les limites quotidiennes doivent être des nombres entiers positifs.",
+  "25adc12314cdb81f": "Limites",
+  "c201f53debb9b241": "Plafond quotidien",
+  "c82e1f320b93fbc1": "Exécutions par jour",
+  "2996ea4e1e583d34": "Jetons par jour",
+  "dc53cecbcc085b27": "Pas encore pris en charge pour les bots. Choisissez Claude ou Codex.",
+  "5049d15df6e0fe27": "Le modèle de ce bot ne peut pas être contrôlé par T3. Choisissez un modèle Claude ou Codex."
 }

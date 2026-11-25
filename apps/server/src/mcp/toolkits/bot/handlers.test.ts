@@ -3,9 +3,11 @@ import {
   BotOperationError,
   BOTS_DISABLED_REASON,
   type BotRecord,
+  DEFAULT_BOT_LIMITS,
   EnvironmentId,
   ProjectId,
   ProviderInstanceId,
+  resolveBotLimits,
   ScheduledTaskId,
   ThreadId,
   type ScheduledTask,
@@ -121,6 +123,24 @@ const makeHarness = Effect.fn("BotToolkitTest.makeHarness")(function* (initial?:
     Layer.mock(BotService.BotService)({
       list: () => Effect.sync(() => [...botsMap.values()]),
       get: (projectId) => Effect.sync(() => botsMap.get(projectId)!),
+      getUsage: (projectId) =>
+        Effect.sync(() => {
+          const bot = botsMap.get(projectId)!;
+          const resolved = resolveBotLimits({ limits: bot.limits });
+          return {
+            projectId,
+            limits: {
+              mode: resolved.mode,
+              runsPerDay: resolved.runsPerDay,
+              tokensPerDay: resolved.tokensPerDay,
+            },
+            usage: {
+              runs: 3,
+              tokens: 45_000,
+              dayStartAt: "2026-10-01T00:00:00.000Z",
+            },
+          };
+        }),
       create: (input) =>
         Effect.gen(function* () {
           const current = yield* settings.getSettings.pipe(Effect.orDie);
@@ -130,12 +150,18 @@ const makeHarness = Effect.fn("BotToolkitTest.makeHarness")(function* (initial?:
               reason: "bots_disabled",
             });
           }
+          const resolved = resolveBotLimits({ limits: input.limits });
           const record: BotRecord = {
             projectId: BOT_ID,
             name: input.name,
             goal: input.goal ?? "",
             modelSelection: input.modelSelection ?? null,
             paused: false,
+            limits: {
+              mode: resolved.mode,
+              runsPerDay: resolved.runsPerDay,
+              tokensPerDay: resolved.tokensPerDay,
+            },
             workspaceRoot: "/tmp/bots/digest",
             createdAt: DateTime.formatIso(EPOCH),
             updatedAt: DateTime.formatIso(EPOCH),
@@ -146,12 +172,17 @@ const makeHarness = Effect.fn("BotToolkitTest.makeHarness")(function* (initial?:
       update: (input) =>
         Effect.sync(() => {
           const current = botsMap.get(input.projectId)!;
+          const nextLimits =
+            input.limits === undefined
+              ? current.limits
+              : resolveBotLimits({ limits: input.limits });
           const next: BotRecord = {
             ...current,
             ...(input.name === undefined ? {} : { name: input.name }),
             ...(input.goal === undefined ? {} : { goal: input.goal }),
             ...(input.modelSelection === undefined ? {} : { modelSelection: input.modelSelection }),
             ...(input.paused === undefined ? {} : { paused: input.paused }),
+            ...(nextLimits === undefined ? {} : { limits: nextLimits }),
           };
           botsMap.set(input.projectId, next);
           return next;
@@ -203,6 +234,7 @@ describe("bot MCP toolkit handlers", () => {
             goal: "Summarize open PRs",
             modelSelection: null,
             paused: false,
+            limits: DEFAULT_BOT_LIMITS,
           },
         });
 
@@ -214,6 +246,7 @@ describe("bot MCP toolkit handlers", () => {
               goal: "Summarize open PRs",
               modelSelection: null,
               paused: false,
+              limits: DEFAULT_BOT_LIMITS,
             },
           ],
         });
@@ -223,6 +256,12 @@ describe("bot MCP toolkit handlers", () => {
           bot: {
             id: BOT_ID,
             name: "PR Digest",
+            limits: DEFAULT_BOT_LIMITS,
+            todayUsage: {
+              runs: 3,
+              tokens: 45_000,
+              dayStartAt: "2026-10-01T00:00:00.000Z",
+            },
             triggers: [{ id: "task:digest-daily", title: "Morning digest" }],
             recentRuns: [
               { threadId: RUN_THREAD_1, title: "Morning digest run", status: "completed" },
@@ -242,9 +281,15 @@ describe("bot MCP toolkit handlers", () => {
             botId: BOT_ID,
             name: "Evening Digest",
             goal: "Summarize closed PRs",
+            limits: { mode: "runs_only", runsPerDay: 10 },
           }),
         ).toMatchObject({
-          bot: { id: BOT_ID, name: "Evening Digest", goal: "Summarize closed PRs" },
+          bot: {
+            id: BOT_ID,
+            name: "Evening Digest",
+            goal: "Summarize closed PRs",
+            limits: { mode: "runs_only", runsPerDay: 10 },
+          },
         });
 
         // Read-only client can read but cannot update.

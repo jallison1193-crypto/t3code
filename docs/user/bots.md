@@ -32,3 +32,24 @@ Go to **Settings -> General** and turn **Bots** off.
 - Turning Bots off hides the **Bots** sidebar tab, the **New bot** command, and every bot's runs (including waiting runs in **Needs you**).
 - Every bot trigger is blocked while Bots is off. Scheduled ticks are skipped without building a backlog, and webhooks and manual runs are refused.
 - Your bots, triggers, and run history are kept intact. Turn **Bots** back on in **Settings -> General** to restore everything.
+
+## Safety gates
+
+Bot threads always run through T3 Code's approval gate, even if a trigger or thread is set to a more permissive mode. T3 Code inspects each action before allowing it:
+
+- **Allowed automatically:** Reads, ordinary edits inside the bot's folder, and read-only tools.
+- **Ask before sending or deleting:** Actions that send messages, emails, posts, comments, pull requests, or non-GET HTTP requests, as well as commands or edits that delete files, wait for your approval. Held approvals appear in **Needs you** and trigger phone alerts with only **Approve once** and **Decline** options.
+- **Paying is blocked:** Tools and commands for paying, purchasing, checkout, ordering, transferring money, subscribing, or tipping are declined automatically.
+
+## Supported models
+
+Bots require a provider that routes every tool and MCP call through T3 Code's approval gate. Today, **Claude** and **Codex** models are supported. Runs configured with another provider fail closed with a notice prompting you to pick a Claude or Codex model.
+
+## Daily limits
+
+Each bot has daily usage limits to cap automated spending and run volume:
+
+- **Defaults:** 24 trigger runs per day and 2,000,000 tokens per day (`Runs and tokens`).
+- **Modes:** Edit a bot's **Limits** in its settings to switch between **Runs and tokens**, **Runs only**, or **No limits**, or to adjust the daily caps.
+- **What stops when a limit is reached:** Scheduled ticks are skipped without building a backlog, and incoming webhooks are refused. Clicking **Run now** on a trigger and chatting in a bot thread still work.
+- **Midnight reset:** Counts reset at local midnight on the server, and blocked triggers resume automatically without firing missed runs.
