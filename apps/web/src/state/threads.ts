@@ -45,6 +45,7 @@ export const olderSettledThreads = createOlderSettledThreadAtoms(
 const baseThreadEnvironment = createThreadEnvironmentAtoms(
   connectionAtomRuntime,
   threadFamilies.snapshotAtom,
+  environmentShell.statusAtom,
 );
 
 let cachedReadAppMode: (() => AppMode) | null = null;

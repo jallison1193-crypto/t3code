@@ -1,4 +1,5 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { contextMenuSourceOf } from "../contextMenuSource";
 import {
   ClipboardApiUnavailableError,
   ClipboardWriteError,
@@ -127,10 +128,11 @@ function showWorkspaceContextMenu(event: ReactMouseEvent, workspacePath: string)
   event.preventDefault();
   event.stopPropagation();
   void api.contextMenu
-    .show([{ id: "copy-path", label: resolveMessage(msg("Copy full path")), icon: "copy" }], {
-      x: event.clientX,
-      y: event.clientY,
-    })
+    .show(
+      [{ id: "copy-path", label: resolveMessage(msg("Copy full path")), icon: "copy" }],
+      { x: event.clientX, y: event.clientY },
+      contextMenuSourceOf(event),
+    )
     .then((action) => {
       if (action !== "copy-path") return;
       const clipboardPath = formatFilePathForClipboard(workspacePath);
@@ -160,6 +162,8 @@ interface RunContextSelectorProps {
   showGitControls?: boolean;
   workspaceRoot?: string;
   forceNewWorktree: boolean;
+  /** False when the folder has no repository a worktree could come from. */
+  offersWorkspaceModes: boolean;
   autoEnvironmentLabel?: string | undefined;
   onAutoEnvironment?: (() => void) | undefined;
   envLocked: boolean;
@@ -183,7 +187,8 @@ const RunContextSelector = memo(function RunContextSelector({
   displayMode = "toolbar",
   showGitControls = true,
   workspaceRoot,
-  forceNewWorktree,
+  forceNewWorktree: requestedForceNewWorktree,
+  offersWorkspaceModes,
   autoEnvironmentLabel,
   onAutoEnvironment,
   envLocked,
@@ -193,7 +198,7 @@ const RunContextSelector = memo(function RunContextSelector({
   showEnvironmentPicker,
   showEnvironmentIndicator,
   onEnvironmentChange,
-  effectiveEnvMode,
+  effectiveEnvMode: requestedEnvMode,
   activeWorktreePath,
   onEnvModeChange,
   previousWorktreeLabel,
@@ -207,11 +212,15 @@ const RunContextSelector = memo(function RunContextSelector({
   const composerFloatingLayerProps = useComposerMenuProps();
   const activeEnvironment =
     availableEnvironments?.find((env) => env.environmentId === environmentId) ?? null;
+  // A folder no worktree can come from runs threads in place, whatever mode was requested.
+  const canPickWorkspaceMode = showGitControls && offersWorkspaceModes;
+  const forceNewWorktree = canPickWorkspaceMode && requestedForceNewWorktree;
+  const effectiveEnvMode = canPickWorkspaceMode ? requestedEnvMode : "local";
   const WorkspaceIcon = !showGitControls
     ? FolderIcon
     : effectiveEnvMode === "worktree"
       ? FolderGit2Icon
-      : activeWorktreePath
+      : activeWorktreePath && offersWorkspaceModes
         ? FolderGitIcon
         : FolderIcon;
   const workspaceLabel = !showGitControls
@@ -236,10 +245,11 @@ const RunContextSelector = memo(function RunContextSelector({
     availableEnvironments &&
     ((showEnvironmentPicker && onEnvironmentChange) || addTargets.length > 0),
   );
+  const workspaceModesLocked = envModeLocked || !canPickWorkspaceMode;
   const isLocked =
     (!showGitControls && !hasEnvironmentMenu) ||
     envLocked ||
-    (envModeLocked && (!isPanel || !showEnvironmentPicker));
+    (workspaceModesLocked && (!isPanel || !showEnvironmentPicker));
   const workspacePath =
     forceNewWorktree || (effectiveEnvMode === "worktree" && !activeWorktreePath)
       ? null
@@ -333,7 +343,7 @@ const RunContextSelector = memo(function RunContextSelector({
         data-composer-context-control
         data-composer-shortcut={[
           showEnvironmentPicker && !envLocked ? "composer.host" : "",
-          showGitControls && !envModeLocked ? "composer.workspace" : "",
+          !workspaceModesLocked ? "composer.workspace" : "",
         ].join(" ")}
       >
         {triggerContent}
@@ -424,10 +434,10 @@ const RunContextSelector = memo(function RunContextSelector({
                 </MenuSub>
               ) : null}
             </MenuGroup>
-            {showGitControls ? <MenuSeparator /> : null}
+            {canPickWorkspaceMode ? <MenuSeparator /> : null}
           </>
         ) : null}
-        {showGitControls ? (
+        {canPickWorkspaceMode ? (
           <MenuGroup>
             <MenuGroupLabel>
               <T>Workspace</T>
@@ -753,6 +763,7 @@ export const BranchToolbar = memo(function BranchToolbar({
             showGitControls={showWorkspaceChoices}
             workspaceRoot={activeProject.workspaceRoot}
             forceNewWorktree={forceNewWorktree}
+            offersWorkspaceModes={showGitControls}
             autoEnvironmentLabel={autoEnvironmentLabel}
             onAutoEnvironment={onAutoEnvironment}
             envLocked={envLocked}
@@ -803,6 +814,7 @@ export const BranchToolbar = memo(function BranchToolbar({
         <div className="contents @xl/composer-surface:hidden">
           <RunContextSelector
             forceNewWorktree={forceNewWorktree}
+            offersWorkspaceModes={showGitControls}
             autoEnvironmentLabel={autoEnvironmentLabel}
             onAutoEnvironment={onAutoEnvironment}
             envLocked={envLocked}
