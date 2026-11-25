@@ -5,6 +5,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { T, useGT } from "gt-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
+import { filterNonBotProjects, filterNonBotThreads } from "../bots/bots.logic";
 import { resolveChatIndexLandingTarget } from "../chatIndexLanding.logic";
 import { isElectron } from "../env";
 import { NoProjectsHero } from "../components/NoProjectsHero";
@@ -54,9 +55,17 @@ function IndexDraftLanding() {
   const appMode = useClientSettings((settings) => settings.appMode);
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const projects = useProjects();
-  const threads = useVisibleThreadShells();
+  const allProjects = useProjects();
+  const allThreads = useVisibleThreadShells();
   const serverConfigs = useServerConfigs();
+  const projects = filterNonBotProjects(
+    allProjects,
+    (environmentId) => serverConfigs.get(environmentId)?.settings,
+  );
+  const threads = filterNonBotThreads(
+    allThreads,
+    (environmentId) => serverConfigs.get(environmentId)?.settings,
+  );
   const bootstrapped = useAllEnvironmentShellsBootstrapped();
   const handleNewThread = useNewThreadHandler();
   const router = useRouter();

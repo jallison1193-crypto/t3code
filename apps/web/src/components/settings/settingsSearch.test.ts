@@ -114,6 +114,13 @@ describe("searchSettings", () => {
     });
   });
 
+  it("finds the Bots setting under General", () => {
+    expect(searchSettings("bots")[0]).toMatchObject({
+      id: "bots-enabled",
+      to: "/settings/general",
+    });
+  });
+
   it("finds project instructions, memory, and knowledge files under project settings", () => {
     expect(searchSettings("project instructions")[0]).toMatchObject({
       id: "project-instructions",

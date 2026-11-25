@@ -30,12 +30,14 @@ import {
   type ProjectGroupingSettings,
 } from "@t3tools/client-runtime/state/project-grouping";
 import { resolveNewThreadEnvMode, resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import { filterNonBotProjects } from "../bots/bots.logic";
 import {
   readProjects,
   readThreadShell,
   readThreadShells,
   useProjects,
   useQuietThreadShell,
+  useServerConfigs,
 } from "../state/entities";
 import {
   draftModelSelectionApplies,
@@ -527,7 +529,12 @@ export function useHandleNewThread() {
         : useComposerDraftStore.getState().getDraftSession(routeTarget.draftId)
       : null,
   );
-  const projects = useProjects();
+  const allProjects = useProjects();
+  const serverConfigs = useServerConfigs();
+  const projects = filterNonBotProjects(
+    allProjects,
+    (environmentId) => serverConfigs.get(environmentId)?.settings,
+  );
   const handleNewThread = useNewThreadHandler();
   const groupingSettings = useClientSettings(selectProjectGroupingSettings);
   const defaultProjectRef = resolveDefaultProjectRef(

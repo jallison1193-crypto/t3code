@@ -897,7 +897,8 @@ function HtmlLibraryContent({
   const location = useLocation();
   const navigate = useNavigate();
   const view = libraryViewFromSearch(location.searchStr);
-  const mode = useClientSettings((settings) => settings.sidebarModeFilter);
+  const rawMode = useClientSettings((settings) => settings.sidebarModeFilter);
+  const mode = rawMode === "bots" ? "all" : rawMode;
   const settingsReady = useClientSettingsHydrated();
   const { environments, isReady } = useEnvironments();
   const connected = useConnectedEnvironmentIds();
@@ -952,7 +953,7 @@ function HtmlLibraryContent({
                   <T>Files</T>
                 </Toggle>
               </ToggleGroup>
-              <SidebarModeFilter label={gt("Library mode filter")} />
+              <SidebarModeFilter label={gt("Library mode filter")} includeBots={false} />
             </div>
             {isReady && settingsReady ? (
               projectKey && !group ? (

@@ -138,6 +138,7 @@ import { coordinatorThreadIdOf } from "@t3tools/client-runtime/coordinator-threa
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useOrderWhileOpen } from "../hooks/useOrderWhileOpen";
 import { useProjectPin } from "../hooks/useProjectGroupUpdate";
+import { filterNonBotThreads } from "../bots/bots.logic";
 import { useSidebarProjectGroups } from "../hooks/useSidebarProjectGroups";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { registerSettleAndAdvance } from "../settleAndAdvance";
@@ -1134,7 +1135,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         );
   const threads = useQuietThreadShells();
   const promotingDraftThreadKeys = usePromotingDraftThreadKeys();
-  const listedThreads =
+  const rawListedThreads =
     promotingDraftThreadKeys.length === 0
       ? threads
       : threads.map((thread) =>
@@ -1142,6 +1143,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             ? asLaunchingThread(thread)
             : thread,
         );
+  const listedThreads = filterNonBotThreads(
+    rawListedThreads,
+    (environmentId) => serverConfigs.get(environmentId)?.settings,
+  );
   const routeRowThreadKey =
     routeThreadRef === null
       ? null

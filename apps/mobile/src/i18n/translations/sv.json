@@ -5583,5 +5583,9 @@
   "ac10cafdeea93121": "{count, plural, one {Skrev en plugin {count} gång} other {Skrev en plugin {count} gånger}}",
   "52b987ceaa1e9498": "{count, plural, one {Försökte skriva en plugin {count} gång} other {Försökte skriva en plugin {count} gånger}}",
   "2450a6722d95b646": "{status, select, inProgress {Läser pluginer} completed {Läste pluginer} failed {Kunde inte läsa pluginer} declined {Avböjde att läsa pluginer} stopped {Slutade läsa pluginer} other {Läser pluginer}}",
-  "3c08c0c95a3b07e2": "{status, select, inProgress {Skriver en plugin} completed {Skrev en plugin} failed {Kunde inte skriva pluginen} declined {Avböjde att skriva pluginen} stopped {Slutade skriva pluginen} other {Skriver en plugin}}"
+  "3c08c0c95a3b07e2": "{status, select, inProgress {Skriver en plugin} completed {Skrev en plugin} failed {Kunde inte skriva pluginen} declined {Avböjde att skriva pluginen} stopped {Slutade skriva pluginen} other {Skriver en plugin}}",
+  "009f5e6f7c064faa": "{count, plural, one {Kontrollerade botar {count} gång} other {Kontrollerade botar {count} gånger}}",
+  "c78f0a513623a3c4": "{count, plural, one {Försökte kontrollera botar {count} gång} other {Försökte kontrollera botar {count} gånger}}",
+  "ccb358e98ac6702c": "{count, plural, one {Uppdaterade en bot {count} gång} other {Uppdaterade en bot {count} gånger}}",
+  "e8b01d0152209242": "{count, plural, one {Försökte uppdatera en bot {count} gång} other {Försökte uppdatera en bot {count} gånger}}"
 }

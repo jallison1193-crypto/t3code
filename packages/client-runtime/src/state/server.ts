@@ -2008,6 +2008,24 @@ export function createServerEnvironmentAtoms<R, E>(
       scheduler: configScheduler,
       concurrency: configConcurrency,
     }),
+    createBot: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:bots:create",
+      tag: WS_METHODS.botsCreate,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
+    updateBot: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:bots:update",
+      tag: WS_METHODS.botsUpdate,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
+    deleteBot: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:bots:delete",
+      tag: WS_METHODS.botsDelete,
+      scheduler: configScheduler,
+      concurrency: configConcurrency,
+    }),
     createGuestShare: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:guest-share:create",
       tag: WS_METHODS.guestShareCreate,

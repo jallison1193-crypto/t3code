@@ -42,12 +42,141 @@ const DIGEST_GROUP_PRESENTATION = [
   { key: "finished", label: msg("Finished"), dotClass: "bg-emerald-500 dark:bg-emerald-300/90" },
 ] as const;
 
-export function ProjectThreadsView({ projectKey }: { readonly projectKey: string }) {
+export function ProjectThreadBoardContent({
+  columns,
+  openCount,
+  digest,
+  onOpenThread,
+  emptyTitle,
+  emptyDescription,
+  className,
+}: {
+  readonly columns: Record<ProjectThreadBoardColumn, ReadonlyArray<EnvironmentThreadShell>>;
+  readonly openCount: number;
+  readonly digest: ReturnType<typeof useProjectThreadBoard>["digest"];
+  readonly onOpenThread: (thread: EnvironmentThreadShell) => void;
+  readonly emptyTitle: React.ReactNode;
+  readonly emptyDescription: React.ReactNode;
+  readonly className?: string;
+}) {
   const m = useMessages();
+  const markThreadVisited = useAcknowledgeThreadWoke();
+
+  if (openCount === 0 && columns.done.length === 0) {
+    return (
+      <Empty className={className}>
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <ListTodoIcon />
+          </EmptyMedia>
+          <EmptyTitle>{emptyTitle}</EmptyTitle>
+          <EmptyDescription>{emptyDescription}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    );
+  }
+
+  const hasDigest = sinceAwayDigestCount(digest) > 0;
+  const markableThreads = [...digest.failed, ...digest.finished];
+  return (
+    <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden", className)}>
+      {hasDigest ? (
+        <section
+          aria-label={m(SINCE_AWAY_LABEL)}
+          className="mx-4 mt-3 flex shrink-0 flex-col gap-2 rounded-lg border bg-muted/30 px-3 py-2.5"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-xs font-medium text-muted-foreground">{m(SINCE_AWAY_LABEL)}</h2>
+            {markableThreads.length > 0 ? (
+              <Button
+                variant="ghost-muted"
+                size="xs"
+                onClick={() => {
+                  // The server's own updatedAt, like the command palette, so client clock skew can't leave a thread unseen.
+                  for (const thread of markableThreads) {
+                    markThreadVisited(
+                      scopeThreadRef(thread.environmentId, thread.id),
+                      thread.updatedAt,
+                    );
+                  }
+                }}
+              >
+                <T>Mark all seen</T>
+              </Button>
+            ) : null}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {DIGEST_GROUP_PRESENTATION.map(({ key, label, dotClass }) => {
+              const threads = digest[key];
+              if (threads.length === 0) return null;
+              return (
+                <div key={key} className="flex flex-wrap items-center gap-1.5">
+                  <span className="flex shrink-0 items-center gap-1.5 pr-1 text-xs font-medium text-muted-foreground">
+                    <span aria-hidden className={cn("size-2 rounded-full", dotClass)} />
+                    {m(label)}
+                    <span className="tabular-nums">{threads.length}</span>
+                  </span>
+                  {threads.map((thread) => (
+                    <button
+                      key={`${thread.environmentId}:${thread.id}`}
+                      type="button"
+                      onClick={() => onOpenThread(thread)}
+                      className="max-w-56 cursor-pointer truncate rounded-md border bg-card px-2 py-0.5 text-xs text-foreground hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
+                    >
+                      {thread.title}
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+      <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4">
+        {PROJECT_THREAD_BOARD_COLUMNS.map((column) => (
+          <section
+            key={column}
+            aria-label={m(COLUMN_PRESENTATION[column].label)}
+            className="flex min-h-0 min-w-48 flex-1 basis-0 flex-col"
+          >
+            <h2 className="mb-2 flex shrink-0 items-center gap-2 px-1 text-xs font-medium text-muted-foreground">
+              <span
+                aria-hidden
+                className={cn("size-2 rounded-full", COLUMN_PRESENTATION[column].dotClass)}
+              />
+              {m(COLUMN_PRESENTATION[column].label)}
+              <span className="tabular-nums">{columns[column].length}</span>
+            </h2>
+            <ul className="flex min-h-0 flex-col gap-1.5 overflow-y-auto">
+              {columns[column].map((thread) => (
+                <li key={`${thread.environmentId}:${thread.id}`}>
+                  <button
+                    type="button"
+                    onClick={() => onOpenThread(thread)}
+                    className={cn(
+                      "flex w-full flex-col gap-0.5 rounded-lg border bg-card px-2.5 py-2 text-left hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
+                      column === "done" && "text-muted-foreground",
+                    )}
+                  >
+                    <span className="truncate text-sm">{thread.title}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {formatRelativeTimeLabel(thread.updatedAt)}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function ProjectThreadsView({ projectKey }: { readonly projectKey: string }) {
   const navigate = useNavigate();
   const { isReady } = useEnvironments();
   const { group, columns, openCount, digest } = useProjectThreadBoard(projectKey);
-  const markThreadVisited = useAcknowledgeThreadWoke();
 
   // From the board, a thread opens beside its project's coordinator when there is one.
   const openThread = (thread: EnvironmentThreadShell) => {
@@ -90,120 +219,21 @@ export function ProjectThreadsView({ projectKey }: { readonly projectKey: string
         <T>Loading project…</T>
       </div>
     );
-  } else if (openCount === 0 && columns.done.length === 0) {
-    body = (
-      <Empty>
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <ListTodoIcon />
-          </EmptyMedia>
-          <EmptyTitle>
-            <T>No threads yet</T>
-          </EmptyTitle>
-          <EmptyDescription>
-            <T>
-              Threads you or the coordinator start in <Var>{group.displayName}</Var> show up here by
-              state.
-            </T>
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    );
   } else {
-    const hasDigest = sinceAwayDigestCount(digest) > 0;
-    const markableThreads = [...digest.failed, ...digest.finished];
     body = (
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {hasDigest ? (
-          <section
-            aria-label={m(SINCE_AWAY_LABEL)}
-            className="mx-4 mt-3 flex shrink-0 flex-col gap-2 rounded-lg border bg-muted/30 px-3 py-2.5"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-xs font-medium text-muted-foreground">{m(SINCE_AWAY_LABEL)}</h2>
-              {markableThreads.length > 0 ? (
-                <Button
-                  variant="ghost-muted"
-                  size="xs"
-                  onClick={() => {
-                    // The server's own updatedAt, like the command palette, so client clock skew can't leave a thread unseen.
-                    for (const thread of markableThreads) {
-                      markThreadVisited(
-                        scopeThreadRef(thread.environmentId, thread.id),
-                        thread.updatedAt,
-                      );
-                    }
-                  }}
-                >
-                  <T>Mark all seen</T>
-                </Button>
-              ) : null}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              {DIGEST_GROUP_PRESENTATION.map(({ key, label, dotClass }) => {
-                const threads = digest[key];
-                if (threads.length === 0) return null;
-                return (
-                  <div key={key} className="flex flex-wrap items-center gap-1.5">
-                    <span className="flex shrink-0 items-center gap-1.5 pr-1 text-xs font-medium text-muted-foreground">
-                      <span aria-hidden className={cn("size-2 rounded-full", dotClass)} />
-                      {m(label)}
-                      <span className="tabular-nums">{threads.length}</span>
-                    </span>
-                    {threads.map((thread) => (
-                      <button
-                        key={`${thread.environmentId}:${thread.id}`}
-                        type="button"
-                        onClick={() => openThread(thread)}
-                        className="max-w-56 cursor-pointer truncate rounded-md border bg-card px-2 py-0.5 text-xs text-foreground hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
-                      >
-                        {thread.title}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
-        <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4">
-          {PROJECT_THREAD_BOARD_COLUMNS.map((column) => (
-            <section
-              key={column}
-              aria-label={m(COLUMN_PRESENTATION[column].label)}
-              className="flex min-h-0 min-w-48 flex-1 basis-0 flex-col"
-            >
-              <h2 className="mb-2 flex shrink-0 items-center gap-2 px-1 text-xs font-medium text-muted-foreground">
-                <span
-                  aria-hidden
-                  className={cn("size-2 rounded-full", COLUMN_PRESENTATION[column].dotClass)}
-                />
-                {m(COLUMN_PRESENTATION[column].label)}
-                <span className="tabular-nums">{columns[column].length}</span>
-              </h2>
-              <ul className="flex min-h-0 flex-col gap-1.5 overflow-y-auto">
-                {columns[column].map((thread) => (
-                  <li key={`${thread.environmentId}:${thread.id}`}>
-                    <button
-                      type="button"
-                      onClick={() => openThread(thread)}
-                      className={cn(
-                        "flex w-full flex-col gap-0.5 rounded-lg border bg-card px-2.5 py-2 text-left hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
-                        column === "done" && "text-muted-foreground",
-                      )}
-                    >
-                      <span className="truncate text-sm">{thread.title}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {formatRelativeTimeLabel(thread.updatedAt)}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
-        </div>
-      </div>
+      <ProjectThreadBoardContent
+        columns={columns}
+        openCount={openCount}
+        digest={digest}
+        onOpenThread={openThread}
+        emptyTitle={<T>No threads yet</T>}
+        emptyDescription={
+          <T>
+            Threads you or the coordinator start in <Var>{group.displayName}</Var> show up here by
+            state.
+          </T>
+        }
+      />
     );
   }
 

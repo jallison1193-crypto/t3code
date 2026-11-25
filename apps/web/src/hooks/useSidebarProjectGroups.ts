@@ -1,5 +1,6 @@
 import { useMessages } from "gt-react";
 
+import { filterNonBotProjects } from "../bots/bots.logic";
 import { orderItemsByPreferredIds, sortSidebarV2ProjectGroups } from "../components/Sidebar.logic";
 import {
   getProjectOrderKey,
@@ -7,12 +8,22 @@ import {
 } from "@t3tools/client-runtime/state/project-grouping";
 import { buildSidebarProjectSnapshots } from "../sidebarProjectGrouping";
 import { useEnvironmentIdentities, usePrimaryEnvironmentId } from "../state/environments";
-import { useDelegatedUnderParent, useProjects, useQuietThreadShells } from "../state/entities";
+import {
+  useDelegatedUnderParent,
+  useProjects,
+  useQuietThreadShells,
+  useServerConfigs,
+} from "../state/entities";
 import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
 import { useClientSettings } from "./useSettings";
 
 export function useSidebarProjectGroups() {
-  const projects = useProjects();
+  const allProjects = useProjects();
+  const serverConfigs = useServerConfigs();
+  const projects = filterNonBotProjects(
+    allProjects,
+    (environmentId) => serverConfigs.get(environmentId)?.settings,
+  );
   // Activity order lags a running thread's streaming ticks until its next
   // real change; reading every tick re-rendered the whole sidebar with it.
   const threads = useQuietThreadShells();

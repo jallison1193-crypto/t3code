@@ -5558,5 +5558,9 @@
   "ac10cafdeea93121": "{count, plural, other {プラグインを {count} 回書き込みました}}",
   "52b987ceaa1e9498": "{count, plural, other {プラグインを {count} 回書き込もうとしました}}",
   "2450a6722d95b646": "{status, select, inProgress {プラグインを読み取っています} completed {プラグインを読み取りました} failed {プラグインを読み取れませんでした} declined {プラグインの読み取りは拒否されました} stopped {プラグインの読み取りを中止しました} other {プラグインを読み取っています}}",
-  "3c08c0c95a3b07e2": "{status, select, inProgress {プラグインを書き込んでいます} completed {プラグインを書き込みました} failed {プラグインを書き込めませんでした} declined {プラグインの書き込みは拒否されました} stopped {プラグインの書き込みを中止しました} other {プラグインを書き込んでいます}}"
+  "3c08c0c95a3b07e2": "{status, select, inProgress {プラグインを書き込んでいます} completed {プラグインを書き込みました} failed {プラグインを書き込めませんでした} declined {プラグインの書き込みは拒否されました} stopped {プラグインの書き込みを中止しました} other {プラグインを書き込んでいます}}",
+  "009f5e6f7c064faa": "{count, plural, other {ボットを {count} 回確認しました}}",
+  "c78f0a513623a3c4": "{count, plural, other {ボットの確認を {count} 回試みました}}",
+  "ccb358e98ac6702c": "{count, plural, other {ボットを {count} 回更新しました}}",
+  "e8b01d0152209242": "{count, plural, other {ボットの更新を {count} 回試みました}}"
 }

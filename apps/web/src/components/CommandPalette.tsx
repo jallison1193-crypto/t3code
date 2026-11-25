@@ -235,6 +235,9 @@ import {
   reduceCommandPaletteSearchState,
   type SearchOverlayMode,
 } from "./CommandPalette.logic";
+import { filterNonBotProjects, filterNonBotThreads } from "~/bots/bots.logic";
+import { openNewBotDialog } from "~/bots/newBotDialogState";
+import { useAnyBotsEnabled } from "~/bots/useBots";
 import { resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
 import { CommandPaletteContent, type PendingInputSelection } from "./CommandPaletteContent";
 import {
@@ -506,7 +509,12 @@ function OpenCommandPaletteDialog(props: {
   const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread } =
     useHandleNewThread();
   const paletteRouteTarget = useThreadRouteTarget();
-  const projects = useProjects();
+  const serverConfigs = useServerConfigs();
+  const botsEnabled = useAnyBotsEnabled();
+  const projects = filterNonBotProjects(
+    useProjects(),
+    (environmentId) => serverConfigs.get(environmentId)?.settings,
+  );
   const referenceThreadRef =
     pathname === "/pull-requests"
       ? environments.some((environment) => environment.serverConfig !== null)
@@ -516,7 +524,7 @@ function OpenCommandPaletteDialog(props: {
         ? scopeThreadRef(activeThread.environmentId, activeThread.id)
         : null;
   const openPanelPullRequestUrl = useOpenPanelPullRequestUrl(referenceThreadRef);
-  const activeThreadServerConfig = useServerConfigs().get(
+  const activeThreadServerConfig = serverConfigs.get(
     activeThread?.environmentId ?? ("" as EnvironmentId),
   );
   const canShareActiveThreadWithGuest = useAtomValue(
@@ -543,13 +551,16 @@ function OpenCommandPaletteDialog(props: {
   };
   // Threads the sidebar shows under their parent open there, so opening a project never lands on one.
   const delegatedUnderParent = useDelegatedUnderParent();
-  const threads = useVisibleThreadShells().filter(
-    (thread) =>
-      !isShownUnderParent(
-        { environmentId: thread.environmentId, threadId: thread.id },
-        thread.lineage,
-        delegatedUnderParent,
-      ),
+  const threads = filterNonBotThreads(
+    useVisibleThreadShells().filter(
+      (thread) =>
+        !isShownUnderParent(
+          { environmentId: thread.environmentId, threadId: thread.id },
+          thread.lineage,
+          delegatedUnderParent,
+        ),
+    ),
+    (environmentId) => serverConfigs.get(environmentId)?.settings,
   );
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const providersByEnvironment = useEnvironmentProviders();
@@ -1393,6 +1404,17 @@ function OpenCommandPaletteDialog(props: {
       icon: <MessageSquareDashedIcon className={ITEM_ICON_CLASS} />,
       shortcutCommand: "chat.newWithoutProject",
       run: () => startScratchThread(scratchTargetEnvironmentId),
+    });
+  }
+
+  if (botsEnabled) {
+    actionItems.push({
+      kind: "action",
+      value: "action:new-bot",
+      searchTerms: ["new bot", "create bot", "agent", "automation", "schedule"],
+      title: gt("New bot"),
+      icon: <BotIcon className={ITEM_ICON_CLASS} />,
+      run: async () => openNewBotDialog(),
     });
   }
 

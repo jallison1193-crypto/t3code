@@ -39,6 +39,7 @@ import {
 import { scheduleTimeZoneLabel } from "@t3tools/client-runtime/scheduled-task-time-zone";
 import { scheduledTaskWorktreeBaseRef } from "@t3tools/client-runtime/scheduled-task-worktree";
 import {
+  isBotProject,
   MAX_WEBHOOK_DELIVERY_AGE_MINUTES,
   MAX_WEBHOOK_FILTERS,
   MIN_SCHEDULED_TASK_INTERVAL_MS,
@@ -94,6 +95,7 @@ import { useSettingsScope } from "./SettingsScopeContext";
 import { EnvironmentRow, useEnvironmentTransportLabel } from "./EnvironmentRow";
 import { SettingsGroup } from "./SettingsGroup";
 import { settingsScopeEnvironmentLabel, settingsScopeEnvironmentLabels } from "./settingsScopeAxis";
+import type { ResolvedSettingsScope } from "./settingsScope";
 import {
   WEBHOOK_SIGNATURE_DEFAULTS,
   changeDraftProject,
@@ -719,9 +721,12 @@ function ScheduledTaskEnvironmentSection({
       : null,
     useMessages(),
   );
-  const tasks = tasksQuery.data?.tasks.filter((task) =>
-    matchesScheduledTaskScope(scope, environment.environmentId, task.projectId),
-  );
+  const tasks = tasksQuery.data?.tasks.filter((task) => {
+    if (!matchesScheduledTaskScope(scope, environment.environmentId, task.projectId)) return false;
+    const settings = environment.serverConfig?.settings;
+    if (settings?.botsEnabled === false && isBotProject(settings, task.projectId)) return false;
+    return true;
+  });
   const linkedTask = tasks?.find((task) => task.id === taskId);
   return (
     <SettingsSection
@@ -778,7 +783,7 @@ function ScheduledTaskEnvironmentSection({
   );
 }
 
-function ScheduledTaskRow({
+export function ScheduledTaskRow({
   environmentId,
   task,
   timeZone,
@@ -1257,13 +1262,29 @@ function WebhookDeliveryMode({ environmentId }: { readonly environmentId: Enviro
   );
 }
 
-function ScheduledTaskEditorDialog({
+// A bot trigger editor opens outside Settings, so it has no settings scope to filter by.
+const FIXED_PROJECT_SCOPE: ResolvedSettingsScope = {
+  kind: "all",
+  label: "",
+  members: [],
+  environmentIds: [],
+};
+
+interface ScheduledTaskFixedProject {
+  readonly environmentId: EnvironmentId;
+  readonly projectId: ProjectId;
+  readonly defaultThreadMode?: ScheduledTaskThreadMode;
+}
+
+export function ScheduledTaskEditorDialog({
   initialEnvironmentId,
   task,
+  fixedProject,
   onClose,
 }: {
   readonly initialEnvironmentId: EnvironmentId;
   readonly task: ScheduledTask | null;
+  readonly fixedProject?: ScheduledTaskFixedProject;
   readonly onClose: () => void;
 }) {
   const [saving, setSaving] = useState(false);
@@ -1278,15 +1299,86 @@ function ScheduledTaskEditorDialog({
     >
       {/* The form owns the draft so a keystroke re-renders it, not the dialog chrome. */}
       <DialogPopup className="max-w-xl">
-        <ScheduledTaskEditorForm
-          initialEnvironmentId={initialEnvironmentId}
-          task={task}
-          saving={saving}
-          onSavingChange={setSaving}
-          onClose={onClose}
-        />
+        {fixedProject !== undefined ? (
+          <FixedProjectScheduledTaskEditorForm
+            fixedProject={fixedProject}
+            task={task}
+            saving={saving}
+            onSavingChange={setSaving}
+            onClose={onClose}
+          />
+        ) : (
+          <ScopedScheduledTaskEditorForm
+            initialEnvironmentId={initialEnvironmentId}
+            task={task}
+            saving={saving}
+            onSavingChange={setSaving}
+            onClose={onClose}
+          />
+        )}
       </DialogPopup>
     </Dialog>
+  );
+}
+
+function ScopedScheduledTaskEditorForm({
+  initialEnvironmentId,
+  task,
+  saving,
+  onSavingChange,
+  onClose,
+}: {
+  readonly initialEnvironmentId: EnvironmentId;
+  readonly task: ScheduledTask | null;
+  readonly saving: boolean;
+  readonly onSavingChange: (saving: boolean) => void;
+  readonly onClose: () => void;
+}) {
+  const { scope, connectedEnvironments } = useSettingsScope();
+  return (
+    <ScheduledTaskEditorForm
+      initialEnvironmentId={initialEnvironmentId}
+      task={task}
+      scope={scope}
+      connectedEnvironments={connectedEnvironments}
+      saving={saving}
+      onSavingChange={onSavingChange}
+      onClose={onClose}
+    />
+  );
+}
+
+function FixedProjectScheduledTaskEditorForm({
+  fixedProject,
+  task,
+  saving,
+  onSavingChange,
+  onClose,
+}: {
+  readonly fixedProject: ScheduledTaskFixedProject;
+  readonly task: ScheduledTask | null;
+  readonly saving: boolean;
+  readonly onSavingChange: (saving: boolean) => void;
+  readonly onClose: () => void;
+}) {
+  const environment = useEnvironment(fixedProject.environmentId);
+  const connectedEnvironments =
+    environment !== null &&
+    environment.connection.phase === "connected" &&
+    environment.serverConfig !== null
+      ? [environment]
+      : [];
+  return (
+    <ScheduledTaskEditorForm
+      initialEnvironmentId={fixedProject.environmentId}
+      task={task}
+      fixedProject={fixedProject}
+      scope={FIXED_PROJECT_SCOPE}
+      connectedEnvironments={connectedEnvironments}
+      saving={saving}
+      onSavingChange={onSavingChange}
+      onClose={onClose}
+    />
   );
 }
 
@@ -1467,12 +1559,18 @@ function ScheduledTaskDestination({
 function ScheduledTaskEditorForm({
   initialEnvironmentId,
   task,
+  fixedProject,
+  scope,
+  connectedEnvironments,
   saving,
   onSavingChange: setSaving,
   onClose,
 }: {
   readonly initialEnvironmentId: EnvironmentId;
   readonly task: ScheduledTask | null;
+  readonly fixedProject?: ScheduledTaskFixedProject | undefined;
+  readonly scope: ResolvedSettingsScope;
+  readonly connectedEnvironments: ReadonlyArray<EnvironmentPresentation>;
   readonly saving: boolean;
   readonly onSavingChange: (saving: boolean) => void;
   readonly onClose: () => void;
@@ -1480,8 +1578,9 @@ function ScheduledTaskEditorForm({
   const messages = useMessages();
   const locale = useLocale();
   const gt = useGT();
-  const { scope, connectedEnvironments } = useSettingsScope();
-  const [environmentId, setEnvironmentId] = useState(initialEnvironmentId);
+  const [environmentId, setEnvironmentId] = useState(
+    fixedProject?.environmentId ?? initialEnvironmentId,
+  );
   const environment = useEnvironment(environmentId);
   // Older servers reject one-time schedules, so offer Once only where it can save.
   const offersOnce =
@@ -1496,10 +1595,21 @@ function ScheduledTaskEditorForm({
     messages,
   );
   const allProjects = useProjects();
-  const projectsOn = (id: EnvironmentId) =>
-    allProjects.filter(
-      (project) => project.environmentId === id && matchesScheduledTaskScope(scope, id, project.id),
-    );
+  const projectsOn = (id: EnvironmentId) => {
+    const envSettings =
+      id === environmentId
+        ? environment?.serverConfig?.settings
+        : connectedEnvironments.find((entry) => entry.environmentId === id)?.serverConfig?.settings;
+    return allProjects.filter((project) => {
+      if (project.environmentId !== id) return false;
+      if (fixedProject !== undefined) {
+        return id === fixedProject.environmentId && project.id === fixedProject.projectId;
+      }
+      if (!matchesScheduledTaskScope(scope, id, project.id)) return false;
+      if (isBotProject(envSettings, project.id) && project.id !== task?.projectId) return false;
+      return true;
+    });
+  };
   const scopedProjects = projectsOn(environmentId);
   const settings = useEnvironmentSettings(environmentId);
   const providers =
@@ -1520,7 +1630,14 @@ function ScheduledTaskEditorForm({
       ? taskToDraft(task)
       : {
           ...EMPTY_DRAFT,
-          projectId: defaultScheduledTaskProjectId(scopedProjects, scope),
+          projectId:
+            fixedProject?.projectId ?? defaultScheduledTaskProjectId(scopedProjects, scope),
+          ...(fixedProject !== undefined
+            ? {
+                threadMode: fixedProject.defaultThreadMode ?? "new_thread",
+                workspaceMode: "root" as const,
+              }
+            : {}),
         },
   );
   // Pinned first. The chosen project stays listed after it is archived.
@@ -1740,7 +1857,7 @@ function ScheduledTaskEditorForm({
           <Field label={gt("Runs on")} htmlFor="scheduled-task-environment">
             <Select
               value={environmentId}
-              disabled={task !== null || saving}
+              disabled={task !== null || fixedProject !== undefined || saving}
               onValueChange={(id) => {
                 const next = connectedEnvironments.find((entry) => entry.environmentId === id);
                 if (!next) return;
@@ -1848,6 +1965,7 @@ function ScheduledTaskEditorForm({
             <Field label={gt("Project")} htmlFor="scheduled-task-project">
               <Select
                 value={selectedProjectId}
+                disabled={fixedProject !== undefined || saving}
                 onValueChange={(projectId) =>
                   setDraft((current) => changeDraftProject(current, projectId ?? ""))
                 }

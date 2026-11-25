@@ -12,7 +12,7 @@ import { useSettingsProjectGroups } from "../settings/useSettingsProjectGroups";
 import { buildSinceAwayDigest } from "./sinceAwayDigest.logic";
 
 export function useProjectThreadBoard(projectKey: string) {
-  const projectGroups = useSettingsProjectGroups();
+  const projectGroups = useSettingsProjectGroups({ includeBots: true });
   const { presentationById } = useEnvironments();
   const shells = useQuietThreadShells();
   const localLastVisitedAtById = useUiStateStore((state) => state.threadLastVisitedAtById);

@@ -5585,5 +5585,9 @@
   "ac10cafdeea93121": "{count, plural, one {Wrote a plugin {count} time} other {Wrote a plugin {count} times}}",
   "52b987ceaa1e9498": "{count, plural, one {Tried to write a plugin {count} time} other {Tried to write a plugin {count} times}}",
   "2450a6722d95b646": "{status, select, inProgress {Reading plugins} completed {Read plugins} failed {Failed to read plugins} declined {Declined to read plugins} stopped {Stopped reading plugins} other {Reading plugins}}",
-  "3c08c0c95a3b07e2": "{status, select, inProgress {Writing a plugin} completed {Wrote a plugin} failed {Failed to write a plugin} declined {Declined to write a plugin} stopped {Stopped writing a plugin} other {Writing a plugin}}"
+  "3c08c0c95a3b07e2": "{status, select, inProgress {Writing a plugin} completed {Wrote a plugin} failed {Failed to write a plugin} declined {Declined to write a plugin} stopped {Stopped writing a plugin} other {Writing a plugin}}",
+  "009f5e6f7c064faa": "{count, plural, one {Checked bots {count} time} other {Checked bots {count} times}}",
+  "c78f0a513623a3c4": "{count, plural, one {Tried to check bots {count} time} other {Tried to check bots {count} times}}",
+  "ccb358e98ac6702c": "{count, plural, one {Updated a bot {count} time} other {Updated a bot {count} times}}",
+  "e8b01d0152209242": "{count, plural, one {Tried to update a bot {count} time} other {Tried to update a bot {count} times}}"
 }

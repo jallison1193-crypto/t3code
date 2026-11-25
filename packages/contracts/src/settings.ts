@@ -42,6 +42,7 @@ import {
   ProviderOptionSelections,
 } from "./model.ts";
 import { ModelSelection } from "./modelSelection.ts";
+import { BotProfile } from "./bot.ts";
 import { PluginHash, PluginId, PluginSettingEntry, PluginSettingEntryPatch } from "./plugin.ts";
 import { ProjectScript, type ProjectMutation } from "./project.ts";
 import { DEFAULT_RUNTIME_MODE, RuntimeMode } from "./providerPolicy.ts";
@@ -96,9 +97,17 @@ export const AppMode = Schema.Literals(["code", "work"]);
 export type AppMode = typeof AppMode.Type;
 const DEFAULT_APP_MODE: AppMode = "code";
 
-export const SidebarModeFilter = Schema.Literals(["all", "code", "work"]);
+export const SidebarModeFilter = Schema.Literals(["all", "code", "work", "bots"]);
 export type SidebarModeFilter = typeof SidebarModeFilter.Type;
 const DEFAULT_SIDEBAR_MODE_FILTER: SidebarModeFilter = "all";
+
+/** Falls back to `"all"` when Bots are off without rewriting the saved client setting. */
+export function resolveSidebarModeFilter(
+  filter: SidebarModeFilter,
+  botsEnabled: boolean,
+): SidebarModeFilter {
+  return filter === "bots" && !botsEnabled ? "all" : filter;
+}
 
 export const SidebarProjectGroupingMode = Schema.Literals([
   "repository",
@@ -1288,8 +1297,10 @@ export const ProjectSettingsOverrides = Schema.Struct({
   providerInstances: Schema.optionalKey(
     Schema.Record(ProviderInstanceId, ProjectProviderInstanceOverride),
   ),
+  /** Fork: marks a hidden project as a bot and carries its pause state. */
+  bot: Schema.optionalKey(BotProfile),
 } satisfies Record<
-  ProjectScopedServerSettingKey | "providerInstances" | "coordinatorThreadId",
+  ProjectScopedServerSettingKey | "providerInstances" | "coordinatorThreadId" | "bot",
   unknown
 >);
 export type ProjectSettingsOverrides = typeof ProjectSettingsOverrides.Type;
@@ -1586,6 +1597,8 @@ export const ServerSettings = Schema.Struct({
   linkedEnvironmentsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   /** Beta: Claude and Codex predict the next prompt after completed turns. Codex follows a change at once; open Claude threads after they restart. */
   promptSuggestionsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  /** Fork: global switch for Bots. Off hides bot surfaces and blocks bot triggers without removing data. */
+  botsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   sidebarAutoSettleKeepPullRequests: Schema.Boolean.pipe(
     Schema.withDecodingDefault(Effect.succeed(false)),
   ),
@@ -2046,6 +2059,7 @@ export const ServerSettingsPatch = Schema.Struct({
   guestSharingEnabled: Schema.optionalKey(Schema.Boolean),
   linkedEnvironmentsEnabled: Schema.optionalKey(Schema.Boolean),
   promptSuggestionsEnabled: Schema.optionalKey(Schema.Boolean),
+  botsEnabled: Schema.optionalKey(Schema.Boolean),
   backgroundActivity: Schema.optionalKey(
     Schema.Struct({
       schemaVersion: Schema.optionalKey(Schema.Literal(1)),

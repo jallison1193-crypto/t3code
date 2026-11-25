@@ -59,6 +59,8 @@ export type T3McpToolSummaryAction =
   | "theme-set"
   | "plugin-read"
   | "plugin-write"
+  | "bot-read"
+  | "bot-update"
   | "attachment-prepare"
   | "attachment-discard"
   | "attachment-send"
@@ -425,6 +427,8 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   t3_theme_set: tool(["Set", "Setting", "Set", "the theme"], "theme-set"),
   t3_plugin_read: tool(["Read", "Reading", "Read", "plugins"], "plugin-read"),
   t3_plugin_write: tool(["Write", "Writing", "Wrote", "a plugin"], "plugin-write"),
+  t3_bot_read: tool(["Read", "Reading", "Read", "bots"], "bot-read"),
+  t3_bot_update: tool(["Update", "Updating", "Updated", "a bot"], "bot-update"),
   t3_thread_launch: tool(["Launch", "Launching", "Launched", "a project thread"], "thread-create"),
   t3_project_list: tool(["List", "Listing", "Listed", "projects"], "project-list"),
   t3_project_read: tool(["Read", "Reading", "Read", "a project"], "project-read"),

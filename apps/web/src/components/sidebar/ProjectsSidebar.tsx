@@ -9,7 +9,7 @@ import {
   projectThreadBoardColumn,
   type ProjectThreadBoardColumn,
 } from "@t3tools/client-runtime/project-thread-board";
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import { resolveSidebarModeFilter, type ScopedThreadRef } from "@t3tools/contracts";
 import type { SidebarModeFilter as Mode } from "@t3tools/contracts/settings";
 import { useMatch, useNavigate } from "@tanstack/react-router";
 import { T, useGT } from "gt-react";
@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
+import { deriveBotSidebarEntries, filterNonBotThreads } from "~/bots/bots.logic";
+import { useAnyBotsEnabled } from "~/bots/useBots";
 import { openCommandPalette } from "~/commandPaletteBus";
 import { isElectron } from "~/env";
 import { useClientSettings } from "~/hooks/useSettings";
@@ -53,6 +55,7 @@ import {
   writeExpandedProjectKeys,
   type ProjectsSidebarThread,
 } from "./ProjectsSidebar.logic";
+import { BotsSidebarSection } from "./BotsSidebarSection";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./SidebarChrome";
 import { SidebarModeFilter } from "./SidebarModeFilter";
 import { SidebarHeaderIconButton } from "./SidebarThreadHeader";
@@ -146,9 +149,10 @@ export function ProjectsSidebar() {
   const gt = useGT();
   const navigate = useNavigate();
   const { isMobile, setOpenMobile } = useSidebar();
-  const projectGroups = useSettingsProjectGroups();
+  const projectGroups = useSettingsProjectGroups({ includeBots: true });
   const threads = useQuietThreadShells();
   const { presentationById } = useEnvironments();
+  const botsEnabled = useAnyBotsEnabled();
   const { shownTarget } = useShownThreadRouteTarget();
   const projectHomeMatch = useMatch({ from: "/_chat/projects/$projectKey", shouldThrow: false });
   const projectThreadsMatch = useMatch({
@@ -172,14 +176,22 @@ export function ProjectsSidebar() {
     readExpandedProjectKeys(),
   );
   const sidebarModeFilter = useClientSettings((settings) => settings.sidebarModeFilter);
+  const effectiveModeFilter = resolveSidebarModeFilter(sidebarModeFilter, botsEnabled);
+  const getServerSettings = (environmentId: Parameters<typeof presentationById.get>[0]) =>
+    presentationById.get(environmentId)?.serverConfig?.settings;
 
   const sections = buildProjectsSidebarSections({
     projectGroups,
     threads,
-    getServerSettings: (environmentId) =>
-      presentationById.get(environmentId)?.serverConfig?.settings,
-    modeFilter: sidebarModeFilter,
+    getServerSettings,
+    modeFilter: effectiveModeFilter,
   });
+  const botEntries = deriveBotSidebarEntries({
+    projectGroups,
+    threads,
+    getServerSettings,
+  });
+  const nonBotThreads = filterNonBotThreads(threads, getServerSettings);
 
   const projectByMemberKey = new Map<string, ProjectFaviconProject>();
   for (const group of projectGroups) {
@@ -283,146 +295,166 @@ export function ProjectsSidebar() {
           </SidebarGroup>
         ) : null}
 
-        <ThreadFoldersSidebar
-          threads={threads}
-          mode={sidebarModeFilter}
-          activeThreadKey={activeThreadKey}
-          onSelect={openScopedThread}
-        />
+        {effectiveModeFilter === "bots" ? (
+          <BotsSidebarSection
+            bots={botEntries}
+            expandedByProjectKey={expandedByProjectKey}
+            activeProjectKey={activeProjectKey}
+            activeThreadKey={activeThreadKey}
+            onToggleBot={toggleProject}
+            onOpenBot={openProject}
+            onOpenThread={openThread}
+          />
+        ) : (
+          <>
+            <ThreadFoldersSidebar
+              threads={nonBotThreads}
+              mode={effectiveModeFilter}
+              activeThreadKey={activeThreadKey}
+              onSelect={openScopedThread}
+            />
 
-        <SidebarGroup>
-          <SidebarSectionHeading label={gt("Projects")} />
-          {sections.projects.length === 0 ? (
-            <p className="px-(--sidebar-row-content-inset) py-1 text-xs text-sidebar-muted-foreground">
-              <T>No projects yet</T>
-            </p>
-          ) : (
-            <SidebarMenu>
-              {sections.projects.map(({ group, activeThreads, attentionCount, attentionTone }) => {
-                const isExpanded = expandedByProjectKey[group.projectKey] === true;
-                const isProjectActive = activeProjectKey === group.projectKey;
-                return (
-                  <SidebarMenuItem key={group.projectKey}>
-                    <div
-                      data-active={isProjectActive ? "true" : undefined}
-                      className={cn(
-                        "flex h-8 w-full items-center gap-1 rounded-(--control-radius) pr-1 transition-colors hover:bg-sidebar-row-hover",
-                        isProjectActive && "bg-sidebar-row-selected",
-                      )}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => openProject(group.projectKey)}
-                        className="flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-(--control-radius) pl-(--sidebar-row-content-inset) pr-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                      >
-                        <ProjectFavicon project={group} className="size-4 shrink-0" />
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-sidebar-foreground/90">
-                          {group.displayName}
-                        </span>
-                        {!isExpanded && attentionTone && attentionCount > 0 ? (
-                          <span className="flex shrink-0 items-center gap-1 text-xs tabular-nums text-sidebar-muted-foreground">
-                            <span
-                              aria-hidden
-                              className={cn(
-                                "size-1.5 rounded-full",
-                                ATTENTION_DOT_CLASS[attentionTone],
-                              )}
-                            />
-                            <span>{attentionCount}</span>
-                          </span>
-                        ) : null}
-                      </button>
-                      <button
-                        type="button"
-                        aria-expanded={isExpanded}
-                        aria-label={
-                          isExpanded
-                            ? gt("Collapse {name}", { name: group.displayName })
-                            : gt("Expand {name}", { name: group.displayName })
-                        }
-                        onClick={() => toggleProject(group.projectKey)}
-                        className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-(--control-radius) text-sidebar-muted-foreground outline-none hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                      >
-                        <ChevronDownIcon
-                          aria-hidden
-                          className={cn(
-                            "size-3.5 transition-transform",
-                            !isExpanded && "-rotate-90",
-                          )}
-                        />
-                      </button>
-                    </div>
-                    {isExpanded ? (
-                      activeThreads.length > 0 ? (
-                        <SidebarMenuSub>
-                          {activeThreads.map((thread) => (
-                            <ThreadNavRow
-                              key={scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))}
-                              thread={thread}
-                              nested
-                              isActive={
-                                activeThreadKey ===
-                                scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))
+            <SidebarGroup>
+              <SidebarSectionHeading label={gt("Projects")} />
+              {sections.projects.length === 0 ? (
+                <p className="px-(--sidebar-row-content-inset) py-1 text-xs text-sidebar-muted-foreground">
+                  <T>No projects yet</T>
+                </p>
+              ) : (
+                <SidebarMenu>
+                  {sections.projects.map(
+                    ({ group, activeThreads, attentionCount, attentionTone }) => {
+                      const isExpanded = expandedByProjectKey[group.projectKey] === true;
+                      const isProjectActive = activeProjectKey === group.projectKey;
+                      return (
+                        <SidebarMenuItem key={group.projectKey}>
+                          <div
+                            data-active={isProjectActive ? "true" : undefined}
+                            className={cn(
+                              "flex h-8 w-full items-center gap-1 rounded-(--control-radius) pr-1 transition-colors hover:bg-sidebar-row-hover",
+                              isProjectActive && "bg-sidebar-row-selected",
+                            )}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => openProject(group.projectKey)}
+                              className="flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-(--control-radius) pl-(--sidebar-row-content-inset) pr-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                            >
+                              <ProjectFavicon project={group} className="size-4 shrink-0" />
+                              <span className="min-w-0 flex-1 truncate text-sm font-medium text-sidebar-foreground/90">
+                                {group.displayName}
+                              </span>
+                              {!isExpanded && attentionTone && attentionCount > 0 ? (
+                                <span className="flex shrink-0 items-center gap-1 text-xs tabular-nums text-sidebar-muted-foreground">
+                                  <span
+                                    aria-hidden
+                                    className={cn(
+                                      "size-1.5 rounded-full",
+                                      ATTENTION_DOT_CLASS[attentionTone],
+                                    )}
+                                  />
+                                  <span>{attentionCount}</span>
+                                </span>
+                              ) : null}
+                            </button>
+                            <button
+                              type="button"
+                              aria-expanded={isExpanded}
+                              aria-label={
+                                isExpanded
+                                  ? gt("Collapse {name}", { name: group.displayName })
+                                  : gt("Expand {name}", { name: group.displayName })
                               }
-                              onSelect={openThread}
-                              onChangeFolder={() => changeFolder(thread)}
-                            />
-                          ))}
-                        </SidebarMenuSub>
-                      ) : (
-                        <p className="py-1 pl-8 pr-2 text-xs text-sidebar-muted-foreground">
-                          <T>No active threads</T>
-                        </p>
-                      )
-                    ) : null}
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          )}
-        </SidebarGroup>
+                              onClick={() => toggleProject(group.projectKey)}
+                              className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-(--control-radius) text-sidebar-muted-foreground outline-none hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                            >
+                              <ChevronDownIcon
+                                aria-hidden
+                                className={cn(
+                                  "size-3.5 transition-transform",
+                                  !isExpanded && "-rotate-90",
+                                )}
+                              />
+                            </button>
+                          </div>
+                          {isExpanded ? (
+                            activeThreads.length > 0 ? (
+                              <SidebarMenuSub>
+                                {activeThreads.map((thread) => (
+                                  <ThreadNavRow
+                                    key={scopedThreadKey(
+                                      scopeThreadRef(thread.environmentId, thread.id),
+                                    )}
+                                    thread={thread}
+                                    nested
+                                    isActive={
+                                      activeThreadKey ===
+                                      scopedThreadKey(
+                                        scopeThreadRef(thread.environmentId, thread.id),
+                                      )
+                                    }
+                                    onSelect={openThread}
+                                    onChangeFolder={() => changeFolder(thread)}
+                                  />
+                                ))}
+                              </SidebarMenuSub>
+                            ) : (
+                              <p className="py-1 pl-8 pr-2 text-xs text-sidebar-muted-foreground">
+                                <T>No active threads</T>
+                              </p>
+                            )
+                          ) : null}
+                        </SidebarMenuItem>
+                      );
+                    },
+                  )}
+                </SidebarMenu>
+              )}
+            </SidebarGroup>
 
-        {sections.pinned.length > 0 ? (
-          <SidebarGroup>
-            <SidebarSectionHeading label={gt("Pinned")} />
-            <SidebarMenu>
-              {sections.pinned.map((thread) => (
-                <ThreadNavRow
-                  key={scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))}
-                  thread={thread}
-                  project={projectForThread(thread)}
-                  isActive={
-                    activeThreadKey ===
-                    scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))
-                  }
-                  onSelect={openThread}
-                  onChangeFolder={() => changeFolder(thread)}
-                />
-              ))}
-            </SidebarMenu>
-          </SidebarGroup>
-        ) : null}
+            {sections.pinned.length > 0 ? (
+              <SidebarGroup>
+                <SidebarSectionHeading label={gt("Pinned")} />
+                <SidebarMenu>
+                  {sections.pinned.map((thread) => (
+                    <ThreadNavRow
+                      key={scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))}
+                      thread={thread}
+                      project={projectForThread(thread)}
+                      isActive={
+                        activeThreadKey ===
+                        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))
+                      }
+                      onSelect={openThread}
+                      onChangeFolder={() => changeFolder(thread)}
+                    />
+                  ))}
+                </SidebarMenu>
+              </SidebarGroup>
+            ) : null}
 
-        {sections.otherThreads.length > 0 ? (
-          <SidebarGroup>
-            <SidebarSectionHeading label={gt("Other threads")} />
-            <SidebarMenu>
-              {sections.otherThreads.map((thread) => (
-                <ThreadNavRow
-                  key={scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))}
-                  thread={thread}
-                  project={projectForThread(thread)}
-                  isActive={
-                    activeThreadKey ===
-                    scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))
-                  }
-                  onSelect={openThread}
-                  onChangeFolder={() => changeFolder(thread)}
-                />
-              ))}
-            </SidebarMenu>
-          </SidebarGroup>
-        ) : null}
+            {sections.otherThreads.length > 0 ? (
+              <SidebarGroup>
+                <SidebarSectionHeading label={gt("Other threads")} />
+                <SidebarMenu>
+                  {sections.otherThreads.map((thread) => (
+                    <ThreadNavRow
+                      key={scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))}
+                      thread={thread}
+                      project={projectForThread(thread)}
+                      isActive={
+                        activeThreadKey ===
+                        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))
+                      }
+                      onSelect={openThread}
+                      onChangeFolder={() => changeFolder(thread)}
+                    />
+                  ))}
+                </SidebarMenu>
+              </SidebarGroup>
+            ) : null}
+          </>
+        )}
       </SidebarContent>
       <SidebarChromeFooter />
     </>
