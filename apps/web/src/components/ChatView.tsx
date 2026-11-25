@@ -4222,8 +4222,8 @@ export default function ChatView(props: ChatViewProps) {
                   }
                   gitCwd={gitCwd}
                   workspaceMutationId={workspaceRevision.revision}
-                  isGitRepo={showCodingChrome && isGitRepo}
-                  showCodingChrome={showCodingChrome}
+                  isGitRepo={showCodingChrome && !isBotThread && isGitRepo}
+                  showCodingChrome={showCodingChrome && !isBotThread}
                   envLocked={envLocked}
                   availableEnvironments={logicalProjectEnvironments}
                   autoEnvironmentLabel={autoEnvironmentLabel}
