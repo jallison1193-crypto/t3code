@@ -12687,7 +12687,6 @@
   ],
   "119fdf3a37955ebd": "Connect an environment to manage its plugins.",
   "582e155f909e9bc4": "Loading plugins…",
-  "d82c581217d84120": "Plugins live in the plugins folder below; agents will also be able to build them here soon.",
   "cc0e82d6578ff61e": "Uninstall",
   "86c29ba4da470da1": [
     "Plugins folder:",
@@ -13063,5 +13062,13 @@
   "06aa52561efb5fa6": "Work mode",
   "437cbbd5e7ba6160": "Switch to Code",
   "e1aacebc11885164": "No matches in recent files.",
-  "837e46cbcd50eeef": "Search older files"
+  "837e46cbcd50eeef": "Search older files",
+  "8d1b9870705daa45": "Bot safety gate",
+  "510835e3a26c97d5": "Bots always ask before sending, deleting, or changing agent settings.",
+  "9517fffdb26a8aed": "Plugins setting not updated",
+  "3d9ee193e785ce3c": "Could not update plugins setting.",
+  "e0a411bf7000279f": "Each environment has its own plugins. The one picked above is the one shown and changed here.",
+  "a96a6a1d3f2d498a": "Run installed user and repo plugins on this environment. Turning this off pauses every plugin without uninstalling them.",
+  "da4cc80c87a85b11": "Plugins are switched off. Installed plugins stay installed but do nothing until you turn this back on.",
+  "289da94c4b01df5a": "No plugins yet. Ask any agent to make one: describe what you want, and it builds the plugin in your plugins folder."
 }

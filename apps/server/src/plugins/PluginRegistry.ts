@@ -238,6 +238,7 @@ interface PluginSnapshot {
   readonly active: ReadonlyArray<EnvironmentPlugin>;
   readonly panelEntries: ReadonlyMap<string, ReadonlyMap<string, string>>;
   readonly workerSpecs: ReadonlyArray<PluginWorkerDesiredSpec>;
+  readonly installedWorkerSpecs: ReadonlyArray<PluginWorkerDesiredSpec>;
   readonly mcpSpecs: ReadonlyArray<PluginMcpServerDesiredSpec>;
   readonly externalPowersHashes: ReadonlyMap<string, string>;
   readonly activeUserScanned: ReadonlyArray<ScannedPlugin>;
@@ -2189,6 +2190,7 @@ const make = Effect.gen(function* () {
     active: [],
     panelEntries: new Map(),
     workerSpecs: [],
+    installedWorkerSpecs: [],
     mcpSpecs: [],
     externalPowersHashes: new Map(),
     activeUserScanned: [],
@@ -2257,12 +2259,14 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const currentSettings = yield* settings.getSettings.pipe(
         Effect.map((current) => ({
+          pluginsEnabled: current.pluginsEnabled,
           plugins: current.plugins as Readonly<Record<string, PluginSettingEntry>>,
           repoPlugins: current.repoPlugins as Readonly<
             Record<string, Readonly<Record<string, string>>>
           >,
         })),
         Effect.orElseSucceed(() => ({
+          pluginsEnabled: true,
           plugins: {} as Readonly<Record<string, PluginSettingEntry>>,
           repoPlugins: {} as Readonly<Record<string, Readonly<Record<string, string>>>>,
         })),
@@ -2284,17 +2288,30 @@ const make = Effect.gen(function* () {
         mcpRuntimeStates,
         defaultNetworkRestricted,
       ).pipe(Effect.provideService(FileSystem.FileSystem, fs));
-      const repoProjects = yield* scanRepoProjects(currentSettings.repoPlugins, true);
-      const combinedActive: Array<EnvironmentPlugin> = [...active];
-      for (const { projectId, scanned } of repoProjects) {
-        for (const item of scanned) {
-          if (!item.plugin.enabled || item.plugin.problem !== undefined) continue;
-          const envPlugin = buildEnvironmentPlugin(item, projectId);
-          if (envPlugin !== null) {
-            combinedActive.push(envPlugin);
+      const combinedActive: Array<EnvironmentPlugin> = [];
+      if (currentSettings.pluginsEnabled) {
+        combinedActive.push(...active);
+        const repoProjects = yield* scanRepoProjects(currentSettings.repoPlugins, true);
+        for (const { projectId, scanned } of repoProjects) {
+          for (const item of scanned) {
+            if (!item.plugin.enabled || item.plugin.problem !== undefined) continue;
+            const envPlugin = buildEnvironmentPlugin(item, projectId);
+            if (envPlugin !== null) {
+              combinedActive.push(envPlugin);
+            }
           }
         }
       }
+      const publishedPanelEntries: ReadonlyMap<
+        string,
+        ReadonlyMap<string, string>
+      > = currentSettings.pluginsEnabled ? panelEntries : new Map();
+      const publishedWorkerSpecs: ReadonlyArray<PluginWorkerDesiredSpec> =
+        currentSettings.pluginsEnabled ? workerSpecs : [];
+      const publishedMcpSpecs: ReadonlyArray<PluginMcpServerDesiredSpec> =
+        currentSettings.pluginsEnabled ? mcpSpecs : [];
+      const publishedActiveUserScanned: ReadonlyArray<ScannedPlugin> =
+        currentSettings.pluginsEnabled ? activeUserScanned : [];
       const [activeChanged, workerSpecsChanged, mcpSpecsChanged, next] = yield* Ref.modify(
         published,
         (
@@ -2302,19 +2319,20 @@ const make = Effect.gen(function* () {
         ): readonly [readonly [boolean, boolean, boolean, PluginSnapshot], PluginSnapshot] => {
           const sameActive = Equal.equals(previous.active, combinedActive);
           const samePlugins = Equal.equals(previous.plugins, plugins);
-          const sameWorkerSpecs = Equal.equals(previous.workerSpecs, workerSpecs);
-          const sameMcpSpecs = Equal.equals(previous.mcpSpecs, mcpSpecs);
+          const sameWorkerSpecs = Equal.equals(previous.workerSpecs, publishedWorkerSpecs);
+          const sameMcpSpecs = Equal.equals(previous.mcpSpecs, publishedMcpSpecs);
           const updated: PluginSnapshot = {
             seq: sameActive ? previous.seq : previous.seq + 1,
             workerSeq: sameWorkerSpecs ? previous.workerSeq : previous.workerSeq + 1,
             mcpSeq: sameMcpSpecs ? previous.mcpSeq : previous.mcpSeq + 1,
             plugins,
             active: combinedActive,
-            panelEntries,
-            workerSpecs,
-            mcpSpecs,
+            panelEntries: publishedPanelEntries,
+            workerSpecs: publishedWorkerSpecs,
+            installedWorkerSpecs: workerSpecs,
+            mcpSpecs: publishedMcpSpecs,
             externalPowersHashes,
-            activeUserScanned,
+            activeUserScanned: publishedActiveUserScanned,
           };
           if (sameActive && samePlugins && sameWorkerSpecs && sameMcpSpecs) {
             return [[false, false, false, updated], updated];
@@ -2367,7 +2385,7 @@ const make = Effect.gen(function* () {
     Effect.asVoid,
   );
   const pluginSettingChanges = settings.streamChanges.pipe(
-    Stream.map((current) => [current.plugins, current.repoPlugins] as const),
+    Stream.map((current) => [current.pluginsEnabled, current.plugins, current.repoPlugins]),
     Stream.changesWith(Equal.equals),
   );
   yield* Stream.runForEach(pluginSettingChanges, () =>
@@ -3581,7 +3599,7 @@ const make = Effect.gen(function* () {
             reason: "changed",
           });
         }
-        const targetSpec = current.workerSpecs.find((spec) => spec.pluginId === id);
+        const targetSpec = current.installedWorkerSpecs.find((spec) => spec.pluginId === id);
         const targetExternalHash = current.externalPowersHashes.get(id);
         yield* settings
           .updateSettings({
@@ -3653,7 +3671,7 @@ const make = Effect.gen(function* () {
             reason: "changed",
           });
         }
-        const targetSpec = current.workerSpecs.find((spec) => spec.pluginId === id);
+        const targetSpec = current.installedWorkerSpecs.find((spec) => spec.pluginId === id);
         if (targetSpec === undefined) {
           return yield* new PluginOperationError({
             pluginId: id,
@@ -3713,7 +3731,7 @@ const make = Effect.gen(function* () {
             reason: "has_problem",
           });
         }
-        const targetSpec = current.workerSpecs.find((spec) => spec.pluginId === id);
+        const targetSpec = current.installedWorkerSpecs.find((spec) => spec.pluginId === id);
         if (
           targetSpec === undefined ||
           !targetSpec.folders.some((folder) => folder.id === folderId)
@@ -3917,12 +3935,23 @@ const make = Effect.gen(function* () {
   )(function* (projectId) {
     // User plugins are watched, so the published snapshot is current; repo folders are not.
     const snapshot = yield* Ref.get(published);
-    const repoApprovals = yield* settings.getSettings.pipe(
-      Effect.map((current) =>
-        Object.hasOwn(current.repoPlugins, projectId) ? current.repoPlugins[projectId] : undefined,
-      ),
-      Effect.orElseSucceed(() => undefined),
+    const { pluginsEnabled, repoApprovals } = yield* settings.getSettings.pipe(
+      Effect.map((current) => ({
+        pluginsEnabled: current.pluginsEnabled,
+        repoApprovals: Object.hasOwn(current.repoPlugins, projectId)
+          ? current.repoPlugins[projectId]
+          : undefined,
+      })),
+      Effect.orElseSucceed(() => ({ pluginsEnabled: true, repoApprovals: undefined })),
     );
+    if (!pluginsEnabled) {
+      return {
+        contextPlugins: [],
+        commands: [],
+        hooks: {},
+        agents: [],
+      };
+    }
     const repoProjects =
       repoApprovals === undefined
         ? []

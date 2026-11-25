@@ -139,8 +139,9 @@ A plugin with `worker` in `.t3-plugin/plugin.json` runs background ES module cod
 
 ## Enabling, editing, and uninstalling
 
-New plugins start **off**. Open **Settings → Plugins** to turn each plugin on or off.
+New plugins start **off**. Open **Settings → Plugins** to turn each plugin on or off, or use the **Plugins** switch at the top of **Settings → Plugins** to turn all user and repo plugins off or back on for that environment without uninstalling them.
 
+- Turning **Plugins** off stops every active user and repo plugin on that environment (CSS, panels, slash commands, skills, instructions, workers, MCP servers, hooks, and agents) while keeping your installed plugins and their individual toggles intact. Turn **Plugins** back on to restore them.
 - Enabling or disabling a plugin applies live in every connected web and desktop client of that environment.
 - Edits to a user plugin's manifest, CSS, panel HTML, worker, skills, commands, `AGENTS.md`, `.mcp.json`, `hooks/hooks.json`, or `agents/` files on disk are picked up automatically.
 - Invalid or oversized MCP, hook, or agent configs are reported as part problems on the plugin without blocking its other parts. A plugin with a missing or invalid manifest, no supported parts, a name that does not match its folder, invalid CSS, a missing/invalid panel or worker entry, invalid or oversized skills/commands, or oversized `AGENTS.md` still appears in **Settings → Plugins** with a problem message, its switch disabled, and no parts loaded.

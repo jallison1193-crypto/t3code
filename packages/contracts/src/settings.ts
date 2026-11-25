@@ -1588,6 +1588,8 @@ export const ServerSettings = Schema.Struct({
   repoPlugins: Schema.Record(ProjectId, Schema.Record(PluginId, PluginHash)).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
+  /** Fork: global switch for plugins. Off stops every user and repo plugin without removing them. */
+  pluginsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   /** Beta: guest links for this machine's threads. Off refuses new links and pauses existing ones. */
   guestSharingEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   /**
@@ -2056,6 +2058,7 @@ export const ServerSettingsPatch = Schema.Struct({
   repoPlugins: Schema.optionalKey(
     Schema.Record(ProjectId, Schema.NullOr(Schema.Record(PluginId, Schema.NullOr(PluginHash)))),
   ),
+  pluginsEnabled: Schema.optionalKey(Schema.Boolean),
   guestSharingEnabled: Schema.optionalKey(Schema.Boolean),
   linkedEnvironmentsEnabled: Schema.optionalKey(Schema.Boolean),
   promptSuggestionsEnabled: Schema.optionalKey(Schema.Boolean),

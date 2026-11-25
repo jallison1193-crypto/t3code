@@ -253,6 +253,12 @@ export function PluginsSettingsPanel() {
 
   return (
     <SettingsPageContainer>
+      <p className="-mt-6 px-3 text-xs text-muted-foreground sm:px-4">
+        <T>
+          Each environment has its own plugins. The one picked above is the one shown and changed
+          here.
+        </T>
+      </p>
       {connected &&
       environment.serverConfig !== null &&
       environment.serverConfig.environment.capabilities.environmentPlugins !== true ? (
@@ -290,6 +296,10 @@ function EnvironmentPluginsSection({
     serverEnvironment.pluginsList({ environmentId, input: {} }),
     messages,
   );
+  const pluginsEnabled = useEnvironmentSettings(
+    environmentId,
+    (settings) => settings.pluginsEnabled !== false,
+  );
   const livePluginSettings = useEnvironmentSettings(environmentId, (settings) => settings.plugins);
   const liveRepoPluginSettings = useEnvironmentSettings(
     environmentId,
@@ -302,12 +312,19 @@ function EnvironmentPluginsSection({
       projectTitles.set(project.id, project.title);
     }
   }
+  const canUpdateSettings = useAtomValue(
+    serverEnvironment.updateSettings.permissionAtom(environmentId),
+  );
   const canSetEnabled = useAtomValue(
     serverEnvironment.setPluginEnabled.permissionAtom(environmentId),
   );
   const canUninstall = useAtomValue(
     serverEnvironment.uninstallPlugin.permissionAtom(environmentId),
   );
+  const updateSettings = useAtomCommand(serverEnvironment.updateSettings, {
+    label: "plugins enabled update",
+    reportFailure: false,
+  });
   const setPluginEnabled = useAtomCommand(serverEnvironment.setPluginEnabled, {
     label: "plugin enabled update",
     reportFailure: false,
@@ -317,6 +334,7 @@ function EnvironmentPluginsSection({
     reportFailure: false,
   });
 
+  const [savingPluginsEnabled, setSavingPluginsEnabled] = useState(false);
   const [busyPluginKey, setBusyPluginKey] = useState<string | null>(null);
   const [uninstallTarget, setUninstallTarget] = useState<InstalledPlugin | null>(null);
 
@@ -340,6 +358,29 @@ function EnvironmentPluginsSection({
       }))
       .sort((left, right) => left.title.localeCompare(right.title));
   })();
+
+  const handleTogglePluginsEnabled = async (next: boolean) => {
+    if (savingPluginsEnabled || !canUpdateSettings) return;
+    setSavingPluginsEnabled(true);
+    try {
+      const result = await updateSettings({
+        environmentId,
+        input: { patch: { pluginsEnabled: next } },
+      });
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        toastManager.add({
+          type: "error",
+          title: gt("Plugins setting not updated"),
+          description:
+            (error instanceof Error ? thrownErrorMessage(error, messages) : null) ??
+            gt("Could not update plugins setting."),
+        });
+      }
+    } finally {
+      setSavingPluginsEnabled(false);
+    }
+  };
 
   const handleToggle = async (plugin: InstalledPlugin, enabled: boolean) => {
     const key = `user:${plugin.id}`;
@@ -436,6 +477,31 @@ function EnvironmentPluginsSection({
           </Button>
         }
       >
+        <SettingsRow
+          title={gt("Plugins")}
+          description={
+            <T>
+              Run installed user and repo plugins on this environment. Turning this off pauses every
+              plugin without uninstalling them.
+            </T>
+          }
+          status={
+            !pluginsEnabled ? (
+              <T>
+                Plugins are switched off. Installed plugins stay installed but do nothing until you
+                turn this back on.
+              </T>
+            ) : undefined
+          }
+          control={
+            <Switch
+              checked={pluginsEnabled}
+              disabled={!canUpdateSettings || savingPluginsEnabled}
+              onCheckedChange={(checked) => void handleTogglePluginsEnabled(Boolean(checked))}
+              aria-label={gt("Plugins")}
+            />
+          }
+        />
         {pluginsQuery.error !== null && pluginsQuery.data === null ? (
           <SettingsRow
             title={gt("Could not load plugins")}
@@ -454,8 +520,8 @@ function EnvironmentPluginsSection({
           <div className="space-y-1.5 px-4 py-3">
             <p className="text-sm text-muted-foreground">
               <T>
-                Plugins live in the plugins folder below; agents will also be able to build them
-                here soon.
+                No plugins yet. Ask any agent to make one: describe what you want, and it builds the
+                plugin in your plugins folder.
               </T>
             </p>
             {pluginsDir ? (
@@ -483,6 +549,7 @@ function EnvironmentPluginsSection({
               return (
                 <SettingsRow
                   key={plugin.id}
+                  className={pluginsEnabled ? undefined : "opacity-55"}
                   title={
                     <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span className="min-w-0 wrap-anywhere">{label}</span>
@@ -569,7 +636,7 @@ function EnvironmentPluginsSection({
       {repoGroups.length > 0 ? (
         <SettingsSection id="repo-plugins" title={gt("Repo plugins")}>
           {repoGroups.map((group) => (
-            <div key={group.projectId}>
+            <div key={group.projectId} className={pluginsEnabled ? undefined : "opacity-55"}>
               <div className="border-b border-border/60 bg-muted/20 px-4 py-1.5 text-xs font-medium text-muted-foreground">
                 {group.title}
               </div>

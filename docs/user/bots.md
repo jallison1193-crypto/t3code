@@ -43,7 +43,7 @@ Go to **Settings -> General** and turn **Bots** off.
 
 ## Safety gates
 
-Bot threads always run through T3 Code's approval gate, even if a trigger or thread is set to a more permissive mode. T3 Code inspects each action before allowing it:
+Bot threads always run through T3 Code's approval gate, even if a trigger or thread is set to a more permissive mode. The composer shows **Bot safety gate** instead of the permissions picker. T3 Code inspects each action before allowing it:
 
 - **Allowed automatically:** Reads, file edits, read-only tools, and commands that don't look like sending or deleting.
 - **Ask before sending or deleting:** Actions that send messages, emails, posts, comments, pull requests, or non-GET HTTP requests, as well as commands or edits that delete files, wait for your approval.

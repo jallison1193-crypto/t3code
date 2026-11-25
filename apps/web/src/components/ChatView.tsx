@@ -90,6 +90,7 @@ import {
   type ServerProvider,
   type ScopedThreadRef,
   type ThreadId,
+  isBotProject,
   ProviderInteractionMode,
   resolveIdleCompaction,
   RuntimeMode,
@@ -1904,8 +1905,10 @@ export default function ChatView(props: ChatViewProps) {
           providerSubagentModels,
           reportedModelSelection,
         );
+  const isBotThread = isBotProject(settings, activeThreadProjectId);
   const showComposerContextStrip =
     !embedded &&
+    !isBotThread &&
     shouldShowComposerContextStrip({
       isDraftHeroState,
       persistInActiveThreads: settings.persistComposerContextStrip,
@@ -4002,6 +4005,7 @@ export default function ChatView(props: ChatViewProps) {
                                 respondingRequestIds={respondingRequestIds}
                                 runtimeMode={runtimeMode}
                                 defaultRuntimeMode={defaultRuntimeMode}
+                                isBotThread={isBotThread}
                                 lockedProvider={modelPickerLockedProvider}
                                 providerStatuses={providerStatuses as ServerProvider[]}
                                 providerCatalogKnown={serverConfig !== null}
@@ -4218,8 +4222,8 @@ export default function ChatView(props: ChatViewProps) {
                   }
                   gitCwd={gitCwd}
                   workspaceMutationId={workspaceRevision.revision}
-                  isGitRepo={showCodingChrome && isGitRepo}
-                  showCodingChrome={showCodingChrome}
+                  isGitRepo={showCodingChrome && !isBotThread && isGitRepo}
+                  showCodingChrome={showCodingChrome && !isBotThread}
                   envLocked={envLocked}
                   availableEnvironments={logicalProjectEnvironments}
                   autoEnvironmentLabel={autoEnvironmentLabel}
