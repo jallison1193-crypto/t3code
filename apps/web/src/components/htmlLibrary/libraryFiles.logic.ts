@@ -129,7 +129,7 @@ export function libraryFilesView(pages: LibraryFilesPages) {
   };
 }
 
-const MAX_EMPTY_FILE_SEARCH_BATCHES = 25;
+const MAX_EMPTY_FILE_SEARCH_BATCHES = 5;
 
 function sameCursor(a: Cursor | null | undefined, b: Cursor | null | undefined): boolean {
   if (a == null || b == null) return a === b;

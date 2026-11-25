@@ -868,6 +868,8 @@ function LibraryFilesResults({
         <p role="status" className="py-6 text-sm text-muted-foreground">
           {pending ? (
             <T>Loading files…</T>
+          ) : view.hasMore ? (
+            <T>No matches in recent files.</T>
           ) : view.unavailable.length === 0 ? (
             <T>
               Nothing here yet. Ask an agent for a visual page, report, or file and it shows up
@@ -881,7 +883,7 @@ function LibraryFilesResults({
           )}
         </p>
       )}
-      {!empty && view.hasMore ? (
+      {view.hasMore && !(pending && empty) ? (
         <div className="mt-3">
           <Button
             variant="outline"
@@ -889,7 +891,7 @@ function LibraryFilesResults({
             disabled={pending}
             onClick={() => void loadMore(files)}
           >
-            {pending ? <T>Loading…</T> : <T>Load more</T>}
+            {pending ? <T>Loading…</T> : empty ? <T>Search older files</T> : <T>Load more</T>}
           </Button>
         </div>
       ) : null}
