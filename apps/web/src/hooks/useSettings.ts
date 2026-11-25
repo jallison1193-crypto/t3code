@@ -186,9 +186,10 @@ function subscribeOtherWindowClientSettings(): () => void {
     refreshClientSettingsFromOtherTab,
   );
   // The desktop app saves settings in the shell, which tells its other window to re-read them.
-  const unsubscribeDesktop = window.desktopBridge?.onClientSettingsChange?.(
-    refreshClientSettingsFromOtherTab,
-  );
+  const unsubscribeDesktop =
+    typeof window === "undefined"
+      ? undefined
+      : window.desktopBridge?.onClientSettingsChange?.(refreshClientSettingsFromOtherTab);
   return () => {
     unsubscribeBrowser();
     unsubscribeDesktop?.();
