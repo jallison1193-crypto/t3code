@@ -41,6 +41,7 @@ try {
 
   Invoke-Git fetch --quiet $UpstreamRemote main | Out-Null
   Invoke-Git fetch --quiet $ForkRemote | Out-Null
+  & pwsh -NoProfile -File (Join-Path $WorktreePath "scripts\fork\clean-worktrees.ps1") *> (Join-Path $logDir "cleanup-$stamp.log")
   $upstream = "$UpstreamRemote/main"
   $upstreamSha = (Invoke-Git rev-parse --short $upstream).Trim()
 
