@@ -38,6 +38,7 @@ import { useLongLivedAssetUrl } from "~/assets/longLivedAssetUrls";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { connectionAtomRuntime } from "~/connection/runtime";
 import { isElectron } from "~/env";
+import { useClientSettings } from "~/hooks/useSettings";
 import { useStableCallback } from "~/hooks/useStableCallback";
 import { dispatchSnapShotComposerFocus } from "~/lib/desktopSnapShot";
 import { useRightPanelStore } from "~/rightPanelStore";
@@ -73,9 +74,11 @@ import {
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SidebarInset } from "../ui/sidebar";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import {
   askForChangesPrompt,
@@ -91,6 +94,7 @@ import {
   type HtmlLibraryEntry,
 } from "./htmlLibraryPages";
 import {
+  hasAnyWorkThread,
   libraryFileEntryKey,
   libraryFileOpenPath,
   libraryFilesView,
@@ -99,6 +103,7 @@ import {
   libraryUrlWithView,
   libraryViewFromSearch,
   loadLibraryFiles,
+  shouldShowLibraryModeFilter,
   splitLibraryFilePath,
   startLibraryFiles,
   type LibraryFileEntry,
@@ -974,8 +979,16 @@ function HtmlLibraryContent({
   const gt = useGT();
   const location = useLocation();
   const navigate = useNavigate();
+  const appMode = useClientSettings((settings) => settings.appMode);
+  const threadShells = useQuietThreadShells();
   const view = libraryViewFromSearch(location.searchStr);
   const mode = libraryModeFromSearch(location.searchStr);
+  const showModeFilter = shouldShowLibraryModeFilter({
+    appMode,
+    hasWorkThread: hasAnyWorkThread(threadShells),
+    mode,
+  });
+  const modeLabel = mode === "code" ? gt("Code") : mode === "work" ? gt("Work") : gt("All");
   const showMode = (target: LibraryMode) =>
     void navigate({
       href: libraryUrlWithMode(location.pathname, location.searchStr, location.hash, target),
@@ -1009,8 +1022,8 @@ function HtmlLibraryContent({
           </WorkspacePageHeader>
         )}
         <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
-          <div className="mx-auto w-full max-w-3xl px-4 py-4 sm:px-6">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <WorkspacePageContainer width="wide" className="min-h-full gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <ToggleGroup
                 aria-label={gt("Library view")}
                 variant="segmented"
@@ -1037,26 +1050,37 @@ function HtmlLibraryContent({
                   <T>Files</T>
                 </Toggle>
               </ToggleGroup>
-              <ToggleGroup
-                aria-label={gt("Library mode filter")}
-                variant="segmented"
-                size="segmented"
-                value={[mode]}
-                onValueChange={(next) => {
-                  const target = next.find((value): value is LibraryMode => value !== mode);
-                  if (target) showMode(target);
-                }}
-              >
-                <Toggle value="all">
-                  <T>All</T>
-                </Toggle>
-                <Toggle value="code">
-                  <T>Code</T>
-                </Toggle>
-                <Toggle value="work">
-                  <T>Work</T>
-                </Toggle>
-              </ToggleGroup>
+              {showModeFilter ? (
+                <div className="shrink-0">
+                  <Select
+                    value={mode}
+                    onValueChange={(value) => {
+                      if (value === "all" || value === "code" || value === "work") {
+                        showMode(value);
+                      }
+                    }}
+                  >
+                    <SelectTrigger
+                      aria-label={gt("Library mode filter")}
+                      size="compact"
+                      variant="ghost"
+                    >
+                      <SelectValue>{modeLabel}</SelectValue>
+                    </SelectTrigger>
+                    <SelectPopup align="end" alignItemWithTrigger={false}>
+                      <SelectItem value="all">
+                        <T>All</T>
+                      </SelectItem>
+                      <SelectItem value="code">
+                        <T>Code</T>
+                      </SelectItem>
+                      <SelectItem value="work">
+                        <T>Work</T>
+                      </SelectItem>
+                    </SelectPopup>
+                  </Select>
+                </div>
+              ) : null}
             </div>
             {isReady ? (
               projectKey && !group ? (
@@ -1086,7 +1110,7 @@ function HtmlLibraryContent({
                 {view === "files" ? <T>Loading files…</T> : <T>Loading pages…</T>}
               </p>
             )}
-          </div>
+          </WorkspacePageContainer>
         </div>
       </div>
     </SidebarInset>

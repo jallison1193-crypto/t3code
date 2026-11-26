@@ -192,9 +192,10 @@ Threads are either **Code** threads (the default) or **Work** threads. Turn on
 the command palette) so new threads start as Work threads. Existing threads keep their tags.
 
 While Work mode is active, the sidebar header shows a **Work mode** indicator with a one-click
-**Switch to Code** button, and the chat hides coding controls (diffs, terminal drawers and terminal
-tabs, branch, worktree, and commit controls, and checkpoint restore or diff actions, along with
-their keyboard shortcuts) regardless of the sidebar filter or the opened thread's tag. Switching
+**Switch to Code** button, and the app hides coding controls (Pull requests and Issues in the
+sidebar, Open in editor controls, diffs, terminal drawers and terminal tabs, branch, worktree, and
+commit controls, and checkpoint restore or diff actions, along with their keyboard shortcuts)
+regardless of the sidebar filter or the opened thread's tag. Switching
 back to Code mode restores those controls with your running terminals, checkpoints, drafts, and
 saved panel tabs intact. Noncoding panels, including threads opened beside a coordinator, stay
 available in both modes.

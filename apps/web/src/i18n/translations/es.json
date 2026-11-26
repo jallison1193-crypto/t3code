@@ -13125,5 +13125,9 @@
   "7e0619494c7b2a24": "Sección Te necesita",
   "a3f4bb6c8e3cce55": "Restablecer la sección Te necesita al valor predeterminado",
   "0426d4f8b82879a9": "Muestra los hilos que te esperan en la parte superior de la barra lateral de proyectos. Solo se aplica cuando la barra lateral de proyectos está activada.",
-  "aa43a97ca417d2a2": "te necesita esperando atención bandeja de entrada barra lateral ocultar"
+  "aa43a97ca417d2a2": "te necesita esperando atención bandeja de entrada barra lateral ocultar",
+  "ac775cff6bbc0f6a": "Mover hilo a Trabajo",
+  "8298cb680a29d59e": "Mover hilo a Código",
+  "7750ae23b180cd58": "Abrir Biblioteca",
+  "6f16ca131b3dfbb5": "Abrir Biblioteca del proyecto"
 }

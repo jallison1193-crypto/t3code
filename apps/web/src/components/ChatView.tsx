@@ -1803,13 +1803,15 @@ export default function ChatView(props: ChatViewProps) {
     useAtomValue(serverEnvironment.configValueAtom(openInEnvironmentId))?.availableEditors ?? [];
   const hostEnvironmentId = useAtomValue(hostEnvironmentIdAtom);
   const remoteOpenState = useRemoteOpenState(openInEnvironmentId);
-  const showOpenInPicker = shouldShowOpenInPicker({
-    activeProjectName: activeProject?.title,
-    activeThreadEnvironmentId: openInEnvironmentId,
-    primaryEnvironmentId: primaryEnvironment?.environmentId ?? null,
-    hostEnvironmentId,
-    remoteOpenMode: remoteOpenState.mode,
-  });
+  const showOpenInPicker =
+    showCodingChrome &&
+    shouldShowOpenInPicker({
+      activeProjectName: activeProject?.title,
+      activeThreadEnvironmentId: openInEnvironmentId,
+      primaryEnvironmentId: primaryEnvironment?.environmentId ?? null,
+      hostEnvironmentId,
+      remoteOpenMode: remoteOpenState.mode,
+    });
   useOpenFavoriteEditorShortcut({
     enabled: showOpenInPicker && !backgroundThread,
     environmentId: openInEnvironmentId,

@@ -13,6 +13,8 @@ import { threadModeOf, WORK_MODE_TAG } from "@t3tools/client-runtime/state/threa
 import { canSnooze, effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
 import {
   AuthOrchestrationOperateScope,
+  type EnvironmentId,
+  type ProjectId,
   type ScopedThreadRef,
   type ThreadId,
 } from "@t3tools/contracts";
@@ -69,6 +71,45 @@ function failureToast(title: string, error: unknown) {
   );
 }
 
+export function readThreadModeAndCoordinatorActions(thread: {
+  readonly id: ThreadId;
+  readonly environmentId: EnvironmentId;
+  readonly projectId: ProjectId | null | undefined;
+  readonly tags?: ReadonlyArray<string> | undefined;
+  readonly source?: { readonly tags?: ReadonlyArray<string> | undefined } | undefined;
+}) {
+  const mode = threadModeOf(thread);
+  const canMoveMode = readEnvironmentScope(thread.environmentId, AuthOrchestrationOperateScope);
+  const coordinator = readCoordinatorMenuState(thread);
+  return {
+    mode,
+    canMoveMode,
+    isCoordinator: coordinator.isCoordinator,
+    canMakeCoordinator: coordinator.supported && !coordinator.isCoordinator,
+  };
+}
+
+export function useMoveThreadMode() {
+  const setThreadTag = useOrchestrationCommand(threadEnvironment.setTag, {
+    label: "Set thread tag",
+    reportFailure: false,
+  });
+
+  return async (threadRef: ScopedThreadRef, targetMode: "work" | "code") => {
+    const result = await setThreadTag({
+      environmentId: threadRef.environmentId,
+      input: {
+        threadId: threadRef.threadId,
+        tag: WORK_MODE_TAG,
+        tagged: targetMode === "work",
+      },
+    });
+    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      failureToast(m(msg("Failed to move thread")), squashAtomCommandFailure(result));
+    }
+  };
+}
+
 export function useThreadActionMenu(input: {
   readonly threadRef: ScopedThreadRef | null;
   readonly projectCwd: string | null;
@@ -103,10 +144,7 @@ export function useThreadActionMenu(input: {
   const regenerateThreadTitle = useOrchestrationCommand(threadEnvironment.regenerateTitle, {
     reportFailure: false,
   });
-  const setThreadTag = useOrchestrationCommand(threadEnvironment.setTag, {
-    label: "Set thread tag",
-    reportFailure: false,
-  });
+  const moveThreadMode = useMoveThreadMode();
   const handleNewThread = useNewThreadHandler();
   const confirmThreadDelete = useClientSettings((s) => s.confirmThreadDelete);
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
@@ -322,16 +360,7 @@ export function useThreadActionMenu(input: {
         }
         case "move-to-work":
         case "move-to-code":
-          await reportFailure(m(msg("Failed to move thread")), () =>
-            setThreadTag({
-              environmentId: threadRef.environmentId,
-              input: {
-                threadId: threadRef.threadId,
-                tag: WORK_MODE_TAG,
-                tagged: action === "move-to-work",
-              },
-            }),
-          );
+          await moveThreadMode(threadRef, action === "move-to-work" ? "work" : "code");
           return;
         case "copy-path": {
           const workspacePath = thread.worktreePath ?? projectCwd;

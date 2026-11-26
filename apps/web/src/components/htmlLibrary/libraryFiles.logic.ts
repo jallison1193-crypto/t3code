@@ -1,4 +1,7 @@
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
+import { threadModeOf } from "@t3tools/client-runtime/state/thread-mode";
 import type {
+  AppMode,
   EnvironmentId,
   OrchestrationV2ListLibraryFilesInput,
   OrchestrationV2ListLibraryFilesResult,
@@ -52,6 +55,20 @@ export function libraryViewFromSearch(search: string | Record<string, unknown>):
 export function libraryModeFromSearch(search: string): LibraryMode {
   const mode = new URLSearchParams(search).get("mode");
   return mode === "code" || mode === "work" ? mode : "all";
+}
+
+export function hasAnyWorkThread(
+  threads: ReadonlyArray<Pick<EnvironmentThreadShell, "deletedAt" | "tags" | "source">>,
+): boolean {
+  return threads.some((thread) => thread.deletedAt === null && threadModeOf(thread) === "work");
+}
+
+export function shouldShowLibraryModeFilter(input: {
+  readonly appMode: AppMode;
+  readonly hasWorkThread: boolean;
+  readonly mode: LibraryMode;
+}): boolean {
+  return input.appMode === "work" || input.hasWorkThread || input.mode !== "all";
 }
 
 // A null value removes the param, so each default keeps a clean URL.
