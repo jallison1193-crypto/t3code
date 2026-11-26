@@ -24,6 +24,7 @@ export type SettingsPath =
   | "/settings/voice"
   | "/settings/appearance"
   | "/settings/plugins"
+  | "/settings/bots"
   | "/settings/chat"
   | "/settings/diffs"
   | "/settings/keybindings"
@@ -103,6 +104,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/general": msg("General"),
   "/settings/appearance": msg("Appearance"),
   "/settings/plugins": msg("Plugins"),
+  "/settings/bots": msg("Bots"),
   "/settings/chat": msg("Chat"),
   "/settings/diffs": msg("Diffs & pull requests"),
   "/settings/keybindings": msg("Keybindings"),
@@ -159,6 +161,7 @@ const ALL_SETTINGS_NAV_GROUPS: ReadonlyArray<SettingsNavGroup> = [
     paths: [
       "/settings/providers",
       "/settings/plugins",
+      "/settings/bots",
       "/settings/threads",
       "/settings/browser",
       "/settings/devices",
@@ -566,8 +569,26 @@ export const SETTINGS_SEARCH_ITEMS = [
   {
     id: "bots-enabled",
     title: msg("Bots"),
-    to: "/settings/general",
+    to: "/settings/bots",
     searchTerms: [msg("bots agents automations triggers schedules webhooks pause disable")],
+  },
+  {
+    id: "bots-list",
+    title: msg("Your bots"),
+    to: "/settings/bots",
+    searchTerms: [msg("bots list manage pause resume triggers schedule webhook")],
+  },
+  {
+    id: "bot-default-model",
+    title: msg("Default model for new bots"),
+    to: "/settings/bots",
+    searchTerms: [msg("bot model default claude codex new bots")],
+  },
+  {
+    id: "bot-default-limits",
+    title: msg("Default daily limits for new bots"),
+    to: "/settings/bots",
+    searchTerms: [msg("bot limits runs tokens daily default new bots")],
   },
   {
     id: "boring-sidebar",
@@ -1634,6 +1655,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/voice": null,
   "/settings/appearance": null,
   "/settings/plugins": null,
+  "/settings/bots": null,
   "/settings/chat": null,
   "/settings/diffs": null,
   "/settings/snap-shot": null,

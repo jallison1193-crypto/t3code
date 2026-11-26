@@ -51,6 +51,7 @@ import {
   AuthOrchestrationOperateScope,
   AuthSourceControlWriteScope,
   AuthFilesystemReadScope,
+  isBotProject,
   type DesktopWslState,
   type EnvironmentId,
   type FilesystemBrowseResult,
@@ -299,6 +300,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { ComposerHandleContext, useComposerHandleContext } from "../composerHandleContext";
 import type { ChatComposerHandle } from "./chat/ChatComposer";
 import {
+  derivePhysicalProjectKey,
   isPickableProjectMember,
   pickableProjectGroups,
 } from "@t3tools/client-runtime/state/project-grouping";
@@ -538,8 +540,9 @@ function OpenCommandPaletteDialog(props: {
   const paletteRouteTarget = useThreadRouteTarget();
   const serverConfigs = useServerConfigs();
   const botsEnabled = useAnyBotsEnabled();
+  const allProjects = useProjects();
   const projects = filterNonBotProjects(
-    useProjects(),
+    allProjects,
     (environmentId) => serverConfigs.get(environmentId)?.settings,
   );
   const referenceThreadRef =
@@ -1926,6 +1929,43 @@ function OpenCommandPaletteDialog(props: {
       await navigate({ to: "/settings" });
     },
   });
+
+  actionItems.push({
+    kind: "action",
+    value: "action:bot-settings",
+    searchTerms: ["bot", "bots", "settings", "defaults", "model", "limits"],
+    title: gt("Open bot settings"),
+    icon: <BotIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/settings/bots" });
+    },
+  });
+
+  const botHomeProjectKey = projectKeyFromPathname(pathname);
+  const activeBotProject =
+    botHomeProjectKey !== null
+      ? (allProjects.find(
+          (project) =>
+            isBotProject(serverConfigs.get(project.environmentId)?.settings, project.id) &&
+            derivePhysicalProjectKey(project) === botHomeProjectKey,
+        ) ?? null)
+      : null;
+  if (activeBotProject !== null) {
+    actionItems.push({
+      kind: "action",
+      value: "action:current-bot-settings",
+      searchTerms: ["bot", "settings", "goal", "model", "limits", "triggers"],
+      title: gt("Open this bot's settings"),
+      description: activeBotProject.title,
+      icon: <BotIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({
+          to: "/settings/bots",
+          search: { bot: activeBotProject.id, env: activeBotProject.environmentId },
+        });
+      },
+    });
+  }
 
   // Every group, so an archived project's thread still opens its own settings.
   const currentProjectGroup =

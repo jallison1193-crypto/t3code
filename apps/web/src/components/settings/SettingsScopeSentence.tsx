@@ -57,6 +57,8 @@ export const SETTINGS_DEVICE_ONLY_PATHS: ReadonlySet<string> = new Set([
   "/settings/connections",
   // Access picks its environment on the page itself.
   "/settings/access",
+  // Bots manages environments and individual bots on the page itself.
+  "/settings/bots",
   "/settings/about",
 ]);
 

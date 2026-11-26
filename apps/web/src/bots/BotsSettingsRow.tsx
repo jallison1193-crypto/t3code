@@ -30,7 +30,7 @@ export function BotsSettingsRow() {
   const targetEnvironments = loadedEnvironments.filter(
     (env) => env.connection.phase === "connected" && writable.has(env.environmentId),
   );
-  const states = loadedEnvironments.map((env) => env.serverConfig!.settings.botsEnabled !== false);
+  const states = loadedEnvironments.map((env) => env.serverConfig?.settings.botsEnabled !== false);
   const anyEnabled = states.length === 0 ? true : states.some(Boolean);
   const allEnabled = states.length === 0 ? true : states.every(Boolean);
   const mixed = states.length > 1 && anyEnabled && !allEnabled;
@@ -71,7 +71,13 @@ export function BotsSettingsRow() {
           this off pauses every bot trigger without deleting bots.
         </T>
       }
-      status={mixed ? gt("Mixed across connected environments") : undefined}
+      status={
+        mixed
+          ? gt("Mixed across connected environments")
+          : !anyEnabled
+            ? gt("Bots below will not run until Bots are turned on.")
+            : undefined
+      }
       resetAction={
         !allEnabled && targetEnvironments.length > 0 ? (
           <SettingResetButton

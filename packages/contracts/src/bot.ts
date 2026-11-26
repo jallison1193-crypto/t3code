@@ -97,6 +97,18 @@ export const BotProfile = Schema.Struct({
 });
 export type BotProfile = typeof BotProfile.Type;
 
+export const BotDefaults = Schema.Struct({
+  modelSelection: Schema.optionalKey(ModelSelection),
+  limits: Schema.optionalKey(BotLimits),
+});
+export type BotDefaults = typeof BotDefaults.Type;
+
+export const BotDefaultsPatch = Schema.Struct({
+  modelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
+  limits: Schema.optionalKey(Schema.NullOr(BotLimits)),
+});
+export type BotDefaultsPatch = typeof BotDefaultsPatch.Type;
+
 export const BotRecord = Schema.Struct({
   projectId: ProjectId,
   name: TrimmedNonEmptyString,

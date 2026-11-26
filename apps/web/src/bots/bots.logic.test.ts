@@ -23,17 +23,20 @@ import {
 } from "../components/sidebar/ProjectsSidebar.logic";
 import { deriveProviderInstanceEntries } from "../providerInstances";
 import {
+  botSettingsSelectionKeyFromSearch,
   deriveBotSidebarEntries,
   filterNonBotProjects,
   filterNonBotThreads,
   formatBotBlockReason,
   formatBotModelDisplayName,
+  formatBotTodayUsage,
   formatBotTokenCount,
   isAnyBotsEnabled,
   isBotSidebarRoute,
   keepBotProjectsSeparate,
   parseBotPositiveInt,
   resolveBotEffectiveModelSelection,
+  resolveBotListStatus,
   resolveBotRouteSidebarMode,
   resolveBotRunNowState,
   resolveFirstSupportedBotModelSelection,
@@ -382,6 +385,32 @@ describe("bots client logic", () => {
       ),
     ).toEqual({ instanceId: codexId, model: "gpt-5.4" });
 
+    // Seeding prefers a supported botDefaults.modelSelection over defaultModelSelection.
+    expect(
+      resolveFirstSupportedBotModelSelection(
+        {
+          defaultModelSelection: { instanceId: codexId, model: "gpt-5.4" },
+          botDefaults: {
+            modelSelection: { instanceId: claudeId, model: "claude-haiku-4-5" },
+          },
+        },
+        entries,
+      ),
+    ).toEqual({ instanceId: claudeId, model: "claude-haiku-4-5" });
+
+    // Seeding ignores an unsupported botDefaults.modelSelection and falls back as before.
+    expect(
+      resolveFirstSupportedBotModelSelection(
+        {
+          defaultModelSelection: { instanceId: codexId, model: "gpt-5.4" },
+          botDefaults: {
+            modelSelection: { instanceId: antigravityId, model: "gemini-pro" },
+          },
+        },
+        entries,
+      ),
+    ).toEqual({ instanceId: codexId, model: "gpt-5.4" });
+
     // Seeding returns null when only unsupported providers exist.
     expect(
       resolveFirstSupportedBotModelSelection(
@@ -538,5 +567,93 @@ describe("bots client logic", () => {
         nextPathname: "/settings/general",
       }),
     ).toBe(false);
+    expect(
+      shouldBlockBotNavigation({
+        dirty: true,
+        currentPathname: "/settings/bots",
+        nextPathname: "/settings/bots",
+        currentSelectionKey: botSettingsSelectionKeyFromSearch({ bot: "bot-a", env: "env-1" }),
+        nextSelectionKey: botSettingsSelectionKeyFromSearch({}),
+      }),
+    ).toBe(true);
+    expect(
+      shouldBlockBotNavigation({
+        dirty: true,
+        currentPathname: "/settings/bots",
+        nextPathname: "/settings/bots",
+        currentSelectionKey: botSettingsSelectionKeyFromSearch({ bot: "bot-a", env: "env-1" }),
+        nextSelectionKey: botSettingsSelectionKeyFromSearch({ bot: "bot-a", env: "env-1" }),
+      }),
+    ).toBe(false);
+  });
+
+  it("derives bot settings list status and formats today's usage text", () => {
+    expect(
+      resolveBotListStatus({ botsEnabled: true, paused: false, blockedByPolicy: undefined }),
+    ).toEqual({ kind: "active", label: "Active" });
+    expect(
+      resolveBotListStatus({
+        botsEnabled: true,
+        paused: true,
+        blockedByPolicy: BOT_PAUSED_REASON,
+      }),
+    ).toEqual({ kind: "paused", label: "Paused" });
+    expect(
+      resolveBotListStatus({
+        botsEnabled: false,
+        paused: false,
+        blockedByPolicy: BOTS_DISABLED_REASON,
+      }),
+    ).toEqual({ kind: "blocked", label: BOTS_DISABLED_REASON });
+    expect(
+      resolveBotListStatus({
+        botsEnabled: true,
+        paused: false,
+        blockedByPolicy: BOT_DAILY_RUN_LIMIT_REASON,
+      }),
+    ).toEqual({ kind: "blocked", label: BOT_DAILY_RUN_LIMIT_REASON });
+    expect(
+      resolveBotListStatus(
+        {
+          botsEnabled: true,
+          paused: false,
+          blockedByPolicy: BOT_DAILY_TOKEN_LIMIT_REASON,
+        },
+        (message) => `[fr] ${message}`,
+      ),
+    ).toEqual({ kind: "blocked", label: `[fr] ${BOT_DAILY_TOKEN_LIMIT_REASON}` });
+    expect(
+      resolveBotListStatus({
+        botsEnabled: true,
+        paused: false,
+        blockedByPolicy: BOT_PAUSED_REASON,
+      }),
+    ).toEqual({ kind: "active", label: "Active" });
+
+    expect(
+      formatBotTodayUsage(null, {
+        mode: "runs_and_tokens",
+        runsPerDay: 24,
+        tokensPerDay: 2_000_000,
+      }),
+    ).toBeNull();
+    expect(
+      formatBotTodayUsage(
+        { runs: 3, tokens: 125_000 },
+        { mode: "runs_and_tokens", runsPerDay: 24, tokensPerDay: 2_000_000 },
+      ),
+    ).toBe("Today: 3 / 24 runs · 125k / 2M tokens");
+    expect(
+      formatBotTodayUsage(
+        { runs: 3, tokens: 125_000 },
+        { mode: "runs_only", runsPerDay: 10, tokensPerDay: 2_000_000 },
+      ),
+    ).toBe("Today: 3 / 10 runs · 125k tokens");
+    expect(
+      formatBotTodayUsage(
+        { runs: 3, tokens: 125_000 },
+        { mode: "none", runsPerDay: 24, tokensPerDay: 2_000_000 },
+      ),
+    ).toBe("Today: 3 runs · 125k tokens");
   });
 });

@@ -17,6 +17,7 @@ import {
   type ServerSettings,
   isBotPaused,
   isBotProject,
+  providerSupportsBotGate,
   resolveBotLimits,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -337,13 +338,33 @@ const make = Effect.gen(function* () {
       })
       .pipe(Effect.orElseSucceed(() => createdProject));
 
+    const effectiveLimits = input.limits ?? settings.botDefaults?.limits;
     const botProfile: BotProfile =
-      input.limits === undefined ? {} : { limits: normalizeBotLimits(input.limits) };
+      effectiveLimits === undefined ? {} : { limits: normalizeBotLimits(effectiveLimits) };
+
+    let effectiveModelSelection: ModelSelection | null = null;
+    if (input.modelSelection !== undefined) {
+      effectiveModelSelection = input.modelSelection;
+    } else if (settings.botDefaults?.modelSelection !== undefined) {
+      const defaultModel = settings.botDefaults.modelSelection;
+      const registryDriver =
+        resolveDriverKind !== undefined
+          ? yield* resolveDriverKind(defaultModel.instanceId)
+          : undefined;
+      const driverKind =
+        registryDriver ??
+        settings.providerInstances[defaultModel.instanceId]?.driver ??
+        defaultModel.instanceId;
+      if (providerSupportsBotGate(driverKind)) {
+        effectiveModelSelection = defaultModel;
+      }
+    }
+
     const override: ProjectSettingsOverrides = {
       bot: botProfile,
       ...(goal.length > 0 ? { projectInstructions: goal } : {}),
-      ...(input.modelSelection !== undefined && input.modelSelection !== null
-        ? { defaultModelSelection: input.modelSelection }
+      ...(effectiveModelSelection !== null
+        ? { defaultModelSelection: effectiveModelSelection }
         : {}),
     };
 

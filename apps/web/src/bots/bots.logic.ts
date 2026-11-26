@@ -10,16 +10,19 @@ import {
   isListedThreadLineage,
   providerSupportsBotGate,
   resolveSidebarModeFilter,
+  type BotDailyUsage,
   type EnvironmentId,
   type ModelSelection,
   type ProjectId,
   type ProviderDriverKind,
+  type ResolvedBotLimits,
   type ServerSettings,
   type SidebarProjectGroupingMode,
 } from "@t3tools/contracts";
 import type { SidebarModeFilter } from "@t3tools/contracts/settings";
 import { derivePhysicalProjectKey } from "@t3tools/client-runtime/state/project-grouping";
 import { toSortableTimestamp } from "@t3tools/client-runtime/state/thread-sort";
+import * as Predicate from "effect/Predicate";
 import { msg } from "gt-react";
 
 import { getDisplayModelName } from "../components/chat/providerIconUtils";
@@ -27,7 +30,7 @@ import type {
   ProjectsSidebarGroupInput,
   ProjectsSidebarThread,
 } from "../components/sidebar/ProjectsSidebar.logic";
-import { m } from "../i18n/messages";
+import { m, type MessageResolver } from "../i18n/messages";
 import {
   resolveSelectableProviderInstanceEntry,
   type ProviderInstanceEntry,
@@ -264,7 +267,12 @@ export function resolveBotEffectiveModelSelection(input: {
 }
 
 export function resolveFirstSupportedBotModelSelection(
-  settings: Pick<ServerSettings, "defaultModelSelection"> | null | undefined,
+  settings:
+    | (Pick<ServerSettings, "defaultModelSelection"> & {
+        readonly botDefaults?: ServerSettings["botDefaults"];
+      })
+    | null
+    | undefined,
   instanceEntries: ReadonlyArray<ProviderInstanceEntry>,
 ): ModelSelection | null {
   const readySupported = instanceEntries.filter(
@@ -280,6 +288,14 @@ export function resolveFirstSupportedBotModelSelection(
   );
   const pool = readySupported.length > 0 ? readySupported : fallbackSupported;
   if (pool.length === 0) return null;
+
+  const botDefault = settings?.botDefaults?.modelSelection ?? null;
+  if (
+    botDefault !== null &&
+    fallbackSupported.some((entry) => entry.instanceId === botDefault.instanceId)
+  ) {
+    return botDefault;
+  }
 
   const envDefault = settings?.defaultModelSelection ?? null;
   if (envDefault !== null) {
@@ -400,10 +416,106 @@ export function formatBotBlockReason(
   return label === undefined ? reason : resolve(label);
 }
 
+type BotListStatusKind = "active" | "paused" | "blocked";
+
+interface BotListStatus {
+  readonly kind: BotListStatusKind;
+  readonly label: string;
+}
+
+const BOT_LIST_STATUS_ACTIVE = msg("Active", { $context: "bot status" });
+const BOT_LIST_STATUS_PAUSED = msg("Paused");
+
+export function resolveBotListStatus(
+  input: {
+    readonly botsEnabled: boolean;
+    readonly paused: boolean;
+    readonly blockedByPolicy: string | undefined;
+  },
+  resolve: (message: string) => string = m,
+): BotListStatus {
+  if (!input.botsEnabled) {
+    return {
+      kind: "blocked",
+      label: formatBotBlockReason(BOTS_DISABLED_REASON, resolve),
+    };
+  }
+  if (input.paused) {
+    return {
+      kind: "paused",
+      label: resolve(BOT_LIST_STATUS_PAUSED),
+    };
+  }
+  if (
+    input.blockedByPolicy !== undefined &&
+    input.blockedByPolicy !== BOT_PAUSED_REASON &&
+    input.blockedByPolicy !== BOTS_DISABLED_REASON
+  ) {
+    return {
+      kind: "blocked",
+      label: formatBotBlockReason(input.blockedByPolicy, resolve),
+    };
+  }
+  return {
+    kind: "active",
+    label: resolve(BOT_LIST_STATUS_ACTIVE),
+  };
+}
+
+export function formatBotTodayUsage(
+  usage: Pick<BotDailyUsage, "runs" | "tokens"> | null | undefined,
+  limits: ResolvedBotLimits,
+  resolve: MessageResolver = m,
+): string | null {
+  if (usage == null) return null;
+  const tokens = formatBotTokenCount(usage.tokens);
+  if (limits.mode === "runs_and_tokens") {
+    return resolve(
+      msg("Today: {runs} / {runsLimit} runs · {tokens} / {tokensLimit} tokens", {
+        runs: usage.runs,
+        runsLimit: limits.runsPerDay,
+        tokens,
+        tokensLimit: formatBotTokenCount(limits.tokensPerDay),
+      }),
+    );
+  }
+  if (limits.mode === "runs_only") {
+    return resolve(
+      msg("Today: {runs} / {runsLimit} runs · {tokens} tokens", {
+        runs: usage.runs,
+        runsLimit: limits.runsPerDay,
+        tokens,
+      }),
+    );
+  }
+  return resolve(
+    msg("Today: {runs} runs · {tokens} tokens", {
+      runs: usage.runs,
+      tokens,
+    }),
+  );
+}
+
+export function botSettingsSelectionKeyFromSearch(search: unknown): string | null {
+  if (!Predicate.isObject(search)) return null;
+  const bot = typeof search.bot === "string" ? search.bot.trim() : "";
+  if (bot.length === 0) return null;
+  const env = typeof search.env === "string" ? search.env.trim() : "";
+  return `${env}:${bot}`;
+}
+
 export function shouldBlockBotNavigation(input: {
   readonly dirty: boolean;
   readonly currentPathname: string;
   readonly nextPathname: string;
+  readonly currentSelectionKey?: string | null;
+  readonly nextSelectionKey?: string | null;
 }): boolean {
-  return input.dirty && input.nextPathname !== input.currentPathname;
+  if (!input.dirty) return false;
+  if (input.nextPathname !== input.currentPathname) return true;
+  return (
+    input.currentSelectionKey !== undefined &&
+    input.nextSelectionKey !== undefined &&
+    input.currentSelectionKey !== input.nextSelectionKey
+  );
 }

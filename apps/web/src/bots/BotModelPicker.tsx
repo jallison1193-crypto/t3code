@@ -25,12 +25,18 @@ export function BotModelPicker({
   projectId,
   value,
   disabled = false,
+  emptyLabel,
+  showClearButton = true,
+  warnOnInheritedUnsupported = true,
   onChange,
 }: {
   readonly environmentId: EnvironmentId;
   readonly projectId: ProjectId | null;
   readonly value: ModelSelection | null;
   readonly disabled?: boolean;
+  readonly emptyLabel?: string;
+  readonly showClearButton?: boolean;
+  readonly warnOnInheritedUnsupported?: boolean;
   readonly onChange: (next: ModelSelection | null) => void;
 }) {
   const gt = useGT();
@@ -59,11 +65,13 @@ export function BotModelPicker({
     environmentDefaultModelSelection: settings.defaultModelSelection,
     instanceEntries,
   });
+  const showUnsupportedWarning =
+    effectiveModel.unsupported && (value !== null || warnOnInheritedUnsupported);
   const unsupportedReason = gt("Not supported for bots yet. Pick Claude or Codex.");
 
   return (
     <div className="space-y-1.5">
-      {effectiveModel.unsupported ? (
+      {showUnsupportedWarning ? (
         <p className="text-xs text-warning" role="status">
           <T>Bots run only on Claude or Codex. Pick a model below.</T>
         </p>
@@ -84,7 +92,7 @@ export function BotModelPicker({
               ? unsupportedReason
               : null;
           }}
-          {...(value === null ? { triggerLabel: gt("Default model") } : {})}
+          {...(value === null ? { triggerLabel: emptyLabel ?? gt("Default model") } : {})}
           triggerAriaLabel={gt("Bot model")}
           triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
           onInstanceModelChange={(instanceId, model) => {
@@ -108,7 +116,7 @@ export function BotModelPicker({
             }
           />
         ) : null}
-        {value !== null ? (
+        {showClearButton && value !== null ? (
           <Button
             type="button"
             variant="ghost"

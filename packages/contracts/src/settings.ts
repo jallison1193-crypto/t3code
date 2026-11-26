@@ -42,7 +42,7 @@ import {
   ProviderOptionSelections,
 } from "./model.ts";
 import { ModelSelection } from "./modelSelection.ts";
-import { BotProfile } from "./bot.ts";
+import { BotDefaults, BotDefaultsPatch, BotProfile } from "./bot.ts";
 import { PluginHash, PluginId, PluginSettingEntry, PluginSettingEntryPatch } from "./plugin.ts";
 import { ProjectScript, type ProjectMutation } from "./project.ts";
 import { DEFAULT_RUNTIME_MODE, RuntimeMode } from "./providerPolicy.ts";
@@ -1626,6 +1626,8 @@ export const ServerSettings = Schema.Struct({
   promptSuggestionsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   /** Fork: global switch for Bots. Off hides bot surfaces and blocks bot triggers without removing data. */
   botsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  /** Fork: default model and daily limits copied to new bots. Missing uses built-in defaults. */
+  botDefaults: Schema.optionalKey(BotDefaults),
   sidebarAutoSettleKeepPullRequests: Schema.Boolean.pipe(
     Schema.withDecodingDefault(Effect.succeed(false)),
   ),
@@ -2088,6 +2090,7 @@ export const ServerSettingsPatch = Schema.Struct({
   linkedEnvironmentsEnabled: Schema.optionalKey(Schema.Boolean),
   promptSuggestionsEnabled: Schema.optionalKey(Schema.Boolean),
   botsEnabled: Schema.optionalKey(Schema.Boolean),
+  botDefaults: Schema.optionalKey(Schema.NullOr(BotDefaultsPatch)),
   backgroundActivity: Schema.optionalKey(
     Schema.Struct({
       schemaVersion: Schema.optionalKey(Schema.Literal(1)),

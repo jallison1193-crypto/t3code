@@ -1,5 +1,7 @@
 import type { ModelPreferences } from "@t3tools/contracts/settings";
 import {
+  type BotDefaults,
+  type BotDefaultsPatch,
   DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_TEXT_GENERATION_MODEL,
   DEFAULT_TEXT_GENERATION_MODEL_BY_PROVIDER,
@@ -300,6 +302,21 @@ function mergePluginSettingsPatch(
   return Object.fromEntries(next);
 }
 
+function mergeBotDefaultsPatch(
+  current: BotDefaults | undefined,
+  patch: BotDefaultsPatch | null,
+): BotDefaults | undefined {
+  if (patch === null) return undefined;
+  const modelSelection =
+    patch.modelSelection === null ? undefined : (patch.modelSelection ?? current?.modelSelection);
+  const limits = patch.limits === null ? undefined : (patch.limits ?? current?.limits);
+  if (modelSelection === undefined && limits === undefined) return undefined;
+  return {
+    ...(modelSelection !== undefined ? { modelSelection } : {}),
+    ...(limits !== undefined ? { limits } : {}),
+  };
+}
+
 function mergeRepoPluginSettingsPatch(
   current: Readonly<Record<string, Readonly<Record<string, string>>>>,
   patch: Readonly<Record<string, Readonly<Record<string, string | null>> | null>>,
@@ -487,6 +504,7 @@ export function applyServerSettingsPatch(
     htmlLibraryEntries: htmlLibraryEntriesPatch,
     plugins: pluginsPatch,
     repoPlugins: repoPluginsPatch,
+    botDefaults: botDefaultsPatch,
     usageLimitSources: usageLimitSourcesPatch,
     textGenerators: textGeneratorsPatch,
     secretProviders: secretProvidersPatch,
@@ -588,6 +606,11 @@ export function applyServerSettingsPatch(
     };
   }
   const next = deepMerge(current, patchForMerge);
+  const { botDefaults: _currentBotDefaults, ...nextWithoutBotDefaults } = next;
+  const nextBotDefaults =
+    botDefaultsPatch === undefined
+      ? current.botDefaults
+      : mergeBotDefaultsPatch(current.botDefaults, botDefaultsPatch);
   let threadSections = current.threadSections;
   if (threadSectionsPatch !== undefined) {
     threadSections = mergeSettingsEntries(
@@ -609,7 +632,8 @@ export function applyServerSettingsPatch(
     };
   }
   const nextWithReplacementsBase = {
-    ...next,
+    ...nextWithoutBotDefaults,
+    ...(nextBotDefaults === undefined ? {} : { botDefaults: nextBotDefaults }),
     favorites,
     providerModelPreferences: nextModelPreferences,
     ...(worktreeCleanupPatch === undefined

@@ -114,11 +114,24 @@ describe("searchSettings", () => {
     });
   });
 
-  it("finds the Bots setting under General", () => {
+  it("finds the Bots settings under Bots", () => {
     expect(searchSettings("bots")[0]).toMatchObject({
       id: "bots-enabled",
-      to: "/settings/general",
+      to: "/settings/bots",
     });
+    expect(searchSettings("bot model default")[0]).toMatchObject({
+      id: "bot-default-model",
+      to: "/settings/bots",
+    });
+    expect(searchSettings("bot limits runs tokens daily")[0]).toMatchObject({
+      id: "bot-default-limits",
+      to: "/settings/bots",
+    });
+    expect(searchSettings("your bots")[0]).toMatchObject({
+      id: "bots-list",
+      to: "/settings/bots",
+    });
+    expect(movedSettingsPath("/settings/general", "bots-enabled")).toBe("/settings/bots");
   });
 
   it("finds project instructions, memory, and knowledge files under project settings", () => {
