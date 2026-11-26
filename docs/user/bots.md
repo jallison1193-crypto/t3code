@@ -52,7 +52,7 @@ Bot threads always run through T3 Code's approval gate, even if a trigger or thr
 - **Ask when unclear:** If T3 Code can't see what an action does, it waits for your approval.
 - **Paying is blocked:** Tools and commands for paying, purchasing, checkout, ordering, transferring money, subscribing, or tipping are declined automatically.
 
-Held approvals appear in **Needs you** when the Needs you section is on and trigger phone alerts, with only **Approve once** and **Decline**.
+Held approvals trigger phone alerts and appear in **Needs you** when that section is on. They offer only **Approve once** and **Decline**.
 
 The gate judges each action by its tool name and command text. A script a bot writes and runs can still reach the network without asking, so give bots only the accounts and folders they need. Codex runs commands in an offline, read-only sandbox and asks before leaving it, which closes that gap for Codex bots.
 
