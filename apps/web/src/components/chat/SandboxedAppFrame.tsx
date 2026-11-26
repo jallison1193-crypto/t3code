@@ -13,6 +13,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { useLongLivedAssetUrl } from "~/assets/longLivedAssetUrls";
 import { APP_VERSION } from "~/branding";
 import { isElectron } from "~/env";
+import { attachMcpAppDocumentLink } from "./mcpAppDocumentLink";
 
 export const sandboxedAppCommandFailure = (result: {
   readonly cause: Parameters<typeof squashAtomCommandFailure>[0]["cause"];
@@ -78,6 +79,7 @@ export function SandboxedAppFrame(props: {
   }) => McpAppHost;
   readonly onFrameChange?: ((frame: HTMLIFrameElement | null) => void) | undefined;
   readonly onHostChange?: ((host: McpAppHost | null) => void) | undefined;
+  readonly onBridgeMissing?: (() => void) | undefined;
   readonly navigatedAwayFallback: ReactNode;
   readonly loadErrorFallback: ReactNode;
 }) {
@@ -108,20 +110,21 @@ export function SandboxedAppFrame(props: {
   const attachFrame = (frame: HTMLIFrameElement) => {
     frameRef.current = frame;
     props.onFrameChange?.(frame);
-    const target = () => frameRef.current?.contentWindow ?? null;
-    const host = props.createHost({
+    let host: McpAppHost | null = null;
+    const documentLink = attachMcpAppDocumentLink(
       frame,
-      // Opaque origins require "*"; the window reference scopes delivery to this frame.
-      post: (message) => target()?.postMessage(message, "*"),
+      (data) => host?.receive(data),
+      () => props.onBridgeMissing?.(),
+    );
+    host = props.createHost({
+      frame,
+      post: documentLink.post,
     });
     hostRef.current = host;
     props.onHostChange?.(host);
-    const receive = (event: MessageEvent) => {
-      if (event.source !== null && event.source === target()) host.receive(event.data);
-    };
-    window.addEventListener("message", receive);
+    window.addEventListener("message", documentLink.receive);
     return () => {
-      window.removeEventListener("message", receive);
+      window.removeEventListener("message", documentLink.receive);
       void host.teardown();
       if (hostRef.current === host) {
         hostRef.current = null;

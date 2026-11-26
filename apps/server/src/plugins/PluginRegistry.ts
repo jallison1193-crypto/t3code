@@ -2087,11 +2087,12 @@ const scanPlugins = Effect.fnUntraced(function* (
   runtimeStates: ReadonlyMap<string, PluginWorkerRuntimeState>,
   mcpRuntimeStates: ReadonlyMap<string, PluginMcpServerRuntimeState>,
   defaultNetworkRestricted: boolean,
+  onPathMissing: Effect.Effect<void> = Effect.void,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const entries = yield* fs
-    .readDirectory(pluginsDir)
-    .pipe(Effect.orElseSucceed((): Array<string> => []));
+  const entries = yield* Effect.catch(fs.readDirectory(pluginsDir), (error) =>
+    Effect.as(error.reason._tag === "NotFound" ? onPathMissing : Effect.void, []),
+  );
 
   const plugins: Array<InstalledPlugin> = [];
   const active: Array<EnvironmentPlugin> = [];
@@ -2195,6 +2196,7 @@ const make = Effect.gen(function* () {
     externalPowersHashes: new Map(),
     activeUserScanned: [],
   });
+  const pathMissing = yield* Ref.make(false);
   const refreshSemaphore = yield* Semaphore.make(1);
   const mutationSemaphore = yield* Semaphore.make(1);
   const watcherScope = yield* Scope.make("sequential");
@@ -2287,6 +2289,7 @@ const make = Effect.gen(function* () {
         runtimeStates,
         mcpRuntimeStates,
         defaultNetworkRestricted,
+        Ref.set(pathMissing, true),
       ).pipe(Effect.provideService(FileSystem.FileSystem, fs));
       const combinedActive: Array<EnvironmentPlugin> = [];
       if (currentSettings.pluginsEnabled) {
@@ -2373,7 +2376,11 @@ const make = Effect.gen(function* () {
       }),
     );
 
-  const watchEvents = watchDirectoryPath(pluginsDir, watchDirectory(pluginsDir)).pipe(
+  const watchEvents = watchDirectoryPath(
+    pluginsDir,
+    watchDirectory(pluginsDir),
+    Ref.getAndSet(pathMissing, false),
+  ).pipe(
     // A save emits several events, and fs.watch can fire before content is flushed.
     Stream.debounce(Duration.millis(100)),
   );

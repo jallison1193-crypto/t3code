@@ -41,6 +41,7 @@ try {
 
   Invoke-Git fetch --quiet $UpstreamRemote main | Out-Null
   Invoke-Git fetch --quiet $ForkRemote | Out-Null
+  & pwsh -NoProfile -File (Join-Path $WorktreePath "scripts\fork\clean-worktrees.ps1") *> (Join-Path $logDir "cleanup-$stamp.log")
   $upstream = "$UpstreamRemote/main"
   $upstreamSha = (Invoke-Git rev-parse --short $upstream).Trim()
 
@@ -66,10 +67,12 @@ try {
     $lines = if ($conflicts.Count -gt 0) {
       @("Merging $newCommits upstream commits ($upstreamSha) conflicts in:", "") + ($conflicts | ForEach-Object { "- ``$_``" })
     } else {
-      @("Merging $newCommits upstream commits ($upstreamSha) failed without conflicts. git said:", "", '```') + ($mergeOut | Select-Object -Last 20) + @('```')
+      @("Merging $newCommits upstream commits ($upstreamSha) failed before any conflict (a git or clone problem). git said:", "", '```') + ($mergeOut | Select-Object -Last 20) + @('```')
     }
     $tail = if ($leftDirty) { @("", "Restoring the sync worktree failed; it needs a manual cleanup:", "") + ($restoreOut | ForEach-Object { "    $_" }) } else { @("", "$Branch unchanged and the sync worktree is clean; resolve by hand.") }
-    Write-Report "merge conflict" ($lines + $tail) 2
+    # No conflicted files means git itself failed (for example a missing object), not a content conflict.
+    if ($conflicts.Count -gt 0) { Write-Report "merge conflict" ($lines + $tail) 2 }
+    Write-Report "setup error" ($lines + $tail) 4
   }
 
   & git diff --quiet $pre HEAD -- pnpm-lock.yaml
@@ -78,6 +81,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "vp i failed; see install-$stamp.log" }
   }
 
+  # A multi-day upstream batch runs the test step well past check:changed's 15-minute default on this laptop.
+  $env:CHECK_CHANGED_TIMEOUT = "2700"
   & vp run check:changed $upstream *> $checkLog
   $checkExit = $LASTEXITCODE
   $logText = Get-Content $checkLog

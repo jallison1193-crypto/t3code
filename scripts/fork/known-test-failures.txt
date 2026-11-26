@@ -16,3 +16,7 @@ reads a fixed SQL turn-item window for long histories and repeated clients
 publishes proven install ownership only for manually updated servers
 # Windows NTFS mtime ticks ~15.6 ms, so a same-length rewrite within a tick keeps the same revision.
 moves an HTML preview's revision only for the page and the files it requested
+# Windows temp paths (mixed separators); fail on plain upstream 6ac4edef8cd too.
+restores a legacy checkpoint after
+a model change after a Claude Code update
+persists Pi inventory removals across failed refreshes and registry restarts
