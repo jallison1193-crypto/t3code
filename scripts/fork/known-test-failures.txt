@@ -10,3 +10,7 @@ re-probes when settings change the codex binaryPath
 # Pass alone; fail after ProjectSettingsPanel.browser leaves a persisted composer draft in localStorage.
 numbers the unsent draft at the top before the threads below it
 does not re-render thread rows when a quick Mod shortcut opens and focuses the terminal
+# Windows temp paths (mixed separators); fail on plain upstream 6ac4edef8cd too.
+restores a legacy checkpoint after
+a model change after a Claude Code update
+persists Pi inventory removals across failed refreshes and registry restarts
