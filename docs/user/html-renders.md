@@ -12,7 +12,7 @@ Previews can load public resources such as CDN scripts, but nothing on your loca
 
 ## Find visual replies
 
-On web and desktop, open **Library** from the sidebar to find pages across your environments. Open a project's **Library** tab to see pages from that project. Use **All**, **Code**, or **Work** to filter by the source thread's mode.
+On web and desktop, open **Library** from the sidebar to find pages across your environments. Open a project's **Library** tab to see pages from that project. When Work mode is on or you have Work threads, use the **All**, **Code**, or **Work** filter to narrow by the source thread's mode.
 
 Select a page to open it full screen, or use **Open source thread** to return to the conversation. From a page's menu, you can pin it to the top of the library, rename it (leave the name blank to restore the original title), or choose **Ask for changes** (also available in the full-screen preview) to open its source thread with a draft prompt ready to edit. When the library shows **Load more**, it can still find pages further back. A notice lists environments it could not search. Agents can also list, pin, unpin, and rename pages in the library.
 

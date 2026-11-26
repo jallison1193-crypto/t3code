@@ -13146,5 +13146,9 @@
   "e68a843ca6095ea9": "Auslöser löschen",
   "b4fef4b4009c66ff": "Aufgabe löschen",
   "9cf66f526ba5756e": "Deaktivierte Auslöser bleiben gespeichert, werden aber nicht ausgeführt.",
-  "1c8a6b147eacb333": "Plugins ausschalten Plugins deaktivieren pausieren aktivieren Erweiterungen"
+  "1c8a6b147eacb333": "Plugins ausschalten Plugins deaktivieren pausieren aktivieren Erweiterungen",
+  "ac775cff6bbc0f6a": "Thread nach „Arbeit“ verschieben",
+  "8298cb680a29d59e": "Thread nach „Code“ verschieben",
+  "7750ae23b180cd58": "Bibliothek öffnen",
+  "6f16ca131b3dfbb5": "Projektbibliothek öffnen"
 }

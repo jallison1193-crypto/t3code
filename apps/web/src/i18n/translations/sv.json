@@ -13151,5 +13151,9 @@
   "e68a843ca6095ea9": "Ta bort utlösare",
   "b4fef4b4009c66ff": "Ta bort uppgift",
   "9cf66f526ba5756e": "Inaktiverade utlösare sparas men körs inte.",
-  "1c8a6b147eacb333": "stäng av plugin inaktivera plugin pausa aktivera tillägg"
+  "1c8a6b147eacb333": "stäng av plugin inaktivera plugin pausa aktivera tillägg",
+  "ac775cff6bbc0f6a": "Flytta tråd till Arbete",
+  "8298cb680a29d59e": "Flytta tråd till Kod",
+  "7750ae23b180cd58": "Öppna Bibliotek",
+  "6f16ca131b3dfbb5": "Öppna projektets Bibliotek"
 }

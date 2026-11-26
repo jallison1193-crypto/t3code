@@ -2,6 +2,7 @@ import { EnvironmentId, ProjectId, ThreadId, TurnItemId } from "@t3tools/contrac
 import { expect, it, vi } from "vite-plus/test";
 
 import {
+  hasAnyWorkThread,
   libraryFileOpenPath,
   libraryFilesView,
   libraryModeFromSearch,
@@ -9,6 +10,7 @@ import {
   libraryUrlWithView,
   libraryViewFromSearch,
   loadLibraryFiles,
+  shouldShowLibraryModeFilter,
   splitLibraryFilePath,
   startLibraryFiles,
 } from "./libraryFiles.logic";
@@ -212,4 +214,27 @@ it("advances past sparse empty file pages until it finds matches or exhausts the
   );
   expect(stuckRead).toHaveBeenCalledTimes(2);
   expect(libraryFilesView(stuck).hasMore).toBe(false);
+});
+
+it("shows the Library mode filter only when Work mode is on, a Work thread exists, or a mode is active", () => {
+  expect(
+    hasAnyWorkThread([
+      { deletedAt: null, tags: [] },
+      { deletedAt: "2026-11-20T00:00:00.000Z", tags: ["mode:work"] },
+    ]),
+  ).toBe(false);
+  expect(hasAnyWorkThread([{ deletedAt: null, source: { tags: ["mode:work"] } }])).toBe(true);
+
+  expect(shouldShowLibraryModeFilter({ appMode: "code", hasWorkThread: false, mode: "all" })).toBe(
+    false,
+  );
+  expect(shouldShowLibraryModeFilter({ appMode: "work", hasWorkThread: false, mode: "all" })).toBe(
+    true,
+  );
+  expect(shouldShowLibraryModeFilter({ appMode: "code", hasWorkThread: true, mode: "all" })).toBe(
+    true,
+  );
+  expect(shouldShowLibraryModeFilter({ appMode: "code", hasWorkThread: false, mode: "work" })).toBe(
+    true,
+  );
 });

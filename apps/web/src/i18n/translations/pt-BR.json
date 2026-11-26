@@ -13144,5 +13144,9 @@
   "e68a843ca6095ea9": "Excluir gatilho",
   "b4fef4b4009c66ff": "Excluir tarefa",
   "9cf66f526ba5756e": "Gatilhos desativados continuam salvos, mas não são executados.",
-  "1c8a6b147eacb333": "desativar plugins desligar plugins pausar ativar extensões"
+  "1c8a6b147eacb333": "desativar plugins desligar plugins pausar ativar extensões",
+  "ac775cff6bbc0f6a": "Mover thread para Trabalho",
+  "8298cb680a29d59e": "Mover thread para Código",
+  "7750ae23b180cd58": "Abrir Biblioteca",
+  "6f16ca131b3dfbb5": "Abrir Biblioteca do projeto"
 }

@@ -13155,5 +13155,9 @@
   "e68a843ca6095ea9": "Delete trigger",
   "b4fef4b4009c66ff": "Delete task",
   "9cf66f526ba5756e": "Disabled triggers stay saved but do not run.",
-  "1c8a6b147eacb333": "turn off plugins disable plugins pause enable extensions"
+  "1c8a6b147eacb333": "turn off plugins disable plugins pause enable extensions",
+  "ac775cff6bbc0f6a": "Move thread to Work",
+  "8298cb680a29d59e": "Move thread to Code",
+  "7750ae23b180cd58": "Open Library",
+  "6f16ca131b3dfbb5": "Open project Library"
 }

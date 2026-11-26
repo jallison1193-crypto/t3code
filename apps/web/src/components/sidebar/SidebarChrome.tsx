@@ -47,6 +47,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPreferences";
 import { readIssueListPreferences } from "../issue/issueListPreferences";
 import { IssueGlyph } from "../issue/issuePresentation";
+import { isCodingChromeVisible } from "../chat/workModeChrome.logic";
 import { isSidebarUtilityPage, useNavigateToMainApp } from "./mainAppLocation";
 import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
@@ -122,7 +123,7 @@ function WorkModeIndicator() {
   return (
     <div
       data-testid="work-mode-indicator"
-      className="mx-(--sidebar-content-inset) mb-1 flex shrink-0 items-center justify-between gap-2 rounded-(--control-radius) border border-sidebar-border/80 bg-sidebar-control-surface px-2 py-1 text-xs"
+      className="relative z-10 mx-(--sidebar-content-inset) mt-2 mb-1 flex shrink-0 items-center justify-between gap-2 rounded-(--control-radius) border border-sidebar-border/80 bg-sidebar-control-surface px-2 py-1 text-xs"
     >
       <span className="truncate font-medium text-sidebar-foreground">
         <T>Work mode</T>
@@ -309,7 +310,9 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   });
   const pullRequestsSupported = usePullRequestsSupported();
   const issuesSupported = useIssuesSupported();
-  const workMode = useClientSettings((settings) => settings.appMode === "work");
+  const appMode = useClientSettings((settings) => settings.appMode);
+  const workMode = appMode === "work";
+  const showCodingChrome = isCodingChromeVisible(appMode);
   const closeMobileSidebar = () => {
     if (isMobile) {
       setOpenMobile(false);
@@ -332,10 +335,13 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   };
 
   const handleUsageClick = () => {
-    if (isMobile) {
-      setOpenMobile(false);
-    }
+    closeMobileSidebar();
     void navigate({ to: "/usage" });
+  };
+
+  const handleLibraryClick = () => {
+    closeMobileSidebar();
+    void navigate({ to: "/library" });
   };
 
   const handleBackClick = () => {
@@ -346,57 +352,44 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   return (
     <SidebarMenu className="flex-row items-center">
       {isOnUtilityPage ? (
-        <>
-          <SidebarMenuItem className="min-w-0 flex-1">
-            <SidebarMenuButton onClick={handleBackClick}>
-              <ArrowLeftIcon />
-              <span>
-                <T>Back</T>
-              </span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarUtilityItem
-            icon={<SettingsIcon />}
-            label={gt("Settings")}
-            onClick={handleSettingsClick}
-          />
-        </>
-      ) : (
-        <>
-          <SidebarUtilityItem
-            icon={<SettingsIcon />}
-            label={gt("Settings")}
-            onClick={handleSettingsClick}
-          />
-          {pullRequestsSupported ? (
-            <SidebarUtilityItem
-              icon={<PullRequestGlyph.pullRequest />}
-              label={gt("Pull requests")}
-              onClick={handlePullRequestsClick}
-            />
-          ) : null}
-          {issuesSupported ? (
-            <SidebarUtilityItem
-              icon={<IssueGlyph.issue />}
-              label={gt("Issues", { $context: "sidebar link to the list of issues" })}
-              onClick={handleIssuesClick}
-            />
-          ) : null}
-          <SidebarUtilityItem
-            icon={<ChartNoAxesColumnIcon />}
-            label={gt("Usage")}
-            onClick={handleUsageClick}
-          />
-        </>
-      )}
+        <SidebarMenuItem className="min-w-0 flex-1">
+          <SidebarMenuButton onClick={handleBackClick}>
+            <ArrowLeftIcon />
+            <span>
+              <T>Back</T>
+            </span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      ) : null}
+      <SidebarUtilityItem
+        icon={<SettingsIcon />}
+        label={gt("Settings")}
+        onClick={handleSettingsClick}
+      />
+      {showCodingChrome && pullRequestsSupported ? (
+        <SidebarUtilityItem
+          icon={<PullRequestGlyph.pullRequest />}
+          label={gt("Pull requests")}
+          onClick={handlePullRequestsClick}
+        />
+      ) : null}
+      {showCodingChrome && issuesSupported ? (
+        <SidebarUtilityItem
+          icon={<IssueGlyph.issue />}
+          label={gt("Issues", { $context: "sidebar link to the list of issues" })}
+          onClick={handleIssuesClick}
+        />
+      ) : null}
+      <SidebarUtilityItem
+        icon={<ChartNoAxesColumnIcon />}
+        label={gt("Usage")}
+        onClick={handleUsageClick}
+      />
       {!workMode ? (
         <SidebarUtilityItem
           icon={<LibraryIcon />}
           label={gt("Library")}
-          onClick={() => {
-            closeMobileSidebar();
-            void navigate({ to: "/library" });
-          }}
+          onClick={handleLibraryClick}
         />
       ) : null}
       <SidebarThreadUndoNotice />

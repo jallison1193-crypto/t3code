@@ -9,7 +9,12 @@ import { expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
-import { __setClientSettingsForTests, getClientSettings } from "~/hooks/useSettings";
+import {
+  __resetClientSettingsPersistenceForTests,
+  __setClientSettingsForTests,
+  getClientSettings,
+  updateClientSettings,
+} from "~/hooks/useSettings";
 import { useRightPanelStore } from "~/rightPanelStore";
 import { render } from "../../../test/render";
 import { SidebarProvider } from "../ui/sidebar";
@@ -63,8 +68,14 @@ function setup() {
   mocks.updateSettings.mockReset();
   mocks.editable = new Set();
   const before = getClientSettings();
+  __resetClientSettingsPersistenceForTests();
   __setClientSettingsForTests({ ...before, appMode: "code", sidebarModeFilter: "all" });
-  return { [Symbol.dispose]: () => __setClientSettingsForTests(before) };
+  return {
+    [Symbol.dispose]: () => {
+      __resetClientSettingsPersistenceForTests();
+      __setClientSettingsForTests(before);
+    },
+  };
 }
 
 it("loads on opening, keeps partial results, and resolves the preview on its source host", async () => {
@@ -144,12 +155,18 @@ it("loads on opening, keeps partial results, and resolves the preview on its sou
   await userEvent.click(dialog.getByRole("button", { name: "Close" }));
   await expect.element(dialog).not.toBeInTheDocument();
 
-  await userEvent.click(screen.getByRole("button", { name: "Work", exact: true }));
   await expect
-    .element(screen.getByRole("button", { name: "Work", exact: true }))
-    .toHaveAttribute("aria-pressed", "true");
+    .element(screen.getByRole("combobox", { name: "Library mode filter" }))
+    .not.toBeInTheDocument();
+
+  await updateClientSettings({ appMode: "work" });
+  const modeFilter = screen.getByRole("combobox", { name: "Library mode filter" });
+  await expect.element(modeFilter).toBeVisible();
+  await userEvent.click(modeFilter);
+  await userEvent.click(page.getByRole("option", { name: "Work", exact: true }));
+  await expect.element(modeFilter).toHaveTextContent("Work");
   // The Library's filter is its own: the sidebar's stays where it was.
-  expect(getClientSettings()).toMatchObject({ appMode: "code", sidebarModeFilter: "all" });
+  expect(getClientSettings()).toMatchObject({ appMode: "work", sidebarModeFilter: "all" });
   await expect.element(screen.getByText("Nothing matches this filter")).toBeVisible();
   expect(mocks.read.mock.calls.slice(5).map(([target]) => target.input)).toEqual([
     { mode: "work" },

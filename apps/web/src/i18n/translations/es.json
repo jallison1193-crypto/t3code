@@ -13139,5 +13139,9 @@
   "e68a843ca6095ea9": "Eliminar disparador",
   "b4fef4b4009c66ff": "Eliminar tarea",
   "9cf66f526ba5756e": "Los disparadores desactivados siguen guardados, pero no se ejecutan.",
-  "1c8a6b147eacb333": "desactivar plugins apagar plugins pausar activar extensiones"
+  "1c8a6b147eacb333": "desactivar plugins apagar plugins pausar activar extensiones",
+  "ac775cff6bbc0f6a": "Mover hilo a Trabajo",
+  "8298cb680a29d59e": "Mover hilo a Código",
+  "7750ae23b180cd58": "Abrir Biblioteca",
+  "6f16ca131b3dfbb5": "Abrir Biblioteca del proyecto"
 }

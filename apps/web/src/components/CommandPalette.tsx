@@ -71,6 +71,7 @@ import {
   FolderGit2Icon,
   FolderIcon,
   FolderPlusIcon,
+  LibraryIcon,
   MessageSquareDashedIcon,
   LinkIcon,
   MessageSquareIcon,
@@ -108,6 +109,12 @@ import { useAtomValue } from "@effect/atom-react";
 import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstraps";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { useCoordinatorThreadActions } from "../hooks/useCoordinatorThreadActions";
+import {
+  readThreadModeAndCoordinatorActions,
+  useMoveThreadMode,
+} from "../hooks/useThreadActionMenu";
+import { useThreadActions } from "../hooks/useThreadActions";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { copyThreadReference } from "../lib/copyThreadReference";
 import {
@@ -432,6 +439,17 @@ function CommandPaletteDialog(props: {
   );
 }
 
+function projectKeyFromPathname(pathname: string): string | null {
+  const match = /^\/projects\/([^/]+)(?:\/(?:threads|library))?$/.exec(pathname);
+  const raw = match?.[1];
+  if (!raw) return null;
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 function OpenCommandPaletteDialog(props: {
   readonly openIntent: CommandPaletteOpenIntent | null;
   readonly setOpen: (open: boolean) => void;
@@ -508,6 +526,9 @@ function OpenCommandPaletteDialog(props: {
   const refreshProviders = useAtomCommand(serverEnvironment.refreshProviders, {
     reportFailure: false,
   });
+  const moveThreadMode = useMoveThreadMode();
+  const { pinThread } = useThreadActions();
+  const { makeCoordinatorThread } = useCoordinatorThreadActions(pinThread);
   const { environments } = useEnvironments();
   const desktopLocalBootstraps = useDesktopLocalBootstraps();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -1608,7 +1629,10 @@ function OpenCommandPaletteDialog(props: {
     });
   }
 
-  if (activeThread !== null) {
+  const activeThreadActions =
+    activeThread != null ? readThreadModeAndCoordinatorActions(activeThread) : null;
+
+  if (activeThread != null) {
     const thread = activeThread;
     actionItems.push({
       kind: "action",
@@ -1622,6 +1646,38 @@ function OpenCommandPaletteDialog(props: {
           thread: scopeThreadRef(thread.environmentId, thread.id),
         }),
     });
+    if (activeThreadActions?.canMoveMode) {
+      const targetMode = activeThreadActions.mode === "code" ? "work" : "code";
+      actionItems.push({
+        kind: "action",
+        value: targetMode === "work" ? "action:move-thread-to-work" : "action:move-thread-to-code",
+        searchTerms:
+          targetMode === "work"
+            ? ["move", "thread", "work", "mode"]
+            : ["move", "thread", "code", "mode"],
+        title: targetMode === "work" ? gt("Move thread to Work") : gt("Move thread to Code"),
+        icon: <PanelLeftIcon className={ITEM_ICON_CLASS} />,
+        run: async () => {
+          await moveThreadMode(scopeThreadRef(thread.environmentId, thread.id), targetMode);
+        },
+      });
+    }
+    if (activeThreadActions?.canMakeCoordinator) {
+      actionItems.push({
+        kind: "action",
+        value: "action:make-project-coordinator",
+        searchTerms: ["coordinator", "project", "home", "make", "thread"],
+        title: gt("Make project coordinator"),
+        icon: <NetworkIcon className={ITEM_ICON_CLASS} />,
+        run: async () => {
+          await makeCoordinatorThread(
+            scopeThreadRef(thread.environmentId, thread.id),
+            thread.projectId,
+            thread.pinnedAt != null,
+          );
+        },
+      });
+    }
     actionItems.push({
       kind: "action",
       value: "action:restart-agent-session",
@@ -1833,6 +1889,17 @@ function OpenCommandPaletteDialog(props: {
     },
   });
 
+  actionItems.push({
+    kind: "action",
+    value: "action:library",
+    searchTerms: ["library", "pages", "files", "visual", "html", "reports"],
+    title: gt("Open Library"),
+    icon: <LibraryIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/library" });
+    },
+  });
+
   for (const direction of [1, -1] as const) {
     const title =
       direction === 1 ? gt("Focus Next Workspace Area") : gt("Focus Previous Workspace Area");
@@ -1925,6 +1992,30 @@ function OpenCommandPaletteDialog(props: {
         await navigate({
           to: "/projects/$projectKey",
           params: { projectKey: contextualProjectGroup.projectKey },
+        });
+      },
+    });
+  }
+
+  const projectPageKey = projectKeyFromPathname(pathname);
+  const activeProjectPageGroup =
+    projectPageKey !== null
+      ? (projectGroups.find((group) => group.projectKey === projectPageKey) ?? null)
+      : activeThreadActions?.isCoordinator
+        ? currentProjectGroup
+        : null;
+  if (activeProjectPageGroup) {
+    actionItems.push({
+      kind: "action",
+      value: "action:project-library",
+      searchTerms: ["project", "library", "pages", "files", "visual", "html"],
+      title: gt("Open project Library"),
+      description: activeProjectPageGroup.displayName,
+      icon: <LibraryIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({
+          to: "/projects/$projectKey/library",
+          params: { projectKey: activeProjectPageGroup.projectKey },
         });
       },
     });
