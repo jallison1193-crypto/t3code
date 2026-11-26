@@ -9,6 +9,7 @@ Base: upstream `pingdotgg/t3code` @ `ecb295516f` (2026-11-17). Research by two G
 - No numbered DB migrations in the fork. Upstream owns the next ids, and a recorded fork name at an upstream id stops the server from starting. Use settings overrides, server settings, or an idempotent `CREATE ... IF NOT EXISTS` in the owning service (see `HtmlLibrary.ts`).
 - Hit every surface (repo `AGENTS.md`): web, desktop, mobile, MCP tools for agents, contracts, i18n, reverse states.
 - Check: `vp run check:changed` plus focused `vp test run <files>`. No repo-wide checks.
+- Models (Josh 2026-11-26): Claude Opus orchestrates and reviews; Gemini 4 Neon builds through `delegate_task` (antigravity, `gemini-4-neon`, `thought_level` high). When Claude's weekly limit runs out, Codex `gpt-6.2-astra` orchestrates and reviews, still with Neon builders. When Antigravity runs out too, Codex `gpt-6.2-sol` is the main builder and `gpt-6.1-terra` takes well-scoped tasks. Josh switches the orchestrator himself. The orchestrator reads every builder diff itself; for Gemini workers it applies the "Gemini-isms (fork)" checks in `AGENTS.md`.
 
 ## Milestone 1: Project Instructions (no DB migration)
 
