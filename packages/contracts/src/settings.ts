@@ -595,6 +595,7 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
   sidebarWorkingShelfEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  sidebarNeedsYouEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   sidebarLayout: SidebarLayout.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_LAYOUT)),
   ),
@@ -2280,6 +2281,7 @@ export const ClientSettingsPatch = Schema.Struct({
   threadDetailsUsageEnabled: Schema.optionalKey(Schema.Boolean),
   threadDetailsItems: Schema.optionalKey(Schema.Record(Schema.String, Schema.Boolean)),
   sidebarWorkingShelfEnabled: Schema.optionalKey(Schema.Boolean),
+  sidebarNeedsYouEnabled: Schema.optionalKey(Schema.Boolean),
   sidebarLayout: Schema.optionalKey(SidebarLayout),
   appMode: Schema.optionalKey(AppMode),
   sidebarModeFilter: Schema.optionalKey(SidebarModeFilter),

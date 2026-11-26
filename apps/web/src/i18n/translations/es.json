@@ -13119,5 +13119,11 @@
   "21fa71719e873654": "Dejar pasar los clics durante el uso del ordenador",
   "031263628128f352": "ventana complementaria automática abrir mostrar uso del ordenador agente",
   "79b504a21a34200d": "ventana complementaria automática ocultar cerrar uso del ordenador agente",
-  "c511f3b80dd427b1": "ventana complementaria fantasma transparente clics atraviesan uso del ordenador"
+  "c511f3b80dd427b1": "ventana complementaria fantasma transparente clics atraviesan uso del ordenador",
+  "1bdf8042973ace43": "Ocultar la sección Te necesita",
+  "e0b2b93e87fb4e23": "Mostrar la sección Te necesita",
+  "7e0619494c7b2a24": "Sección Te necesita",
+  "a3f4bb6c8e3cce55": "Restablecer la sección Te necesita al valor predeterminado",
+  "0426d4f8b82879a9": "Muestra los hilos que te esperan en la parte superior de la barra lateral de proyectos. Solo se aplica cuando la barra lateral de proyectos está activada.",
+  "aa43a97ca417d2a2": "te necesita esperando atención bandeja de entrada barra lateral ocultar"
 }

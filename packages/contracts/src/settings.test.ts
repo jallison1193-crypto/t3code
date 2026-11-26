@@ -692,6 +692,18 @@ describe("ClientSettings.sidebarLayout", () => {
   });
 });
 
+describe("ClientSettings.sidebarNeedsYouEnabled", () => {
+  it("defaults to true and accepts boolean patches", () => {
+    expect(decodeClientSettings({}).sidebarNeedsYouEnabled).toBe(true);
+    expect(decodeClientSettings({ sidebarNeedsYouEnabled: false }).sidebarNeedsYouEnabled).toBe(
+      false,
+    );
+    expect(decodeClientSettingsPatch({ sidebarNeedsYouEnabled: false })).toEqual({
+      sidebarNeedsYouEnabled: false,
+    });
+  });
+});
+
 describe("ClientSettings.appMode and sidebarModeFilter", () => {
   it("defaults independently to code and all, accepts patches, and rejects invalid values", () => {
     const defaults = decodeClientSettings({});

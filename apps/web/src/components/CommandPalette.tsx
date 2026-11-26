@@ -483,6 +483,7 @@ function OpenCommandPaletteDialog(props: {
   }
   const clientSettings = useClientSettings(selectCommandPaletteClientSettings);
   const companionWindowEnabled = useClientSettings((s) => s.companionWindowEnabled);
+  const sidebarNeedsYouEnabled = useClientSettings((s) => s.sidebarNeedsYouEnabled);
   const createProject = useAtomCommand(projectEnvironment.create, {
     reportFailure: false,
   });
@@ -1944,6 +1945,21 @@ function OpenCommandPaletteDialog(props: {
       });
     },
   });
+
+  if (clientSettings.sidebarLayout === "projects") {
+    actionItems.push({
+      kind: "action",
+      value: "action:toggle-needs-you-section",
+      searchTerms: ["sidebar", "needs you", "waiting", "attention", "section", "hide", "show"],
+      title: sidebarNeedsYouEnabled ? gt("Hide Needs you section") : gt("Show Needs you section"),
+      icon: <PanelLeftIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await updateClientSettings({
+          sidebarNeedsYouEnabled: !sidebarNeedsYouEnabled,
+        });
+      },
+    });
+  }
 
   actionItems.push({
     kind: "action",

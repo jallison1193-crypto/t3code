@@ -24,6 +24,7 @@ import { type ReactNode, useState } from "react";
 import { deriveBotSidebarEntries, filterNonBotThreads } from "~/bots/bots.logic";
 import { openCommandPalette } from "~/commandPaletteBus";
 import { isElectron } from "~/env";
+import { useClientSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import { useHiddenThreadKeys, useQuietThreadShells } from "~/state/entities";
 import { ProjectFavicon, type ProjectFaviconProject } from "../ProjectFavicon";
@@ -134,6 +135,7 @@ export function ProjectsSidebar() {
   const gt = useGT();
   const navigate = useNavigate();
   const { isMobile, setOpenMobile } = useSidebar();
+  const sidebarNeedsYouEnabled = useClientSettings((settings) => settings.sidebarNeedsYouEnabled);
   const threads = useQuietThreadShells();
   const {
     activeProjectKey,
@@ -249,7 +251,7 @@ export function ProjectsSidebar() {
         </div>
       </SidebarGroup>
       <SidebarContent>
-        {sections.needsYou.length > 0 ? (
+        {sidebarNeedsYouEnabled && sections.needsYou.length > 0 ? (
           <SidebarGroup>
             <SidebarSectionHeading label={gt("Needs you")} />
             <SidebarMenu>
