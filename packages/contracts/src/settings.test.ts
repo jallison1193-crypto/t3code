@@ -733,11 +733,24 @@ describe("bot settings and overrides", () => {
   it("defaults botsEnabled to true and decodes bot overrides while keeping old payloads valid", () => {
     const legacy = decodeServerSettings({});
     expect(legacy.botsEnabled).toBe(true);
+    expect(legacy.botDefaults).toBeUndefined();
     expect(legacy.projectSettingsOverrides).toEqual({});
 
+    const defaultBotModel = {
+      instanceId: ProviderInstanceId.make("claudeAgent"),
+      model: "claude-haiku-4-5",
+    };
+    const defaultBotLimits = {
+      mode: "runs_only" as const,
+      runsPerDay: 10,
+    };
     const projectId = ProjectId.make("bot-project-1");
     const decoded = decodeServerSettings({
       botsEnabled: false,
+      botDefaults: {
+        modelSelection: defaultBotModel,
+        limits: defaultBotLimits,
+      },
       projectSettingsOverrides: {
         [projectId]: {
           bot: { paused: true },
@@ -746,6 +759,10 @@ describe("bot settings and overrides", () => {
       },
     });
     expect(decoded.botsEnabled).toBe(false);
+    expect(decoded.botDefaults).toEqual({
+      modelSelection: defaultBotModel,
+      limits: defaultBotLimits,
+    });
     expect(decoded.projectSettingsOverrides[projectId]?.bot).toEqual({ paused: true });
     expect(isBotProject(decoded, projectId)).toBe(true);
     expect(isBotPaused(decoded, projectId)).toBe(true);
@@ -765,6 +782,14 @@ describe("bot settings and overrides", () => {
     expect(botTriggerBlockReason(decoded, ProjectId.make("ordinary-project"))).toBeUndefined();
 
     expect(decodeClientServerSettingsPatch({ botsEnabled: false })).toEqual({ botsEnabled: false });
+    expect(
+      decodeClientServerSettingsPatch({
+        botDefaults: { modelSelection: defaultBotModel, limits: null },
+      }),
+    ).toEqual({
+      botDefaults: { modelSelection: defaultBotModel, limits: null },
+    });
+    expect(decodeClientServerSettingsPatch({ botDefaults: null })).toEqual({ botDefaults: null });
     expect(
       decodeClientServerSettingsPatch({
         projectSettingsOverrides: { [projectId]: { bot: { paused: false } } },

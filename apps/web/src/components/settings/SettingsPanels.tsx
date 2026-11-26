@@ -38,7 +38,6 @@ import * as Equal from "effect/Equal";
 import * as Schema from "effect/Schema";
 import { APP_VERSION, HOSTED_APP_CHANNEL, HOSTED_APP_CHANNEL_LABEL } from "../../branding";
 import { AboutVersionTitle } from "./AboutVersionTitle";
-import { BotsSettingsRow } from "../../bots/BotsSettingsRow";
 import { CliCommandSettingsRow } from "./CliCommandSettingsRow";
 import { CompanionWindowSettings } from "./CompanionWindowSettings";
 import { MobileAppSettingsRow } from "./MobileAppSettingsRow";
@@ -1102,7 +1101,6 @@ export function GeneralSettingsPanel() {
             />
           }
         />
-        <BotsSettingsRow />
       </SettingsSection>
 
       <SettingsSection id="confirmations" title={gt("Confirmations")}>

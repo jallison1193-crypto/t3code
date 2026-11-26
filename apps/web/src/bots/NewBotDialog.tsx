@@ -126,7 +126,11 @@ function NewBotDialog({ request }: { readonly request: NewBotDialogRequest }) {
       input: {
         name: trimmedName,
         goal: goal.trim(),
-        ...(modelSelection === null ? {} : { modelSelection }),
+        ...(modelSelection === null
+          ? modelPick !== null && modelPick.environmentId === resolvedEnvironmentId
+            ? { modelSelection: null }
+            : {}
+          : { modelSelection }),
       },
     });
     setSaving(false);

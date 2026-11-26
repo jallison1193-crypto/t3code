@@ -36,11 +36,20 @@ Click **Pause** in the top-right corner of a bot's page to stop its scheduled an
 
 ## Turn Bots off
 
-Go to **Settings -> General** and turn **Bots** off.
+Go to **Settings -> Bots** and turn **Bots** off.
 
 - Turning Bots off hides the **Bots** sidebar tab, the **New bot** command, and every bot's runs (including waiting runs in **Needs you**).
 - Every bot trigger is blocked while Bots is off. Scheduled ticks are skipped without building a backlog, and webhooks and manual runs are refused.
-- Your bots, triggers, and run history are kept intact. Turn **Bots** back on in **Settings -> General** to restore everything.
+- Your bots, triggers, and run history are kept intact. Turn **Bots** back on in **Settings -> Bots** to restore everything.
+
+## Settings -> Bots
+
+Open **Settings -> Bots** (or choose **Open bot settings** in the command palette) to manage bot defaults and review every bot in one place.
+
+- **Default model for new bots:** Choose a Claude or Codex model that new bots start with, or reset it to **Automatic** to pick the first available Claude or Codex model.
+- **Default daily limits for new bots:** Set the default limit mode and daily run or token caps copied into newly created bots, or reset them to the built-in defaults (24 runs and 2,000,000 tokens per day).
+- **Defaults apply only to new bots:** Changing the default model or default daily limits does not modify bots that already exist.
+- **Your bots:** Review each bot's status, model, and today's usage, pause or resume bots from the list, or select a bot to edit its settings in place.
 
 ## Safety gates
 

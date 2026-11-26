@@ -358,7 +358,7 @@ export function ProjectHomeView({ projectKey }: { readonly projectKey: string })
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => void navigate({ to: "/settings/general" })}
+                onClick={() => void navigate({ to: "/settings/bots" })}
               >
                 <T>Open Settings</T>
               </Button>

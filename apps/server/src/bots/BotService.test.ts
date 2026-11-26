@@ -577,4 +577,106 @@ describe("BotService", () => {
         expect(tasksMap.get(otherBotTrigger.id)?.modelSelection).toEqual(codexModel);
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
+
+  it.effect(
+    "applies botDefaults to new bots without limits or supported model, keeps explicit values, and leaves existing bots unchanged",
+    () =>
+      Effect.gen(function* () {
+        const { service, settings } = yield* makeHarness();
+
+        const defaultModel = {
+          instanceId: ProviderInstanceId.make("claudeAgent"),
+          model: "claude-haiku-4-5",
+          options: [{ id: "reasoning", value: "medium" }],
+        };
+        const explicitModel = {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5",
+        };
+        const defaultLimits = {
+          mode: "runs_and_tokens" as const,
+          runsPerDay: 12,
+          tokensPerDay: 500_000,
+        };
+        const explicitLimits = {
+          mode: "runs_only" as const,
+          runsPerDay: 3,
+        };
+
+        yield* settings.updateSettings({
+          botDefaults: {
+            modelSelection: defaultModel,
+            limits: defaultLimits,
+          },
+        });
+
+        const inherited = yield* service.create({
+          name: "Inherited Defaults",
+          goal: "Check status",
+        });
+        expect(inherited.modelSelection).toEqual(defaultModel);
+        expect(inherited.limits).toEqual(defaultLimits);
+
+        const explicit = yield* service.create({
+          name: "Explicit Values",
+          goal: "Check status",
+          modelSelection: explicitModel,
+          limits: explicitLimits,
+        });
+        expect(explicit.modelSelection).toEqual(explicitModel);
+        expect(explicit.limits).toEqual({
+          mode: "runs_only",
+          runsPerDay: 3,
+          tokensPerDay: DEFAULT_BOT_LIMITS.tokensPerDay,
+        });
+
+        // Changing defaults later leaves existing bots unchanged and replaces options cleanly.
+        const updatedModel = {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5.4",
+        };
+        yield* settings.updateSettings({
+          botDefaults: {
+            modelSelection: updatedModel,
+            limits: { mode: "none" },
+          },
+        });
+        expect((yield* service.get(inherited.projectId)).modelSelection).toEqual(defaultModel);
+        expect((yield* service.get(inherited.projectId)).limits).toEqual(defaultLimits);
+
+        const afterUpdate = yield* service.create({ name: "After Update" });
+        expect(afterUpdate.modelSelection).toEqual(updatedModel);
+        expect(afterUpdate.limits).toEqual({
+          mode: "none",
+          runsPerDay: DEFAULT_BOT_LIMITS.runsPerDay,
+          tokensPerDay: DEFAULT_BOT_LIMITS.tokensPerDay,
+        });
+
+        // Unsupported default model falls back to no explicit model while still applying limits.
+        yield* settings.updateSettings({
+          botDefaults: {
+            modelSelection: {
+              instanceId: ProviderInstanceId.make("cursor"),
+              model: "cursor-fast",
+            },
+            limits: { mode: "runs_only", runsPerDay: 7 },
+          },
+        });
+        const unsupportedDefault = yield* service.create({ name: "Unsupported Default" });
+        expect(unsupportedDefault.modelSelection).toBeNull();
+        expect(unsupportedDefault.limits).toEqual({
+          mode: "runs_only",
+          runsPerDay: 7,
+          tokensPerDay: DEFAULT_BOT_LIMITS.tokensPerDay,
+        });
+
+        // Resetting fields with null omits botDefaults cleanly.
+        yield* settings.updateSettings({ botDefaults: { modelSelection: null } });
+        expect((yield* settings.getSettings).botDefaults).toEqual({
+          limits: { mode: "runs_only", runsPerDay: 7 },
+        });
+        yield* settings.updateSettings({ botDefaults: { limits: null } });
+        expect((yield* settings.getSettings).botDefaults).toBeUndefined();
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
 });
