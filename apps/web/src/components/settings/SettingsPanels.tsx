@@ -537,6 +537,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.sidebarLayout !== DEFAULT_UNIFIED_SETTINGS.sidebarLayout
       ? [gt("Projects sidebar")]
       : []),
+    ...(settings.sidebarNeedsYouEnabled !== DEFAULT_UNIFIED_SETTINGS.sidebarNeedsYouEnabled
+      ? [gt("Needs you section")]
+      : []),
     ...(settings.appMode !== DEFAULT_UNIFIED_SETTINGS.appMode ? [gt("Work mode")] : []),
     ...(settings.sidebarAutoSettleAfterDays !== DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays
       ? [gt("Auto-settle inactive threads")]
@@ -751,6 +754,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
       sidebarProjectSortOrder: DEFAULT_UNIFIED_SETTINGS.sidebarProjectSortOrder,
       sidebarWorkingShelfEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled,
+      sidebarNeedsYouEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarNeedsYouEnabled,
       sidebarLayout: DEFAULT_UNIFIED_SETTINGS.sidebarLayout,
       appMode: DEFAULT_UNIFIED_SETTINGS.appMode,
       sidebarModeFilter: DEFAULT_UNIFIED_SETTINGS.sidebarModeFilter,
@@ -1033,6 +1037,37 @@ export function GeneralSettingsPanel() {
                 updateSettings({ sidebarLayout: checked ? "projects" : "threads" })
               }
               aria-label={gt("Projects sidebar")}
+            />
+          }
+        />
+        <SettingsRow
+          {...setting("needs-you-section")}
+          description={
+            <T>
+              Show threads waiting for you at the top of the projects sidebar. Only applies when
+              Projects sidebar is on.
+            </T>
+          }
+          resetAction={
+            settings.sidebarNeedsYouEnabled !== DEFAULT_UNIFIED_SETTINGS.sidebarNeedsYouEnabled ? (
+              <SettingResetButton
+                ariaLabel={gt("Reset Needs you section to default")}
+                onClick={() =>
+                  updateSettings({
+                    sidebarNeedsYouEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarNeedsYouEnabled,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.sidebarNeedsYouEnabled}
+              disabled={settings.sidebarLayout !== "projects"}
+              onCheckedChange={(checked) =>
+                updateSettings({ sidebarNeedsYouEnabled: Boolean(checked) })
+              }
+              aria-label={gt("Needs you section")}
             />
           }
         />

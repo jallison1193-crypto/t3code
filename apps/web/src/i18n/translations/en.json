@@ -13135,5 +13135,11 @@
   "21fa71719e873654": "Click-through during computer use",
   "031263628128f352": "companion window automatic open show computer use agent",
   "79b504a21a34200d": "companion window automatic hide close computer use agent",
-  "c511f3b80dd427b1": "companion window ghost transparent clicks pass through computer use"
+  "c511f3b80dd427b1": "companion window ghost transparent clicks pass through computer use",
+  "1bdf8042973ace43": "Hide Needs you section",
+  "e0b2b93e87fb4e23": "Show Needs you section",
+  "7e0619494c7b2a24": "Needs you section",
+  "a3f4bb6c8e3cce55": "Reset Needs you section to default",
+  "0426d4f8b82879a9": "Show threads waiting for you at the top of the projects sidebar. Only applies when Projects sidebar is on.",
+  "aa43a97ca417d2a2": "needs you waiting attention inbox sidebar hide"
 }

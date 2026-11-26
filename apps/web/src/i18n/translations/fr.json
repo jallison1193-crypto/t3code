@@ -13124,5 +13124,11 @@
   "21fa71719e873654": "Clic traversant pendant le contrôle de l’ordinateur",
   "031263628128f352": "fenêtre compagnon automatique ouvrir afficher contrôle de l'ordinateur agent",
   "79b504a21a34200d": "fenêtre compagnon automatique masquer fermer contrôle de l'ordinateur agent",
-  "c511f3b80dd427b1": "fenêtre compagnon fantôme transparente clics traversent contrôle de l'ordinateur"
+  "c511f3b80dd427b1": "fenêtre compagnon fantôme transparente clics traversent contrôle de l'ordinateur",
+  "1bdf8042973ace43": "Masquer la section A besoin de vous",
+  "e0b2b93e87fb4e23": "Afficher la section A besoin de vous",
+  "7e0619494c7b2a24": "Section A besoin de vous",
+  "a3f4bb6c8e3cce55": "Réinitialiser la section A besoin de vous à la valeur par défaut",
+  "0426d4f8b82879a9": "Affiche les fils en attente de votre action en haut de la barre latérale des projets. S'applique uniquement lorsque la barre latérale Projets est activée.",
+  "aa43a97ca417d2a2": "a besoin de vous en attente attention boîte de réception barre latérale masquer"
 }

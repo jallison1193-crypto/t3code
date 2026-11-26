@@ -25,7 +25,7 @@ On a bot's page, open the **Triggers** section and click **Add trigger**.
 - Triggers always follow the bot's model: new triggers use the bot's current model, and changing a bot's model updates all of its existing triggers.
 - To get a webhook trigger's address, open its **...** menu and choose **Copy webhook URL**. The address contains a secret, so give it only to services that should be able to start the bot.
 - By default, each trigger run starts a new thread under the bot so runs stay separate.
-- Click any run under **Runs** (or expand the bot in the **Bots** sidebar tab) to read the run or reply to it. If a run needs your input or approval, or fails and you have not opened it, it also appears under **Needs you**.
+- Click any run under **Runs** (or expand the bot in the **Bots** sidebar tab) to read the run or reply to it. If a run needs your input or approval, or fails and you have not opened it, it also appears under **Needs you** when the Needs you section is on.
 
 ## Pause a bot
 
@@ -52,7 +52,7 @@ Bot threads always run through T3 Code's approval gate, even if a trigger or thr
 - **Ask when unclear:** If T3 Code can't see what an action does, it waits for your approval.
 - **Paying is blocked:** Tools and commands for paying, purchasing, checkout, ordering, transferring money, subscribing, or tipping are declined automatically.
 
-Held approvals appear in **Needs you** and trigger phone alerts, with only **Approve once** and **Decline**.
+Held approvals appear in **Needs you** when the Needs you section is on and trigger phone alerts, with only **Approve once** and **Decline**.
 
 The gate judges each action by its tool name and command text. A script a bot writes and runs can still reach the network without asking, so give bots only the accounts and folders they need. Codex runs commands in an offline, read-only sandbox and asks before leaving it, which closes that gap for Codex bots.
 

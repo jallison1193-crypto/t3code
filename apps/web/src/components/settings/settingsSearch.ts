@@ -542,7 +542,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "projects-sidebar",
     title: msg("Projects sidebar"),
     to: "/settings/general",
-    searchTerms: ["sidebar layout projects first needs you threads"],
+    searchTerms: ["sidebar layout projects first threads"],
+  },
+  {
+    id: "needs-you-section",
+    title: msg("Needs you section"),
+    to: "/settings/general",
+    searchTerms: [msg("needs you waiting attention inbox sidebar hide")],
   },
   {
     id: "work-mode",

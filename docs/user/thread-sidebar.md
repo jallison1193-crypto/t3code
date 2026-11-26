@@ -169,7 +169,9 @@ Turn on **Settings → General → Projects sidebar** (or run **Switch to projec
 command palette) to list projects first, with a **Needs you** section at the top for threads
 waiting on approvals or input and failed threads you have not opened, expandable working, waiting, and ready-for-review threads under each
 project (and an **Open Threads** link when a project has none), **Pinned**, and up to 10 **Other
-threads** outside your project groups. Each device keeps its own choice.
+threads** outside your project groups. You can turn off the **Needs you** section in
+**Settings → General → Needs you section** (or from the command palette); waiting threads still
+appear under their projects. Each device keeps its own choice.
 
 Use **New thread folder** beside **Thread folders** to group conversations across projects and
 connected servers. In a thread’s menu or in the command palette, choose **Change thread folder**.
