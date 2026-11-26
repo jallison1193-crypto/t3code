@@ -16,7 +16,7 @@ import {
   resolveBotLimits,
   type ScheduledTask,
 } from "@t3tools/contracts";
-import { useNavigate, useRouter } from "@tanstack/react-router";
+import { useBlocker, useNavigate, useRouter } from "@tanstack/react-router";
 import * as Equal from "effect/Equal";
 import { T, useGT, useMessages } from "gt-react";
 import {
@@ -37,6 +37,15 @@ import {
 import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
 import { resolveThreadStatusDisplay } from "~/components/ThreadStatusDot";
 import { WorkspacePageHeader } from "~/components/WorkspacePageHeader";
+import {
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogPopup,
+  AlertDialogTitle,
+} from "~/components/ui/alert-dialog";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -67,11 +76,13 @@ import { buildThreadRouteParams } from "~/threadRoutes";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 import { BotModelPicker } from "./BotModelPicker";
 import {
+  formatBotBlockReason,
   formatBotTokenCount,
   isBotEnvironmentEnabled,
   parseBotPositiveInt,
   resolveBotEffectiveModelSelection,
   resolveBotRunNowState,
+  shouldBlockBotNavigation,
 } from "./bots.logic";
 
 export function BotHomeView({
@@ -177,6 +188,17 @@ export function BotHomeView({
     draftGoal.trim() !== savedGoal ||
     !Equal.equals(draftModelSelection, savedModelSelection) ||
     limitsDirty;
+  const hasUnsavedChanges = canUpdateBot && isDirty;
+  const blocker = useBlocker({
+    shouldBlockFn: ({ current, next }) =>
+      shouldBlockBotNavigation({
+        dirty: hasUnsavedChanges,
+        currentPathname: current.pathname,
+        nextPathname: next.pathname,
+      }),
+    enableBeforeUnload: () => hasUnsavedChanges,
+    withResolver: true,
+  });
 
   const [saving, setSaving] = useState(false);
   const [startingRun, setStartingRun] = useState(false);
@@ -210,8 +232,8 @@ export function BotHomeView({
       ? gt("Bots are off")
       : runNowState.reason === "paused"
         ? gt("Bot is paused")
-        : runNowState.reason === "blocked"
-          ? (blockedByPolicy ?? null)
+        : runNowState.reason === "blocked" && blockedByPolicy !== undefined
+          ? formatBotBlockReason(blockedByPolicy, messages)
           : null;
 
   const limitModeLabels: Record<BotLimitMode, string> = {
@@ -357,7 +379,8 @@ export function BotHomeView({
       }
       return;
     }
-    void navigate({ to: "/", replace: true });
+    setEditDraft({ key: projectKey });
+    void navigate({ to: "/", replace: true, ignoreBlocker: true });
   };
 
   const fieldsDisabled = !canUpdateBot || !connected || saving;
@@ -696,6 +719,38 @@ export function BotHomeView({
           onClose={() => setTriggerEditor(null)}
         />
       ) : null}
+
+      <AlertDialog
+        open={blocker.status === "blocked"}
+        onOpenChange={(open) => {
+          if (!open && blocker.status === "blocked") blocker.reset();
+        }}
+      >
+        <AlertDialogPopup>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              <T>Discard unsaved changes?</T>
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              <T>Your changes to this bot have not been saved.</T>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose render={<Button variant="outline" />}>
+              <T>Keep editing</T>
+            </AlertDialogClose>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setEditDraft({ key: projectKey });
+                blocker.proceed?.();
+              }}
+            >
+              <T>Discard</T>
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogPopup>
+      </AlertDialog>
     </SidebarInset>
   );
 }

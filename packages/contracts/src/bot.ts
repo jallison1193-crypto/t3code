@@ -16,7 +16,7 @@ export const BOT_PAUSED_REASON = "This bot is paused";
 export const BOT_DAILY_RUN_LIMIT_REASON = "Daily run limit reached";
 export const BOT_DAILY_TOKEN_LIMIT_REASON = "Daily token limit reached";
 export const BOT_UNSUPPORTED_PROVIDER_REASON =
-  "This bot's model can't be gated by T3. Pick a Claude or Codex model.";
+  "Bots can only use Claude or Codex models. Pick one of those.";
 
 /**
  * Providers that route every tool and MCP call through a T3 approval request in

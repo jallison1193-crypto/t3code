@@ -13130,5 +13130,19 @@
   "7e0619494c7b2a24": "Section A besoin de vous",
   "a3f4bb6c8e3cce55": "Réinitialiser la section A besoin de vous à la valeur par défaut",
   "0426d4f8b82879a9": "Affiche les fils en attente de votre action en haut de la barre latérale des projets. S'applique uniquement lorsque la barre latérale Projets est activée.",
-  "aa43a97ca417d2a2": "a besoin de vous en attente attention boîte de réception barre latérale masquer"
+  "aa43a97ca417d2a2": "a besoin de vous en attente attention boîte de réception barre latérale masquer",
+  "ad874f429ec352d0": "Abandonner les modifications non enregistrées ?",
+  "15d95f52d13edfe4": "Vos modifications apportées à ce bot n’ont pas été enregistrées.",
+  "abac141768d80661": "Continuer l’édition",
+  "9dac2e9e78d66ba4": "Les bots sont désactivés dans les Paramètres",
+  "6f9e97a34367c174": "Ce bot est en pause",
+  "ad53810a215598c5": "Limite quotidienne d’exécutions atteinte",
+  "289911b1563679ef": "Limite quotidienne de jetons atteinte",
+  "5940efa53dcef484": "Les bots ne peuvent utiliser que des modèles Claude ou Codex. Choisissez-en un.",
+  "2855ef1fb7c08d35": "Déclencheur activé",
+  "58d8d00d5d2d6107": "Tâche activée",
+  "e68a843ca6095ea9": "Supprimer le déclencheur",
+  "b4fef4b4009c66ff": "Supprimer la tâche",
+  "9cf66f526ba5756e": "Les déclencheurs désactivés restent enregistrés mais ne s’exécutent pas.",
+  "1c8a6b147eacb333": "désactiver les plugins arrêter les plugins pause activer extensions"
 }

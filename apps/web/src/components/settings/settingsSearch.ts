@@ -391,6 +391,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     environmentOnly: true,
   },
   {
+    id: "run-plugins",
+    title: msg("Run plugins"),
+    to: "/settings/plugins",
+    searchTerms: [msg("turn off plugins disable plugins pause enable extensions")],
+    environmentOnly: true,
+  },
+  {
     // Prefixed because the slider control already owns the `appearance-contrast` id.
     id: "setting-appearance-contrast",
     title: msg("Contrast"),

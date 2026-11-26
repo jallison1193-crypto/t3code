@@ -472,7 +472,7 @@ function EnvironmentPluginsSection({
         }
       >
         <SettingsRow
-          title={gt("Run plugins")}
+          {...setting("run-plugins")}
           description={
             <T>
               Run installed user and repo plugins on the environment picked above; each environment

@@ -13125,5 +13125,19 @@
   "7e0619494c7b2a24": "Sección Te necesita",
   "a3f4bb6c8e3cce55": "Restablecer la sección Te necesita al valor predeterminado",
   "0426d4f8b82879a9": "Muestra los hilos que te esperan en la parte superior de la barra lateral de proyectos. Solo se aplica cuando la barra lateral de proyectos está activada.",
-  "aa43a97ca417d2a2": "te necesita esperando atención bandeja de entrada barra lateral ocultar"
+  "aa43a97ca417d2a2": "te necesita esperando atención bandeja de entrada barra lateral ocultar",
+  "ad874f429ec352d0": "¿Descartar los cambios sin guardar?",
+  "15d95f52d13edfe4": "Tus cambios en este bot no se han guardado.",
+  "abac141768d80661": "Seguir editando",
+  "9dac2e9e78d66ba4": "Los bots están desactivados en Ajustes",
+  "6f9e97a34367c174": "Este bot está en pausa",
+  "ad53810a215598c5": "Se alcanzó el límite diario de ejecuciones",
+  "289911b1563679ef": "Se alcanzó el límite diario de tokens",
+  "5940efa53dcef484": "Los bots solo pueden usar modelos de Claude o Codex. Elige uno de esos.",
+  "2855ef1fb7c08d35": "Disparador activado",
+  "58d8d00d5d2d6107": "Tarea activada",
+  "e68a843ca6095ea9": "Eliminar disparador",
+  "b4fef4b4009c66ff": "Eliminar tarea",
+  "9cf66f526ba5756e": "Los disparadores desactivados siguen guardados, pero no se ejecutan.",
+  "1c8a6b147eacb333": "desactivar plugins apagar plugins pausar activar extensiones"
 }

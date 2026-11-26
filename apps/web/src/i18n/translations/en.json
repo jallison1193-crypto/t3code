@@ -13141,5 +13141,19 @@
   "7e0619494c7b2a24": "Needs you section",
   "a3f4bb6c8e3cce55": "Reset Needs you section to default",
   "0426d4f8b82879a9": "Show threads waiting for you at the top of the projects sidebar. Only applies when Projects sidebar is on.",
-  "aa43a97ca417d2a2": "needs you waiting attention inbox sidebar hide"
+  "aa43a97ca417d2a2": "needs you waiting attention inbox sidebar hide",
+  "ad874f429ec352d0": "Discard unsaved changes?",
+  "15d95f52d13edfe4": "Your changes to this bot have not been saved.",
+  "abac141768d80661": "Keep editing",
+  "9dac2e9e78d66ba4": "Bots are turned off in Settings",
+  "6f9e97a34367c174": "This bot is paused",
+  "ad53810a215598c5": "Daily run limit reached",
+  "289911b1563679ef": "Daily token limit reached",
+  "5940efa53dcef484": "Bots can only use Claude or Codex models. Pick one of those.",
+  "2855ef1fb7c08d35": "Trigger enabled",
+  "58d8d00d5d2d6107": "Task enabled",
+  "e68a843ca6095ea9": "Delete trigger",
+  "b4fef4b4009c66ff": "Delete task",
+  "9cf66f526ba5756e": "Disabled triggers stay saved but do not run.",
+  "1c8a6b147eacb333": "turn off plugins disable plugins pause enable extensions"
 }
