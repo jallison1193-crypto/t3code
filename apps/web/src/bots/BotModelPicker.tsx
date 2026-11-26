@@ -45,6 +45,9 @@ export function BotModelPicker({
     useAtomValue(serverEnvironment.providersValueAtom(environmentId)) ?? EMPTY_SERVER_PROVIDERS;
   const instanceEntries = providerInstanceEntriesFor(providers, settings, projectId);
   const defaultFallbackEntry =
+    instanceEntries.find(
+      (entry) => entry.enabled && entry.isAvailable && providerSupportsBotGate(entry.driverKind),
+    ) ??
     instanceEntries.find((entry) => entry.enabled && providerSupportsBotGate(entry.driverKind)) ??
     instanceEntries.find((entry) => entry.enabled) ??
     instanceEntries[0];
