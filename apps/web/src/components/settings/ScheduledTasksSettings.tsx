@@ -55,6 +55,7 @@ import { msg, T, useGT, useLocale, useMessages, Var } from "gt-react";
 import { m, type MessageResolver } from "../../i18n/messages";
 
 import {
+  formatBotBlockReason,
   formatBotModelDisplayName,
   resolveBotEffectiveModelSelection,
 } from "../../bots/bots.logic";
@@ -127,6 +128,15 @@ import { Menu, MenuTrigger, MenuPopup, MenuItem, MenuSeparator } from "../ui/men
 import { ToggleGroup, Toggle } from "../ui/toggle-group";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "../ui/empty";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
+import {
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogPopup,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {
@@ -812,6 +822,7 @@ export function ScheduledTaskRow({
   const timestampFormat = useClientSettings((settings) => settings.timestampFormat);
   const [busy, setBusy] = useState(false);
   const [deliveriesOpen, setDeliveriesOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const isWebhook = task.schedule.type === "webhook";
   const isBotTask = isBotProject(
     useEnvironment(environmentId)?.serverConfig?.settings,
@@ -852,13 +863,6 @@ export function ScheduledTaskRow({
   });
   const act = async (action: "toggle" | "run" | "delete") => {
     if (busy || !readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)) return;
-    if (action === "delete") {
-      const message = `${gt('Delete "{title}"?', { title: task.title })}\n${gt("This cannot be undone.")}`;
-      const confirmed =
-        (await requestConfirmDialog(message, { variant: "destructive" })) ??
-        window.confirm(message);
-      if (!confirmed) return;
-    }
     setBusy(true);
     const result =
       action === "toggle"
@@ -894,7 +898,7 @@ export function ScheduledTaskRow({
             )}{" "}
             ·{" "}
             {task.blockedByPolicy !== undefined ? (
-              task.blockedByPolicy
+              formatBotBlockReason(task.blockedByPolicy, messages)
             ) : !task.enabled ? (
               gt("Paused")
             ) : isWebhook ? (
@@ -968,12 +972,37 @@ export function ScheduledTaskRow({
                 </MenuItem>
               )}
               <MenuSeparator />
-              <MenuItem onClick={() => void act("delete")}>
+              <MenuItem onClick={() => setDeleteConfirmOpen(true)}>
                 <Trash2Icon />
                 Delete
               </MenuItem>
             </MenuPopup>
           </Menu>
+          <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+            <AlertDialogPopup>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {gt('Delete "{title}"?', { title: task.title })}
+                </AlertDialogTitle>
+                <AlertDialogDescription>{gt("This cannot be undone.")}</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogClose render={<Button variant="outline" />}>
+                  <T>Cancel</T>
+                </AlertDialogClose>
+                <Button
+                  variant="destructive"
+                  disabled={busy}
+                  onClick={() => {
+                    setDeleteConfirmOpen(false);
+                    void act("delete");
+                  }}
+                >
+                  {isBotTask ? <T>Delete trigger</T> : <T>Delete task</T>}
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogPopup>
+          </AlertDialog>
           {deliveriesOpen ? (
             <WebhookDeliveriesDialog
               environmentId={environmentId}
@@ -2590,11 +2619,16 @@ function ScheduledTaskEditorForm({
                 <T>Enabled</T>
               </Label>
               <p id="scheduled-task-enabled-description" className="text-sm text-muted-foreground">
-                <T>Disabled tasks stay saved but do not run.</T>
+                {isBotTrigger ? (
+                  <T>Disabled triggers stay saved but do not run.</T>
+                ) : (
+                  <T>Disabled tasks stay saved but do not run.</T>
+                )}
               </p>
             </div>
             <Switch
               id="scheduled-task-enabled"
+              aria-label={isBotTrigger ? gt("Trigger enabled") : gt("Task enabled")}
               aria-describedby="scheduled-task-enabled-description"
               checked={draft.enabled}
               onCheckedChange={(enabled) => setDraft((current) => ({ ...current, enabled }))}

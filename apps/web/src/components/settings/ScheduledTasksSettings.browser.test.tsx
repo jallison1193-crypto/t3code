@@ -188,7 +188,7 @@ describe("ScheduledTasksSettings", () => {
       .toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Actions for Review issues" }));
     await userEvent.click(page.getByRole("menuitem", { name: "Delete", exact: true }));
-    await userEvent.click(page.getByRole("button", { name: "Confirm", exact: true }));
+    await userEvent.click(page.getByRole("button", { name: "Delete task", exact: true }));
     await vi.waitFor(() =>
       expect(state.remove).toHaveBeenCalledExactlyOnceWith(expect.anything(), {
         environmentId,

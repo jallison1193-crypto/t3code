@@ -1,4 +1,9 @@
 import {
+  BOT_DAILY_RUN_LIMIT_REASON,
+  BOT_DAILY_TOKEN_LIMIT_REASON,
+  BOT_PAUSED_REASON,
+  BOT_UNSUPPORTED_PROVIDER_REASON,
+  BOTS_DISABLED_REASON,
   EnvironmentId,
   ProjectId,
   ProviderDriverKind,
@@ -21,6 +26,7 @@ import {
   deriveBotSidebarEntries,
   filterNonBotProjects,
   filterNonBotThreads,
+  formatBotBlockReason,
   formatBotModelDisplayName,
   formatBotTokenCount,
   isAnyBotsEnabled,
@@ -31,6 +37,7 @@ import {
   resolveBotRouteSidebarMode,
   resolveBotRunNowState,
   resolveFirstSupportedBotModelSelection,
+  shouldBlockBotNavigation,
 } from "./bots.logic";
 
 const ENV_LOCAL = EnvironmentId.make("env-local");
@@ -477,5 +484,59 @@ describe("bots client logic", () => {
         routeOverride: null,
       }),
     ).toBe("all");
+  });
+
+  it("maps known bot block reasons through the message resolver and passes unknown strings through", () => {
+    const resolved: string[] = [];
+    const resolve = (message: string) => {
+      resolved.push(message);
+      return `[de] ${message}`;
+    };
+
+    for (const reason of [
+      BOTS_DISABLED_REASON,
+      BOT_PAUSED_REASON,
+      BOT_DAILY_RUN_LIMIT_REASON,
+      BOT_DAILY_TOKEN_LIMIT_REASON,
+      BOT_UNSUPPORTED_PROVIDER_REASON,
+    ]) {
+      expect(formatBotBlockReason(reason, resolve)).toBe(`[de] ${reason}`);
+    }
+    expect(resolved).toHaveLength(5);
+
+    expect(formatBotBlockReason("Future server limit", resolve)).toBe("Future server limit");
+    expect(formatBotBlockReason("toString", resolve)).toBe("toString");
+    expect(resolved).toHaveLength(5);
+  });
+
+  it("blocks bot navigation only when dirty and moving to another pathname", () => {
+    expect(
+      shouldBlockBotNavigation({
+        dirty: true,
+        currentPathname: "/projects/env:bot-a",
+        nextPathname: "/projects/env:bot-b",
+      }),
+    ).toBe(true);
+    expect(
+      shouldBlockBotNavigation({
+        dirty: true,
+        currentPathname: "/projects/env:bot-a",
+        nextPathname: "/settings/general",
+      }),
+    ).toBe(true);
+    expect(
+      shouldBlockBotNavigation({
+        dirty: true,
+        currentPathname: "/projects/env:bot-a",
+        nextPathname: "/projects/env:bot-a",
+      }),
+    ).toBe(false);
+    expect(
+      shouldBlockBotNavigation({
+        dirty: false,
+        currentPathname: "/projects/env:bot-a",
+        nextPathname: "/settings/general",
+      }),
+    ).toBe(false);
   });
 });

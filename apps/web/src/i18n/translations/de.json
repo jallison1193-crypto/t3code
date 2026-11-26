@@ -13132,5 +13132,19 @@
   "7e0619494c7b2a24": "Bereich „Braucht dich“",
   "a3f4bb6c8e3cce55": "Bereich „Braucht dich“ auf Standard zurücksetzen",
   "0426d4f8b82879a9": "Threads, die auf dich warten, oben in der Projekt-Seitenleiste anzeigen. Gilt nur, wenn die Projekt-Seitenleiste aktiviert ist.",
-  "aa43a97ca417d2a2": "braucht dich wartend aufmerksamkeit posteingang seitenleiste ausblenden"
+  "aa43a97ca417d2a2": "braucht dich wartend aufmerksamkeit posteingang seitenleiste ausblenden",
+  "ad874f429ec352d0": "Nicht gespeicherte Änderungen verwerfen?",
+  "15d95f52d13edfe4": "Deine Änderungen an diesem Bot wurden nicht gespeichert.",
+  "abac141768d80661": "Weiter bearbeiten",
+  "9dac2e9e78d66ba4": "Bots sind in den Einstellungen deaktiviert",
+  "6f9e97a34367c174": "Dieser Bot ist pausiert",
+  "ad53810a215598c5": "Tageslimit für Ausführungen erreicht",
+  "289911b1563679ef": "Tageslimit für Tokens erreicht",
+  "5940efa53dcef484": "Bots können nur Claude- oder Codex-Modelle verwenden. Wähle eines davon.",
+  "2855ef1fb7c08d35": "Auslöser aktiviert",
+  "58d8d00d5d2d6107": "Aufgabe aktiviert",
+  "e68a843ca6095ea9": "Auslöser löschen",
+  "b4fef4b4009c66ff": "Aufgabe löschen",
+  "9cf66f526ba5756e": "Deaktivierte Auslöser bleiben gespeichert, werden aber nicht ausgeführt.",
+  "1c8a6b147eacb333": "Plugins ausschalten Plugins deaktivieren pausieren aktivieren Erweiterungen"
 }

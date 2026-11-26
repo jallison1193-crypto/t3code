@@ -18,6 +18,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 
+import { formatBotBlockReason } from "../../bots/bots.logic";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { useClientSettings } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
@@ -53,7 +54,7 @@ function taskScheduleLine(
     <>
       {scheduleLabel(task.schedule, timestampFormat, timeZone, task.nextRunAt, resolve)}
       {task.blockedByPolicy !== undefined ? (
-        ` · ${task.blockedByPolicy}`
+        ` · ${formatBotBlockReason(task.blockedByPolicy, resolve)}`
       ) : task.enabled && task.nextRunAt !== null ? (
         <>
           {" · "}

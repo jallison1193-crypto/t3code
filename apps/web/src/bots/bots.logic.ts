@@ -1,4 +1,9 @@
 import {
+  BOT_DAILY_RUN_LIMIT_REASON,
+  BOT_DAILY_TOKEN_LIMIT_REASON,
+  BOT_PAUSED_REASON,
+  BOT_UNSUPPORTED_PROVIDER_REASON,
+  BOTS_DISABLED_REASON,
   DEFAULT_MODEL_BY_PROVIDER,
   isBotPaused,
   isBotProject,
@@ -15,12 +20,14 @@ import {
 import type { SidebarModeFilter } from "@t3tools/contracts/settings";
 import { derivePhysicalProjectKey } from "@t3tools/client-runtime/state/project-grouping";
 import { toSortableTimestamp } from "@t3tools/client-runtime/state/thread-sort";
+import { msg } from "gt-react";
 
 import { getDisplayModelName } from "../components/chat/providerIconUtils";
 import type {
   ProjectsSidebarGroupInput,
   ProjectsSidebarThread,
 } from "../components/sidebar/ProjectsSidebar.logic";
+import { m } from "../i18n/messages";
 import {
   resolveSelectableProviderInstanceEntry,
   type ProviderInstanceEntry,
@@ -372,4 +379,31 @@ export function resolveBotRouteSidebarMode(input: {
     return "bots";
   }
   return resolveSidebarModeFilter(input.savedMode, input.botsEnabled);
+}
+
+const BOT_BLOCK_REASON_LABELS: Readonly<Record<string, string>> = {
+  [BOTS_DISABLED_REASON]: msg("Bots are turned off in Settings"),
+  [BOT_PAUSED_REASON]: msg("This bot is paused"),
+  [BOT_DAILY_RUN_LIMIT_REASON]: msg("Daily run limit reached"),
+  [BOT_DAILY_TOKEN_LIMIT_REASON]: msg("Daily token limit reached"),
+  [BOT_UNSUPPORTED_PROVIDER_REASON]: msg(
+    "Bots can only use Claude or Codex models. Pick one of those.",
+  ),
+};
+
+export function formatBotBlockReason(
+  reason: string,
+  resolve: (message: string) => string = m,
+): string {
+  if (!Object.hasOwn(BOT_BLOCK_REASON_LABELS, reason)) return reason;
+  const label = BOT_BLOCK_REASON_LABELS[reason];
+  return label === undefined ? reason : resolve(label);
+}
+
+export function shouldBlockBotNavigation(input: {
+  readonly dirty: boolean;
+  readonly currentPathname: string;
+  readonly nextPathname: string;
+}): boolean {
+  return input.dirty && input.nextPathname !== input.currentPathname;
 }
