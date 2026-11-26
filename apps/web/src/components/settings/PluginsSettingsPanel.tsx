@@ -356,101 +356,89 @@ function EnvironmentPluginsSection({
   const handleTogglePluginsEnabled = async (next: boolean) => {
     if (savingPluginsEnabled || !canUpdateSettings) return;
     setSavingPluginsEnabled(true);
-    try {
-      const result = await updateSettings({
-        environmentId,
-        input: { patch: { pluginsEnabled: next } },
+    const result = await updateSettings({
+      environmentId,
+      input: { patch: { pluginsEnabled: next } },
+    });
+    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      const error = squashAtomCommandFailure(result);
+      toastManager.add({
+        type: "error",
+        title: gt("Plugins setting not updated"),
+        description:
+          (error instanceof Error ? thrownErrorMessage(error, messages) : null) ??
+          gt("Could not update plugins setting."),
       });
-      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-        const error = squashAtomCommandFailure(result);
-        toastManager.add({
-          type: "error",
-          title: gt("Plugins setting not updated"),
-          description:
-            (error instanceof Error ? thrownErrorMessage(error, messages) : null) ??
-            gt("Could not update plugins setting."),
-        });
-      }
-    } finally {
-      setSavingPluginsEnabled(false);
     }
+    setSavingPluginsEnabled(false);
   };
 
   const handleToggle = async (plugin: InstalledPlugin, enabled: boolean) => {
     const key = `user:${plugin.id}`;
     setBusyPluginKey(key);
-    try {
-      const result = await setPluginEnabled({
-        environmentId,
-        input: { id: plugin.id, enabled },
+    const result = await setPluginEnabled({
+      environmentId,
+      input: { id: plugin.id, enabled },
+    });
+    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      const error = squashAtomCommandFailure(result);
+      toastManager.add({
+        type: "error",
+        title: gt("Plugin not updated"),
+        description:
+          (error instanceof Error ? thrownErrorMessage(error, messages) : null) ??
+          gt("Could not update plugin state."),
       });
-      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-        const error = squashAtomCommandFailure(result);
-        toastManager.add({
-          type: "error",
-          title: gt("Plugin not updated"),
-          description:
-            (error instanceof Error ? thrownErrorMessage(error, messages) : null) ??
-            gt("Could not update plugin state."),
-        });
-      }
-    } finally {
-      setBusyPluginKey((current) => (current === key ? null : current));
     }
+    setBusyPluginKey((current) => (current === key ? null : current));
   };
 
   const handleToggleRepo = async (plugin: InstalledPlugin, enabled: boolean) => {
     if (plugin.projectId === undefined) return;
     const key = `repo:${plugin.projectId}:${plugin.id}`;
     setBusyPluginKey(key);
-    try {
-      const result = await setPluginEnabled({
-        environmentId,
-        input: {
-          id: plugin.id,
-          projectId: plugin.projectId,
-          enabled,
-          ...(enabled && plugin.revision !== undefined ? { revision: plugin.revision } : {}),
-        },
+    const result = await setPluginEnabled({
+      environmentId,
+      input: {
+        id: plugin.id,
+        projectId: plugin.projectId,
+        enabled,
+        ...(enabled && plugin.revision !== undefined ? { revision: plugin.revision } : {}),
+      },
+    });
+    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      pluginsQuery.refresh();
+      const error = squashAtomCommandFailure(result);
+      toastManager.add({
+        type: "error",
+        title: gt("Plugin not updated"),
+        description:
+          (error instanceof Error ? thrownErrorMessage(error, messages) : null) ??
+          gt("Could not update plugin state."),
       });
-      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-        pluginsQuery.refresh();
-        const error = squashAtomCommandFailure(result);
-        toastManager.add({
-          type: "error",
-          title: gt("Plugin not updated"),
-          description:
-            (error instanceof Error ? thrownErrorMessage(error, messages) : null) ??
-            gt("Could not update plugin state."),
-        });
-      }
-    } finally {
-      setBusyPluginKey((current) => (current === key ? null : current));
     }
+    setBusyPluginKey((current) => (current === key ? null : current));
   };
 
   const handleConfirmUninstall = async (plugin: InstalledPlugin) => {
     const key = `user:${plugin.id}`;
     setUninstallTarget(null);
     setBusyPluginKey(key);
-    try {
-      const result = await uninstallPlugin({
-        environmentId,
-        input: { id: plugin.id },
+    const result = await uninstallPlugin({
+      environmentId,
+      input: { id: plugin.id },
+    });
+    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      const error = squashAtomCommandFailure(result);
+      toastManager.add({
+        type: "error",
+        title: gt("Plugin not uninstalled"),
+        description:
+          (error instanceof Error ? thrownErrorMessage(error, messages) : null) ??
+          gt("Could not uninstall plugin."),
       });
-      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-        const error = squashAtomCommandFailure(result);
-        toastManager.add({
-          type: "error",
-          title: gt("Plugin not uninstalled"),
-          description:
-            (error instanceof Error ? thrownErrorMessage(error, messages) : null) ??
-            gt("Could not uninstall plugin."),
-        });
-      }
-    } finally {
-      setBusyPluginKey((current) => (current === key ? null : current));
     }
+    setBusyPluginKey((current) => (current === key ? null : current));
   };
 
   const uninstallLabel = uninstallTarget?.displayName ?? uninstallTarget?.id ?? "";
@@ -840,81 +828,69 @@ function PluginWorkerDetails({
 
   const loadLog = async () => {
     setLogLoading(true);
-    try {
-      const result = await getWorkerLog({
-        environmentId,
-        input: { id: pluginId },
-      });
-      if (result._tag === "Success") {
-        setLogState(result.value);
-      } else {
-        reportError(result, gt("Could not load worker log"), gt("Could not read worker output."));
-      }
-    } finally {
-      setLogLoading(false);
+    const result = await getWorkerLog({
+      environmentId,
+      input: { id: pluginId },
+    });
+    if (result._tag === "Success") {
+      setLogState(result.value);
+    } else {
+      reportError(result, gt("Could not load worker log"), gt("Could not read worker output."));
     }
+    setLogLoading(false);
   };
 
   const handleApprove = async () => {
     setWorkerActionBusy(true);
-    try {
-      const result = await approveWorker({
-        environmentId,
-        input: { id: pluginId, ...(revision !== undefined ? { revision } : {}) },
-      });
-      reportError(result, gt("Worker not approved"), gt("Could not approve plugin worker."));
-    } finally {
-      setWorkerActionBusy(false);
-    }
+    const result = await approveWorker({
+      environmentId,
+      input: { id: pluginId, ...(revision !== undefined ? { revision } : {}) },
+    });
+    reportError(result, gt("Worker not approved"), gt("Could not approve plugin worker."));
+    setWorkerActionBusy(false);
   };
 
   const handleRunNow = async () => {
     setWorkerActionBusy(true);
-    try {
-      const result = await runWorker({
-        environmentId,
-        input: { id: pluginId },
-      });
-      if (result._tag === "Success") {
-        if (result.value.skipped) {
-          toastManager.add({
-            type: "info",
-            title: gt("Worker already running"),
-            description: gt("Wait for the current run to finish before starting another."),
-          });
-        }
-        if (logOpen) {
-          void loadLog();
-        }
-      } else {
-        reportError(result, gt("Worker run failed"), gt("Could not run plugin worker."));
+    const result = await runWorker({
+      environmentId,
+      input: { id: pluginId },
+    });
+    if (result._tag === "Success") {
+      if (result.value.skipped) {
+        toastManager.add({
+          type: "info",
+          title: gt("Worker already running"),
+          description: gt("Wait for the current run to finish before starting another."),
+        });
       }
-    } finally {
-      setWorkerActionBusy(false);
+      if (logOpen) {
+        void loadLog();
+      }
+    } else {
+      reportError(result, gt("Worker run failed"), gt("Could not run plugin worker."));
     }
+    setWorkerActionBusy(false);
   };
 
   const handleSaveFolder = async (folderId: PluginId, savedPath: string | null) => {
-    const rawDraft = Object.hasOwn(drafts, folderId) ? drafts[folderId]! : (savedPath ?? "");
+    const rawDraft = Object.hasOwn(drafts, folderId) ? (drafts[folderId] ?? "") : (savedPath ?? "");
     const trimmed = rawDraft.trim();
     setSavingFolderId(folderId);
-    try {
-      const result = await setWorkerFolder({
-        environmentId,
-        input: { id: pluginId, folderId, path: trimmed.length === 0 ? null : trimmed },
+    const result = await setWorkerFolder({
+      environmentId,
+      input: { id: pluginId, folderId, path: trimmed.length === 0 ? null : trimmed },
+    });
+    if (result._tag === "Success") {
+      setDrafts((current) => {
+        const next = { ...current };
+        delete next[folderId];
+        return next;
       });
-      if (result._tag === "Success") {
-        setDrafts((current) => {
-          const next = { ...current };
-          delete next[folderId];
-          return next;
-        });
-      } else {
-        reportError(result, gt("Folder not saved"), gt("Could not save worker folder path."));
-      }
-    } finally {
-      setSavingFolderId((current) => (current === folderId ? null : current));
+    } else {
+      reportError(result, gt("Folder not saved"), gt("Could not save worker folder path."));
     }
+    setSavingFolderId((current) => (current === folderId ? null : current));
   };
 
   const busy = rowBusy || workerActionBusy;
@@ -1127,47 +1103,41 @@ function PluginExternalDetails({
 
   const handleApprove = async () => {
     setActionBusy(true);
-    try {
-      const result = await setPluginEnabled({
-        environmentId,
-        input: {
-          id: plugin.id,
-          enabled: true,
-          approveExternal: true,
-          ...(plugin.revision !== undefined ? { revision: plugin.revision } : {}),
-        },
-      });
-      reportError(
-        result,
-        gt("Plugin not approved"),
-        gt("Could not approve plugin MCP servers and hooks."),
-      );
-    } finally {
-      setActionBusy(false);
-    }
+    const result = await setPluginEnabled({
+      environmentId,
+      input: {
+        id: plugin.id,
+        enabled: true,
+        approveExternal: true,
+        ...(plugin.revision !== undefined ? { revision: plugin.revision } : {}),
+      },
+    });
+    reportError(
+      result,
+      gt("Plugin not approved"),
+      gt("Could not approve plugin MCP servers and hooks."),
+    );
+    setActionBusy(false);
   };
 
   const handleRemoveApproval = async () => {
     setActionBusy(true);
-    try {
-      const result = await updateSettings({
-        environmentId,
-        input: {
-          patch: {
-            plugins: {
-              [plugin.id]: { externalApproval: null },
-            },
+    const result = await updateSettings({
+      environmentId,
+      input: {
+        patch: {
+          plugins: {
+            [plugin.id]: { externalApproval: null },
           },
         },
-      });
-      reportError(
-        result,
-        gt("Approval not removed"),
-        gt("Could not remove plugin external approval."),
-      );
-    } finally {
-      setActionBusy(false);
-    }
+      },
+    });
+    reportError(
+      result,
+      gt("Approval not removed"),
+      gt("Could not remove plugin external approval."),
+    );
+    setActionBusy(false);
   };
 
   const busy = rowBusy || actionBusy;

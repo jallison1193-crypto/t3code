@@ -238,99 +238,96 @@ export function PluginChangeCard({
 
   const runAction = async (action: PluginChangeCardAction) => {
     setBusy(true);
-    try {
-      switch (action) {
-        case "install": {
+    switch (action) {
+      case "install": {
+        const result = await setPluginEnabled({
+          environmentId,
+          input: {
+            id: change.pluginId,
+            enabled: true,
+            approveWorker: true,
+            approveExternal: true,
+            revision: change.after,
+          },
+        });
+        reportError(result, gt("Plugin not updated"), gt("Could not update plugin state."));
+        break;
+      }
+      case "turn-off": {
+        const result = await setPluginEnabled({
+          environmentId,
+          input: { id: change.pluginId, enabled: false },
+        });
+        reportError(result, gt("Plugin not updated"), gt("Could not update plugin state."));
+        break;
+      }
+      case "cancel": {
+        const result = await uninstallPlugin({
+          environmentId,
+          input: { id: change.pluginId },
+        });
+        reportError(result, gt("Plugin not uninstalled"), gt("Could not uninstall plugin."));
+        break;
+      }
+      case "install-anyway": {
+        const result = await restorePluginRevision({
+          environmentId,
+          input: {
+            id: change.pluginId,
+            revision: change.after,
+            enable: true,
+            approveWorker: true,
+            approveExternal: true,
+          },
+        });
+        reportError(result, gt("Plugin not restored"), gt("Could not restore plugin revision."));
+        break;
+      }
+      case "approve": {
+        if (needsWorkerApproval) {
+          const result = await approvePluginWorker({
+            environmentId,
+            input: { id: change.pluginId, revision: change.after },
+          });
+          reportError(result, gt("Worker not approved"), gt("Could not approve plugin worker."));
+        }
+        if (needsExternalApproval) {
           const result = await setPluginEnabled({
             environmentId,
             input: {
               id: change.pluginId,
               enabled: true,
-              approveWorker: true,
               approveExternal: true,
               revision: change.after,
             },
           });
-          reportError(result, gt("Plugin not updated"), gt("Could not update plugin state."));
-          break;
+          reportError(
+            result,
+            gt("Plugin not approved"),
+            gt("Could not approve plugin MCP servers and hooks."),
+          );
         }
-        case "turn-off": {
-          const result = await setPluginEnabled({
-            environmentId,
-            input: { id: change.pluginId, enabled: false },
-          });
-          reportError(result, gt("Plugin not updated"), gt("Could not update plugin state."));
-          break;
-        }
-        case "cancel": {
-          const result = await uninstallPlugin({
-            environmentId,
-            input: { id: change.pluginId },
-          });
-          reportError(result, gt("Plugin not uninstalled"), gt("Could not uninstall plugin."));
-          break;
-        }
-        case "install-anyway": {
-          const result = await restorePluginRevision({
-            environmentId,
-            input: {
-              id: change.pluginId,
-              revision: change.after,
-              enable: true,
-              approveWorker: true,
-              approveExternal: true,
-            },
-          });
-          reportError(result, gt("Plugin not restored"), gt("Could not restore plugin revision."));
-          break;
-        }
-        case "approve": {
-          if (needsWorkerApproval) {
-            const result = await approvePluginWorker({
-              environmentId,
-              input: { id: change.pluginId, revision: change.after },
-            });
-            reportError(result, gt("Worker not approved"), gt("Could not approve plugin worker."));
-          }
-          if (needsExternalApproval) {
-            const result = await setPluginEnabled({
-              environmentId,
-              input: {
-                id: change.pluginId,
-                enabled: true,
-                approveExternal: true,
-                revision: change.after,
-              },
-            });
-            reportError(
-              result,
-              gt("Plugin not approved"),
-              gt("Could not approve plugin MCP servers and hooks."),
-            );
-          }
-          break;
-        }
-        case "undo": {
-          if (change.before === undefined) break;
-          const result = await restorePluginRevision({
-            environmentId,
-            input: { id: change.pluginId, revision: change.before },
-          });
-          reportError(result, gt("Plugin not restored"), gt("Could not restore plugin revision."));
-          break;
-        }
-        case "restore": {
-          const result = await restorePluginRevision({
-            environmentId,
-            input: { id: change.pluginId, revision: change.after },
-          });
-          reportError(result, gt("Plugin not restored"), gt("Could not restore plugin revision."));
-          break;
-        }
+        break;
       }
-    } finally {
-      setBusy(false);
+      case "undo": {
+        if (change.before === undefined) break;
+        const result = await restorePluginRevision({
+          environmentId,
+          input: { id: change.pluginId, revision: change.before },
+        });
+        reportError(result, gt("Plugin not restored"), gt("Could not restore plugin revision."));
+        break;
+      }
+      case "restore": {
+        const result = await restorePluginRevision({
+          environmentId,
+          input: { id: change.pluginId, revision: change.after },
+        });
+        reportError(result, gt("Plugin not restored"), gt("Could not restore plugin revision."));
+        break;
+      }
     }
+    setBusy(false);
   };
 
   return (

@@ -36,14 +36,13 @@ import {
   type ProviderInstanceEntry,
 } from "../providerInstances";
 
-type BotServerSettingsLike =
-  | (Pick<ServerSettings, "projectSettingsOverrides"> & {
-      readonly botsEnabled?: boolean | undefined;
-    })
-  | null
-  | undefined;
+import {
+  filterNonBotProjects,
+  type BotServerSettingsLike,
+  type BotSettingsLookup,
+} from "./botProjectFilter";
 
-export type BotSettingsLookup = (environmentId: EnvironmentId) => BotServerSettingsLike;
+export { filterNonBotProjects, type BotSettingsLookup };
 
 export function isAnyBotsEnabled(
   environments: ReadonlyArray<{
@@ -82,17 +81,6 @@ export function isBotThreadVisibleInNeedsYou(
 ): boolean {
   if (!isBotProject(settings, projectId)) return true;
   return isBotEnvironmentEnabled(settings);
-}
-
-export function filterNonBotProjects<
-  TProject extends { readonly environmentId: EnvironmentId; readonly id: ProjectId },
->(
-  projects: ReadonlyArray<TProject>,
-  getServerSettings: BotSettingsLookup,
-): ReadonlyArray<TProject> {
-  return projects.filter(
-    (project) => !isBotProject(getServerSettings(project.environmentId), project.id),
-  );
 }
 
 // A bot folder can sit inside a repository; repository grouping would merge it with that repo's project.

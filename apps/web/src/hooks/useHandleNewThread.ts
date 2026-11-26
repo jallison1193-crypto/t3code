@@ -30,7 +30,7 @@ import {
   type ProjectGroupingSettings,
 } from "@t3tools/client-runtime/state/project-grouping";
 import { resolveNewThreadEnvMode, resolveProjectSettings } from "@t3tools/shared/projectSettings";
-import { filterNonBotProjects } from "../bots/bots.logic";
+import { filterNonBotProjects } from "../bots/botProjectFilter";
 import {
   readProjects,
   readThreadShell,
