@@ -1,5 +1,5 @@
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
-import { threadModeOf } from "@t3tools/client-runtime/state/thread-mode";
+import { threadModeOf, type ThreadModeSource } from "@t3tools/client-runtime/state/thread-mode";
 import type {
   AppMode,
   EnvironmentId,
@@ -58,7 +58,7 @@ export function libraryModeFromSearch(search: string): LibraryMode {
 }
 
 export function hasAnyWorkThread(
-  threads: ReadonlyArray<Pick<EnvironmentThreadShell, "deletedAt" | "tags" | "source">>,
+  threads: ReadonlyArray<Pick<EnvironmentThreadShell, "deletedAt"> & ThreadModeSource>,
 ): boolean {
   return threads.some((thread) => thread.deletedAt === null && threadModeOf(thread) === "work");
 }
