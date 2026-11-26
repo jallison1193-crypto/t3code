@@ -152,7 +152,7 @@ Target: always-on agents like Grok Bot, OpenAI dots and Claude Duet, but on the 
 Asked for by Josh 2026-11-24, after B2 and before T3ther is called done. Walk every fork feature as a new user would, in the real app, and fix what is hidden or confusing.
 
 - Every optional mode (Bots, Work mode, plugins) has a clear on/off switch in Settings and is easy to find when on.
-- Nothing depends on a second hidden setting. Known gap: the All, Code, Work and Bots tabs only show with Settings > General > Projects sidebar on, so the Bots tab is hidden in the default thread sidebar.
+- Nothing depends on a second hidden setting. The All, Code, Work and Bots tabs show in both sidebars (F2a).
 - Known bot gaps found while testing B2: a trigger keeps the model it was created with, so changing the bot's Model on its home page doesn't reach existing triggers; webhook triggers have no Run now (on the bot home or in Settings > Scheduled tasks) and the bot home has no way to start a run by hand; the bot's Default model can resolve to a provider bots can't use.
 - Empty states say what to do next; labels use plain words; every action has a way back.
 - Each feature works end to end, including restart and a second client.
@@ -169,7 +169,7 @@ Left as is: the Threads board's Idle and Done columns (finished runs show as Idl
 4. F4 Settings > Bots (Josh 2026-11-26). A Settings page laid out like Settings > Projects: general bot settings at the top (the Bots on/off switch moved from General, a default model for new bots, default daily limits for new bots instead of the fixed 24 runs and 2M tokens), then the user's bots with status, model, today's usage and pause/resume; picking a bot opens its settings in place. The bot home page and Settings > Bots share one settings component, and the bot home keeps its runs list. Settings search, a command palette entry, all locales and docs. Also asked for the same day: a Settings switch that hides the projects sidebar's Needs you section (waiting threads still show under their projects).
    - Later, not in F4: per-bot notification settings, and a switch for whether waiting bot runs appear in Needs you.
 
-Order to finish T3ther (2026-11-26): end-to-end check, one fix round (its findings plus the deferred sidebar footer and Library container), F4, a short final check, then merge `fork/m5-plugins` into `fork/main`; after that, new work branches from `fork/main` so the twice-weekly upstream sync reaches it. Codex computer-use testing of the companion window comes last.
+Order to finish T3ther (2026-11-26): end-to-end check (done 2026-11-26: everything worked except Run plugins missing from Settings search, English bot reasons in other languages, and unsaved bot edits lost on leaving the page), one fix round (its findings plus the deferred sidebar footer and Library container), F4, a short final check, then merge `fork/m5-plugins` into `fork/main`; after that, new work branches from `fork/main` so the twice-weekly upstream sync reaches it. Codex computer-use testing of the companion window comes last.
 
 ## Milestone 7: Computer-use companion window (desktop)
 
