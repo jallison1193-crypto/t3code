@@ -80,6 +80,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "vp i failed; see install-$stamp.log" }
   }
 
+  # A multi-day upstream batch runs the test step well past check:changed's 15-minute default on this laptop.
+  $env:CHECK_CHANGED_TIMEOUT = "2700"
   & vp run check:changed $upstream *> $checkLog
   $checkExit = $LASTEXITCODE
   $logText = Get-Content $checkLog
