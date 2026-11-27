@@ -6,6 +6,7 @@ import {
   type RuntimeRequestId,
   type ThreadId,
   isBotProject,
+  resolveBotPaymentsMode,
 } from "@t3tools/contracts";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import * as Context from "effect/Context";
@@ -28,6 +29,7 @@ import {
   botHeldApprovalReason,
   classifyBotAction,
 } from "./botActionPolicy.ts";
+import { formatBotPaymentHeldReason } from "./botPaymentDetails.ts";
 
 type ApprovalTurnItem = Extract<OrchestrationV2TurnItem, { readonly type: "approval_request" }>;
 
@@ -48,7 +50,9 @@ function extractSiblingActionDetails(input: {
   readonly approvalItem: ApprovalTurnItem;
   readonly parentNodeId: string | null | undefined;
   readonly turnItems: ReadonlyArray<OrchestrationV2TurnItem>;
-}): Pick<BotActionRequest, "toolName" | "command" | "fileChanges"> {
+}): Pick<BotActionRequest, "toolName" | "command" | "fileChanges"> & {
+  readonly toolInput?: unknown;
+} {
   const nativeId = input.approvalItem.nativeItemRef?.nativeId;
   const siblings = input.turnItems.filter((candidate) => {
     if (candidate.id === input.approvalItem.id) return false;
@@ -57,12 +61,14 @@ function extractSiblingActionDetails(input: {
   });
 
   let toolName: string | undefined;
+  let toolInput: unknown;
   let command: string | undefined;
   let fileChanges: BotActionRequest["fileChanges"];
 
   for (const sibling of siblings) {
     if (sibling.type === "dynamic_tool" && sibling.toolName !== null) {
       toolName = sibling.toolName;
+      toolInput = sibling.input;
     } else if (sibling.type === "web_search" && sibling.title !== null) {
       toolName ??= sibling.title;
     } else if (sibling.type === "command_execution" && sibling.input.trim().length > 0) {
@@ -72,7 +78,7 @@ function extractSiblingActionDetails(input: {
     }
   }
 
-  return { toolName, command, fileChanges };
+  return { toolName, toolInput, command, fileChanges };
 }
 
 function isApprovalRuntimeRequestKind(kind: string): boolean {
@@ -173,7 +179,15 @@ const make = Effect.gen(function* () {
         return;
       }
 
-      if (classification.decision === "block") {
+      const paymentsMode = resolveBotPaymentsMode(
+        settings.projectSettingsOverrides[thread.projectId]?.bot,
+      );
+      const holdAsPayment =
+        classification.decision === "block" &&
+        classification.category === "pay" &&
+        paymentsMode === "ask";
+
+      if (classification.decision === "block" && !holdAsPayment) {
         const supportsFeedback =
           request.responseCapability.type === "live" &&
           request.responseCapability.supportsFeedback === true;
@@ -188,8 +202,15 @@ const make = Effect.gen(function* () {
         return;
       }
 
-      // `ask`: leave pending for the user, label why it was held, and restrict to Approve once / Decline.
-      const reason = botHeldApprovalReason(classification.category);
+      // `ask` (and `pay` under payments=ask): leave pending for the user, label why it was held, and restrict to Approve once / Decline.
+      const reason = holdAsPayment
+        ? formatBotPaymentHeldReason({
+            command: sibling.command,
+            prompt: item.prompt,
+            toolName: sibling.toolName,
+            toolInput: sibling.toolInput,
+          })
+        : botHeldApprovalReason(classification.category);
       if (isAlreadyHeld(item, reason)) return;
 
       const now = yield* DateTime.now;

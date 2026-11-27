@@ -163,6 +163,7 @@ const makeHarness = Effect.fn("BotToolkitTest.makeHarness")(function* (initial?:
               tokensPerDay: resolved.tokensPerDay,
             },
             approvals: input.approvals ?? "t3_gate",
+            payments: input.payments ?? "blocked",
             workspaceRoot: "/tmp/bots/digest",
             createdAt: DateTime.formatIso(EPOCH),
             updatedAt: DateTime.formatIso(EPOCH),
@@ -185,6 +186,7 @@ const makeHarness = Effect.fn("BotToolkitTest.makeHarness")(function* (initial?:
             ...(input.paused === undefined ? {} : { paused: input.paused }),
             ...(nextLimits === undefined ? {} : { limits: nextLimits }),
             ...(input.approvals === undefined ? {} : { approvals: input.approvals }),
+            ...(input.payments === undefined ? {} : { payments: input.payments }),
           };
           botsMap.set(input.projectId, next);
           return next;
@@ -238,6 +240,7 @@ describe("bot MCP toolkit handlers", () => {
             paused: false,
             limits: DEFAULT_BOT_LIMITS,
             approvals: "t3_gate",
+            payments: "blocked",
           },
         });
 
@@ -251,6 +254,7 @@ describe("bot MCP toolkit handlers", () => {
               paused: false,
               limits: DEFAULT_BOT_LIMITS,
               approvals: "t3_gate",
+              payments: "blocked",
             },
           ],
         });
@@ -287,6 +291,7 @@ describe("bot MCP toolkit handlers", () => {
             goal: "Summarize closed PRs",
             limits: { mode: "runs_only", runsPerDay: 10 },
             approvals: "provider",
+            payments: "ask",
           }),
         ).toMatchObject({
           bot: {
@@ -295,6 +300,7 @@ describe("bot MCP toolkit handlers", () => {
             goal: "Summarize closed PRs",
             limits: { mode: "runs_only", runsPerDay: 10 },
             approvals: "provider",
+            payments: "ask",
           },
         });
 

@@ -10,6 +10,7 @@ import {
   type BotApprovalsMode,
   type BotLimitMode,
   type BotLimits,
+  type BotPaymentsMode,
   type EnvironmentId,
   isBotPaused,
   isBotProject,
@@ -17,6 +18,7 @@ import {
   type ProjectId,
   resolveBotApprovalsMode,
   resolveBotLimits,
+  resolveBotPaymentsMode,
   type ServerSettings,
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
@@ -82,6 +84,7 @@ interface BotSettingsListEntry {
   readonly settings: ServerSettings;
   readonly paused: boolean;
   readonly approvals: BotApprovalsMode;
+  readonly payments: BotPaymentsMode;
 }
 
 export function BotsSettingsPage({
@@ -179,6 +182,7 @@ export function BotsSettingsPage({
       settings: envSettings,
       paused: isBotPaused(envSettings, project.id),
       approvals: resolveBotApprovalsMode(envSettings.projectSettingsOverrides[project.id]?.bot),
+      payments: resolveBotPaymentsMode(envSettings.projectSettingsOverrides[project.id]?.bot),
     });
   }
   botEntries.sort(
@@ -340,6 +344,11 @@ export function BotsSettingsPage({
               {selectedBot.approvals === "provider" ? (
                 <Badge variant="warning" size="sm">
                   <T>Less safe</T>
+                </Badge>
+              ) : null}
+              {selectedBot.payments === "ask" ? (
+                <Badge variant="warning" size="sm">
+                  <T>Can ask to pay</T>
                 </Badge>
               ) : null}
             </div>
@@ -600,6 +609,11 @@ function BotSettingsListRow({
             {entry.approvals === "provider" ? (
               <Badge variant="warning" size="sm">
                 <T>Less safe</T>
+              </Badge>
+            ) : null}
+            {entry.payments === "ask" ? (
+              <Badge variant="warning" size="sm">
+                <T>Can ask to pay</T>
               </Badge>
             ) : null}
             {showEnvironmentName ? (

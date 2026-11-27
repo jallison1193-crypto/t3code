@@ -504,6 +504,7 @@ describe("classifyBotAction", () => {
     expect(botHeldApprovalReason("send")).toBe("Bots ask before sending");
     expect(botHeldApprovalReason("delete")).toBe("Bots ask before deleting");
     expect(botHeldApprovalReason("agent-settings")).toBe("Bots ask before changing agent settings");
+    expect(botHeldApprovalReason("pay")).toBe("Bots ask before paying");
   });
 
   it("resolves explicit botGate capability and fails closed on legacy fallback or missing snapshots", () => {

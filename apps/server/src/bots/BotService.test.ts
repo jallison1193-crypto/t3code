@@ -12,6 +12,7 @@ import {
   ProjectId,
   ProviderInstanceId,
   resolveBotLimits,
+  resolveBotPaymentsMode,
   ScheduledTaskId,
   ThreadId,
   type Project,
@@ -743,5 +744,60 @@ describe("BotService", () => {
         yield* settings.updateSettings({ botDefaults: { limits: null } });
         expect((yield* settings.getSettings).botDefaults).toBeUndefined();
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("defaults payments to blocked and round-trips payments through create and update", () =>
+    Effect.gen(function* () {
+      const legacy = decodeBotProfile({});
+      expect(legacy.payments).toBeUndefined();
+      expect(resolveBotPaymentsMode(legacy)).toBe("blocked");
+
+      const { service, settings } = yield* makeHarness();
+
+      const defaultBot = yield* service.create({ name: "Default Payments Bot" });
+      expect(defaultBot.payments).toBe("blocked");
+      expect(
+        (yield* settings.getSettings).projectSettingsOverrides[defaultBot.projectId]?.bot,
+      ).toEqual({});
+
+      const askAtCreate = yield* service.create({
+        name: "Ask Payments Bot",
+        payments: "ask",
+      });
+      expect(askAtCreate.payments).toBe("ask");
+      expect((yield* service.get(askAtCreate.projectId)).payments).toBe("ask");
+      expect(
+        (yield* settings.getSettings).projectSettingsOverrides[askAtCreate.projectId]?.bot,
+      ).toEqual({ payments: "ask" });
+
+      // Switching blocked -> ask stores payments: "ask" and survives unrelated updates.
+      const enabledAsk = yield* service.update({
+        projectId: defaultBot.projectId,
+        payments: "ask",
+      });
+      expect(enabledAsk.payments).toBe("ask");
+      expect((yield* service.get(defaultBot.projectId)).payments).toBe("ask");
+      expect(
+        (yield* settings.getSettings).projectSettingsOverrides[defaultBot.projectId]?.bot,
+      ).toEqual({ payments: "ask" });
+
+      const pausedWhileAsk = yield* service.update({
+        projectId: defaultBot.projectId,
+        paused: true,
+      });
+      expect(pausedWhileAsk.paused).toBe(true);
+      expect(pausedWhileAsk.payments).toBe("ask");
+
+      // Switching back to blocked omits payments from the stored profile.
+      const backToBlocked = yield* service.update({
+        projectId: defaultBot.projectId,
+        payments: "blocked",
+      });
+      expect(backToBlocked.payments).toBe("blocked");
+      expect((yield* service.get(defaultBot.projectId)).payments).toBe("blocked");
+      expect(
+        (yield* settings.getSettings).projectSettingsOverrides[defaultBot.projectId]?.bot,
+      ).toEqual({ paused: true });
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

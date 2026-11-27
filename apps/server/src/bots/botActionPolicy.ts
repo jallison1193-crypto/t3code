@@ -5,8 +5,8 @@ import type {
 } from "@t3tools/contracts";
 
 export type BotActionDecision = "allow" | "ask" | "block";
-export type BotHeldCategory = "send" | "delete" | "agent-settings" | "unknown";
-export type BotActionCategory = BotHeldCategory | "pay";
+export type BotHeldCategory = "send" | "delete" | "agent-settings" | "unknown" | "pay";
+export type BotActionCategory = BotHeldCategory;
 
 export type BotActionClassification =
   | { readonly decision: "allow" }
@@ -25,6 +25,7 @@ const BOT_HELD_APPROVAL_REASONS: Record<BotHeldCategory, string> = {
   delete: "Bots ask before deleting",
   "agent-settings": "Bots ask before changing agent settings",
   unknown: "Bots ask when T3 can't tell what an action does",
+  pay: "Bots ask before paying",
 };
 
 export function botHeldApprovalReason(category: BotHeldCategory): string {
@@ -186,6 +187,7 @@ const HELD_CATEGORY_RANK: Record<BotHeldCategory, number> = {
   send: 2,
   delete: 3,
   "agent-settings": 4,
+  pay: 5,
 };
 const BLOCK_PAY: BotActionClassification = { decision: "block", category: "pay" };
 
@@ -403,16 +405,18 @@ function unwrapCommandTokens(tokens: ReadonlyArray<string>): ReadonlyArray<strin
   return tokens.slice(index);
 }
 
-function isUrlPayTarget(args: ReadonlyArray<string>): boolean {
-  for (const arg of args) {
-    if (!/^https?:\/\//i.test(arg)) continue;
-    const words = tokenizeActionWords(arg);
-    if (words.some((word) => PAY_WORDS.has(word))) return true;
-    for (const phrase of BOT_TOOL_WORD_TABLE.pay.phrases) {
-      if (containsPhrase(words, phrase)) return true;
-    }
+export function isPayUrl(url: string): boolean {
+  if (!/^https?:\/\//i.test(url)) return false;
+  const words = tokenizeActionWords(url);
+  if (words.some((word) => PAY_WORDS.has(word))) return true;
+  for (const phrase of BOT_TOOL_WORD_TABLE.pay.phrases) {
+    if (containsPhrase(words, phrase)) return true;
   }
   return false;
+}
+
+function isUrlPayTarget(args: ReadonlyArray<string>): boolean {
+  return args.some(isPayUrl);
 }
 
 function classifyGitCommand(args: ReadonlyArray<string>): BotActionClassification {

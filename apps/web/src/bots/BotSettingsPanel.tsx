@@ -9,11 +9,13 @@ import {
   type BotApprovalsMode,
   type BotLimitMode,
   type BotLimits,
+  type BotPaymentsMode,
   type EnvironmentId,
   type ModelSelection,
   type ProjectId,
   resolveBotApprovalsMode,
   resolveBotLimits,
+  resolveBotPaymentsMode,
   type ScheduledTask,
 } from "@t3tools/contracts";
 import { useBlocker } from "@tanstack/react-router";
@@ -91,6 +93,7 @@ export function BotSettingsPanel({
   const savedModelSelection: ModelSelection | null = overrides?.defaultModelSelection ?? null;
   const savedLimits = resolveBotLimits(overrides?.bot);
   const savedApprovals = resolveBotApprovalsMode(overrides?.bot);
+  const savedPayments = resolveBotPaymentsMode(overrides?.bot);
 
   const canUpdateBot = useAtomValue(serverEnvironment.updateBot.permissionAtom(environmentId));
   const canOperateTasks = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
@@ -111,12 +114,15 @@ export function BotSettingsPanel({
     readonly modelSelection?: ModelSelection | null;
     readonly modelDirty?: boolean;
     readonly approvals?: BotApprovalsMode;
+    readonly payments?: BotPaymentsMode;
     readonly limitMode?: BotLimitMode;
     readonly runsPerDayText?: string;
     readonly tokensPerDayText?: string;
   }>(() => ({ key: botKey }));
   const [confirmProviderBotKey, setConfirmProviderBotKey] = useState<string | null>(null);
   const confirmProviderApprovals = confirmProviderBotKey === botKey;
+  const [confirmAskPaymentsBotKey, setConfirmAskPaymentsBotKey] = useState<string | null>(null);
+  const confirmAskPayments = confirmAskPaymentsBotKey === botKey;
 
   const currentDraft = editDraft.key === botKey ? editDraft : { key: botKey };
   const draftName = currentDraft.name ?? savedName;
@@ -125,6 +131,7 @@ export function BotSettingsPanel({
     ? (currentDraft.modelSelection ?? null)
     : savedModelSelection;
   const draftApprovals = currentDraft.approvals ?? savedApprovals;
+  const draftPayments = currentDraft.payments ?? savedPayments;
   const draftLimitMode = currentDraft.limitMode ?? savedLimits.mode;
   const draftRunsPerDayText = currentDraft.runsPerDayText ?? String(savedLimits.runsPerDay);
   const draftTokensPerDayText = currentDraft.tokensPerDayText ?? String(savedLimits.tokensPerDay);
@@ -151,12 +158,14 @@ export function BotSettingsPanel({
     (draftLimitMode === "runs_and_tokens" &&
       draftTokensPerDayText.trim() !== String(savedLimits.tokensPerDay));
   const approvalsDirty = draftApprovals !== savedApprovals;
+  const paymentsDirty = draftPayments !== savedPayments;
 
   const isDirty =
     draftName.trim() !== savedName ||
     draftGoal.trim() !== savedGoal ||
     !Equal.equals(draftModelSelection, savedModelSelection) ||
     approvalsDirty ||
+    paymentsDirty ||
     limitsDirty;
   const hasUnsavedChanges = canUpdateBot && botsEnabled && isDirty;
   const blocker = useBlocker({
@@ -216,6 +225,7 @@ export function BotSettingsPanel({
         goal: draftGoal.trim(),
         modelSelection: draftModelSelection,
         ...(approvalsDirty ? { approvals: draftApprovals } : {}),
+        ...(paymentsDirty ? { payments: draftPayments } : {}),
         ...(limitsDirty ? { limits: draftLimits } : {}),
       },
     });
@@ -263,6 +273,10 @@ export function BotSettingsPanel({
   const approvalsLabels: Record<BotApprovalsMode, string> = {
     t3_gate: gt("T3 safety gate (recommended)"),
     provider: gt("Provider's own approvals (less safe)"),
+  };
+  const paymentsLabels: Record<BotPaymentsMode, string> = {
+    blocked: gt("Blocked (recommended)"),
+    ask: gt("Ask me each time"),
   };
 
   const content = (
@@ -343,6 +357,44 @@ export function BotSettingsPanel({
               <SelectPopup>
                 <SelectItem value="t3_gate">{approvalsLabels.t3_gate}</SelectItem>
                 <SelectItem value="provider">{approvalsLabels.provider}</SelectItem>
+              </SelectPopup>
+            </Select>
+          }
+        />
+        <SettingsRow
+          title={
+            draftPayments === "ask" ? (
+              <span className="inline-flex items-center gap-1.5">
+                <T>Payments</T>
+                <Badge variant="warning" size="sm">
+                  <T>Can ask to pay</T>
+                </Badge>
+              </span>
+            ) : (
+              gt("Payments")
+            )
+          }
+          description={gt(
+            "Blocked declines payments automatically. Ask me each time holds each payment for Approve once.",
+          )}
+          control={
+            <Select
+              value={draftPayments}
+              disabled={fieldsDisabled}
+              onValueChange={(next) => {
+                if (next === "blocked") {
+                  setEditDraft({ ...currentDraft, payments: "blocked" });
+                } else if (next === "ask" && draftPayments !== "ask") {
+                  setConfirmAskPaymentsBotKey(botKey);
+                }
+              }}
+            >
+              <SelectTrigger aria-label={gt("Payments")}>
+                <SelectValue>{paymentsLabels[draftPayments]}</SelectValue>
+              </SelectTrigger>
+              <SelectPopup>
+                <SelectItem value="blocked">{paymentsLabels.blocked}</SelectItem>
+                <SelectItem value="ask">{paymentsLabels.ask}</SelectItem>
               </SelectPopup>
             </Select>
           }
@@ -513,6 +565,43 @@ export function BotSettingsPanel({
               }}
             >
               <T>Use provider's own approvals</T>
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogPopup>
+      </AlertDialog>
+
+      <AlertDialog
+        open={confirmAskPayments}
+        onOpenChange={(open) => {
+          if (!open) setConfirmAskPaymentsBotKey(null);
+        }}
+      >
+        <AlertDialogPopup>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              <T>Let this bot ask to pay?</T>
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              <T>
+                Each payment T3 spots will wait for you to choose Approve once or Decline. T3 spots
+                payments by tool and command wording only, so browser checkouts or unnamed tools can
+                slip past. Give this bot a clearly named payment tool and a card with its own
+                spending limit.
+              </T>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose render={<Button variant="outline" />}>
+              <T>Cancel</T>
+            </AlertDialogClose>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setEditDraft({ ...currentDraft, payments: "ask" });
+                setConfirmAskPaymentsBotKey(null);
+              }}
+            >
+              <T>Allow asking to pay</T>
             </Button>
           </AlertDialogFooter>
         </AlertDialogPopup>

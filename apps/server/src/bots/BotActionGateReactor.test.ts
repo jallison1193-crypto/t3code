@@ -81,6 +81,7 @@ function makeThread(threadId: ThreadId, projectId: ProjectId): OrchestrationV2Ap
 interface HarnessOptions {
   readonly botsEnabled?: boolean;
   readonly botApprovals?: "t3_gate" | "provider";
+  readonly botPayments?: "blocked" | "ask";
   readonly threadId?: ThreadId;
   readonly projectId?: ProjectId;
   readonly requestKind?: ProviderRequestKind | "user_input";
@@ -199,7 +200,10 @@ const makeHarness = Effect.fn("BotActionGateReactorTest.makeHarness")(function* 
       botsEnabled: options.botsEnabled ?? true,
       projectSettingsOverrides: {
         [BOT_PROJECT]: {
-          bot: options.botApprovals === undefined ? {} : { approvals: options.botApprovals },
+          bot: {
+            ...(options.botApprovals === undefined ? {} : { approvals: options.botApprovals }),
+            ...(options.botPayments === undefined ? {} : { payments: options.botPayments }),
+          },
         },
       },
     }),
@@ -605,5 +609,134 @@ describe("BotActionGateReactor", () => {
         },
       ]);
     }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "declines a pay request under blocked and holds the same request under ask with payment details, leaving non-bot threads and send/delete holds unchanged",
+    () =>
+      Effect.gen(function* () {
+        const payTool: OrchestrationV2TurnItem = {
+          id: TurnItemId.make("item:pay-ask-1"),
+          threadId: BOT_THREAD,
+          runId: RUN_ID,
+          nodeId: PARENT_NODE_ID,
+          providerThreadId: PROVIDER_THREAD_ID,
+          providerTurnId: PROVIDER_TURN_ID,
+          nativeItemRef: { driver: CLAUDE_DRIVER, nativeId: "native-1", strength: "strong" },
+          parentItemId: null,
+          ordinal: 1,
+          status: "running",
+          title: null,
+          startedAt: NOW,
+          completedAt: null,
+          updatedAt: NOW,
+          type: "dynamic_tool",
+          toolName: "stripe_checkout",
+          input: { amount: 2500, currency: "usd", merchant: "Acme" },
+        };
+
+        // Under Blocked (explicit), the pay request is declined with feedback.
+        const blocked = yield* makeHarness({
+          botPayments: "blocked",
+          requestKind: "permission",
+          supportsFeedback: true,
+          prompt: "Pay $25.00 to Acme",
+          siblingItems: [payTool],
+        });
+        yield* blocked.reactor.handle(yield* blocked.runtimeRequestEvent());
+        expect(yield* Ref.get(blocked.dispatchedRef)).toEqual([
+          {
+            type: "runtime-request.respond",
+            commandId: CommandId.make(
+              `server:bot-action-gate:${blocked.threadId}:${blocked.requestId}`,
+            ),
+            threadId: blocked.threadId,
+            requestId: blocked.requestId,
+            decision: "decline",
+            feedback: BOT_PAY_BLOCKED_FEEDBACK,
+          },
+        ]);
+        expect(yield* Ref.get(blocked.writtenEventsRef)).toEqual([]);
+
+        // Under Ask, the exact same request is held pending with payment reason and two options.
+        const ask = yield* makeHarness({
+          botPayments: "ask",
+          requestKind: "permission",
+          supportsFeedback: true,
+          prompt: "Pay $25.00 to Acme",
+          siblingItems: [payTool],
+        });
+        yield* ask.reactor.handle(yield* ask.runtimeRequestEvent());
+        // Replay after holding must be a no-op because the payment reason is deterministic.
+        yield* ask.reactor.handle(yield* ask.turnItemEvent());
+        expect(yield* Ref.get(ask.dispatchedRef)).toEqual([]);
+        expect(yield* Ref.get(ask.writtenEventsRef)).toHaveLength(1);
+        const heldPay = yield* Ref.get(ask.approvalItemRef);
+        expect(heldPay?.type).toBe("approval_request");
+        if (heldPay?.type === "approval_request") {
+          expect(heldPay.reason).toBe("Bots ask before paying: $25.00 to Acme");
+          expect(heldPay.options).toEqual(BOT_HELD_APPROVAL_OPTIONS);
+          expect(heldPay.fullAccessOverride).toBeUndefined();
+        }
+
+        // Under Ask with provider approvals and structured toolInput only, reads amount + merchant.
+        const askProvider = yield* makeHarness({
+          botApprovals: "provider",
+          botPayments: "ask",
+          requestKind: "permission",
+          supportsFeedback: true,
+          siblingItems: [payTool],
+        });
+        yield* askProvider.reactor.handle(yield* askProvider.runtimeRequestEvent());
+        expect(yield* Ref.get(askProvider.dispatchedRef)).toEqual([]);
+        const heldProviderPay = yield* Ref.get(askProvider.approvalItemRef);
+        expect(heldProviderPay?.type).toBe("approval_request");
+        if (heldProviderPay?.type === "approval_request") {
+          expect(heldProviderPay.reason).toBe("Bots ask before paying: amount 2500 (usd) to Acme");
+          expect(heldProviderPay.options).toEqual(BOT_HELD_APPROVAL_OPTIONS);
+          expect(heldProviderPay.fullAccessOverride).toBeUndefined();
+        }
+
+        // Non-bot thread with the same pay request is untouched.
+        const ordinaryPay = yield* makeHarness({
+          threadId: ORDINARY_THREAD,
+          projectId: ORDINARY_PROJECT,
+          requestKind: "permission",
+          prompt: "Pay $25.00 to Acme",
+          siblingItems: [payTool],
+        });
+        yield* ordinaryPay.reactor.handle(yield* ordinaryPay.runtimeRequestEvent());
+        expect(yield* Ref.get(ordinaryPay.dispatchedRef)).toEqual([]);
+        expect(yield* Ref.get(ordinaryPay.writtenEventsRef)).toEqual([]);
+
+        // Ask does not change send or delete holds.
+        const sendUnderAsk = yield* makeHarness({
+          botPayments: "ask",
+          requestKind: "command",
+          prompt: "git push origin main",
+        });
+        yield* sendUnderAsk.reactor.handle(yield* sendUnderAsk.runtimeRequestEvent());
+        expect(yield* Ref.get(sendUnderAsk.dispatchedRef)).toEqual([]);
+        const heldSend = yield* Ref.get(sendUnderAsk.approvalItemRef);
+        expect(heldSend?.type).toBe("approval_request");
+        if (heldSend?.type === "approval_request") {
+          expect(heldSend.reason).toBe("Bots ask before sending");
+          expect(heldSend.options).toEqual(BOT_HELD_APPROVAL_OPTIONS);
+        }
+
+        const deleteUnderAsk = yield* makeHarness({
+          botPayments: "ask",
+          requestKind: "command",
+          prompt: "rm -f notes.txt",
+        });
+        yield* deleteUnderAsk.reactor.handle(yield* deleteUnderAsk.runtimeRequestEvent());
+        expect(yield* Ref.get(deleteUnderAsk.dispatchedRef)).toEqual([]);
+        const heldDelete = yield* Ref.get(deleteUnderAsk.approvalItemRef);
+        expect(heldDelete?.type).toBe("approval_request");
+        if (heldDelete?.type === "approval_request") {
+          expect(heldDelete.reason).toBe("Bots ask before deleting");
+          expect(heldDelete.options).toEqual(BOT_HELD_APPROVAL_OPTIONS);
+        }
+      }).pipe(Effect.scoped),
   );
 });

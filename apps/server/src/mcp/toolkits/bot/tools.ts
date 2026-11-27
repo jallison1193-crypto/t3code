@@ -2,6 +2,7 @@ import {
   BotApprovalsMode,
   BotDailyUsage,
   BotLimits,
+  BotPaymentsMode,
   IsoDateTime,
   ModelSelection,
   OrchestratorMcpFailure,
@@ -28,6 +29,7 @@ const BotSummary = Schema.Struct({
   paused: Schema.Boolean,
   limits: Schema.optionalKey(BotLimits),
   approvals: Schema.optionalKey(BotApprovalsMode),
+  payments: Schema.optionalKey(BotPaymentsMode),
 });
 
 const BotTriggerSummary = Schema.Struct({
@@ -90,7 +92,7 @@ const BotReadTool = Tool.make("t3_bot_read", {
 const BotUpdateTool = Tool.make("t3_bot_update", {
   ...shared,
   description:
-    "Create, update, pause, or resume a bot, or set its daily limits or approvals mode. Omit modelSelection to keep or inherit the default model; pass null to clear it.",
+    "Create, update, pause, or resume a bot, or set its daily limits, approvals, or payments mode. Omit modelSelection to keep or inherit the default model; pass null to clear it.",
   parameters: Schema.Struct({
     action: Schema.Literals(["create", "update", "pause", "resume"]),
     botId: Schema.optional(ProjectId),
@@ -99,6 +101,12 @@ const BotUpdateTool = Tool.make("t3_bot_update", {
     modelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
     limits: Schema.optional(BotLimits),
     approvals: Schema.optional(BotApprovalsMode),
+    payments: Schema.optional(
+      BotPaymentsMode.annotate({
+        description:
+          "blocked (default) declines payments automatically; ask holds each payment for Approve once.",
+      }),
+    ),
   }),
   success: Schema.Struct({
     bot: BotSummary,

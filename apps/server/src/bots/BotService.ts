@@ -20,6 +20,7 @@ import {
   resolveBotApprovalsMode,
   resolveBotGateCapability,
   resolveBotLimits,
+  resolveBotPaymentsMode,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -99,6 +100,7 @@ function toBotRecord(project: Project, settings: ServerSettings): BotRecord {
       tokensPerDay: resolvedLimits.tokensPerDay,
     },
     approvals: resolveBotApprovalsMode(overrides?.bot),
+    payments: resolveBotPaymentsMode(overrides?.bot),
     workspaceRoot: project.workspaceRoot,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
@@ -347,9 +349,11 @@ const make = Effect.gen(function* () {
 
     const effectiveLimits = input.limits ?? settings.botDefaults?.limits;
     const effectiveApprovals = input.approvals ?? "t3_gate";
+    const effectivePayments = input.payments ?? "blocked";
     const botProfile: BotProfile = {
       ...(effectiveLimits === undefined ? {} : { limits: normalizeBotLimits(effectiveLimits) }),
       ...(effectiveApprovals === "provider" ? { approvals: "provider" } : {}),
+      ...(effectivePayments === "ask" ? { payments: "ask" } : {}),
     };
 
     let effectiveModelSelection: ModelSelection | null = null;
@@ -451,7 +455,8 @@ const make = Effect.gen(function* () {
       input.modelSelection !== undefined ||
       input.paused !== undefined ||
       input.limits !== undefined ||
-      input.approvals !== undefined
+      input.approvals !== undefined ||
+      input.payments !== undefined
     ) {
       const latest = yield* readSettings("update", input.projectId);
       const currentOverride = latest.projectSettingsOverrides[input.projectId] ?? { bot: {} };
@@ -468,10 +473,12 @@ const make = Effect.gen(function* () {
       const nextLimits =
         input.limits === undefined ? currentBot?.limits : normalizeBotLimits(input.limits);
       const nextApprovals = input.approvals === undefined ? currentBot?.approvals : input.approvals;
+      const nextPayments = input.payments === undefined ? currentBot?.payments : input.payments;
       const nextBot: BotProfile = {
         ...(nextPaused === true ? { paused: true } : {}),
         ...(nextLimits === undefined ? {} : { limits: nextLimits }),
         ...(nextApprovals === "provider" ? { approvals: "provider" } : {}),
+        ...(nextPayments === "ask" ? { payments: "ask" } : {}),
       };
 
       const nextOverride: ProjectSettingsOverrides = {

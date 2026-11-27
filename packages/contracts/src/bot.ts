@@ -103,6 +103,15 @@ export function resolveBotApprovalsMode(
   return profile?.approvals ?? "t3_gate";
 }
 
+export const BotPaymentsMode = Schema.Literals(["blocked", "ask"]);
+export type BotPaymentsMode = typeof BotPaymentsMode.Type;
+
+export function resolveBotPaymentsMode(
+  profile: { readonly payments?: BotPaymentsMode | undefined } | null | undefined,
+): BotPaymentsMode {
+  return profile?.payments ?? "blocked";
+}
+
 export const BotLimitMode = Schema.Literals(["runs_and_tokens", "runs_only", "none"]);
 export type BotLimitMode = typeof BotLimitMode.Type;
 
@@ -169,6 +178,7 @@ export const BotProfile = Schema.Struct({
   paused: Schema.optionalKey(Schema.Boolean),
   limits: Schema.optionalKey(BotLimits),
   approvals: Schema.optionalKey(BotApprovalsMode),
+  payments: Schema.optionalKey(BotPaymentsMode),
 });
 export type BotProfile = typeof BotProfile.Type;
 
@@ -192,6 +202,7 @@ export const BotRecord = Schema.Struct({
   paused: Schema.Boolean,
   limits: Schema.optionalKey(BotLimits),
   approvals: Schema.optionalKey(BotApprovalsMode),
+  payments: Schema.optionalKey(BotPaymentsMode),
   workspaceRoot: TrimmedNonEmptyString,
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -204,6 +215,7 @@ export const BotCreateInput = Schema.Struct({
   modelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   limits: Schema.optionalKey(BotLimits),
   approvals: Schema.optionalKey(BotApprovalsMode),
+  payments: Schema.optionalKey(BotPaymentsMode),
 });
 export type BotCreateInput = typeof BotCreateInput.Type;
 
@@ -215,6 +227,7 @@ export const BotUpdateInput = Schema.Struct({
   paused: Schema.optionalKey(Schema.Boolean),
   limits: Schema.optionalKey(BotLimits),
   approvals: Schema.optionalKey(BotApprovalsMode),
+  payments: Schema.optionalKey(BotPaymentsMode),
 });
 export type BotUpdateInput = typeof BotUpdateInput.Type;
 

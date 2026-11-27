@@ -172,7 +172,11 @@ const makeSnapshotInstance = Effect.fn("BotConformance.makeSnapshotInstance")(fu
 });
 
 type ProbeExpectation =
-  | { readonly kind: "hold"; readonly expectedReason: string }
+  | {
+      readonly kind: "hold";
+      readonly expectedReason?: string;
+      readonly expectedReasonPrefix?: string;
+    }
   | { readonly kind: "block_pay" }
   | { readonly kind: "auto_allow" }
   | { readonly kind: "turn_complete" };
@@ -217,7 +221,9 @@ interface DriverConformanceSpec {
       readonly build: () => ProviderReplayTranscript;
       readonly expectation: ProbeExpectation;
     };
-    readonly payBlock: () => ProviderReplayTranscript;
+    readonly payBlock: (options?: {
+      readonly expectBlockFeedback?: boolean;
+    }) => ProviderReplayTranscript;
   };
 }
 
@@ -838,14 +844,18 @@ const SUPPORTED_DRIVER_CONFORMANCE_SPECS: ReadonlyArray<DriverConformanceSpec> =
           }),
         expectation: { kind: "hold", expectedReason: "Bots ask before sending" },
       },
-      payBlock: () =>
+      payBlock: (options) =>
         makeClaudeProbeTranscript({
           scenario: "bot-conformance-claude-pay-block",
           toolUseId: "toolu_claude_pay_block",
           toolName: "mcp__stripe__stripe_checkout",
           toolInput: { amount: 2500 },
           expectedBehavior: "deny",
-          expectedDenyMessage: `The user declined this tool call and said:\n${BOT_PAY_BLOCKED_FEEDBACK}`,
+          ...(options?.expectBlockFeedback === false
+            ? {}
+            : {
+                expectedDenyMessage: `The user declined this tool call and said:\n${BOT_PAY_BLOCKED_FEEDBACK}`,
+              }),
         }),
     },
   },
@@ -1247,6 +1257,7 @@ const runBotConformanceProbe = Effect.fn("BotConformance.runProbe")(function* (i
   readonly transcript: ProviderReplayTranscript;
   readonly expectation: ProbeExpectation;
   readonly threadId?: ThreadId;
+  readonly botPayments?: "blocked" | "ask";
 }) {
   const { spec, probeName, expectation } = input;
   const scenarioName = `${spec.driver}-${probeName}`;
@@ -1267,7 +1278,9 @@ const runBotConformanceProbe = Effect.fn("BotConformance.runProbe")(function* (i
     botsEnabled: true,
     responseStreamingMode: "turn",
     projectSettingsOverrides: {
-      [BOT_PROJECT_ID]: { bot: {} },
+      [BOT_PROJECT_ID]: {
+        bot: input.botPayments === undefined ? {} : { payments: input.botPayments },
+      },
     },
   });
   const layerProviderInstances = Layer.mock(ProviderInstanceRegistry.ProviderInstanceRegistry)({
@@ -1553,6 +1566,15 @@ const runBotConformanceProbe = Effect.fn("BotConformance.runProbe")(function* (i
     >();
     const runFinished = yield* Deferred.make<void, BotConformanceProbeError>();
 
+    const matchesExpectedHoldReason = (reason: string | undefined): boolean => {
+      if (expectation.kind !== "hold" || reason === undefined) return false;
+      if (expectation.expectedReason !== undefined) return reason === expectation.expectedReason;
+      if (expectation.expectedReasonPrefix !== undefined) {
+        return reason.startsWith(expectation.expectedReasonPrefix);
+      }
+      return false;
+    };
+
     const watcher = yield* Stream.runForEach(
       orchestrator.streamDomainEvents,
       (event: OrchestrationV2DomainEvent) =>
@@ -1563,7 +1585,7 @@ const runBotConformanceProbe = Effect.fn("BotConformance.runProbe")(function* (i
             event.type === "turn-item.updated" &&
             event.payload.type === "approval_request" &&
             event.payload.status === "waiting" &&
-            event.payload.reason === expectation.expectedReason
+            matchesExpectedHoldReason(event.payload.reason)
           ) {
             yield* Deferred.succeed(heldApproval, event.payload);
           }
@@ -1649,7 +1671,12 @@ const runBotConformanceProbe = Effect.fn("BotConformance.runProbe")(function* (i
 
     if (expectation.kind === "hold") {
       const approvalItem = yield* awaitWithDiag("heldApproval", Deferred.await(heldApproval));
-      expect(approvalItem.reason).toBe(expectation.expectedReason);
+      if (expectation.expectedReason !== undefined) {
+        expect(approvalItem.reason).toBe(expectation.expectedReason);
+      }
+      if (expectation.expectedReasonPrefix !== undefined) {
+        expect(approvalItem.reason?.startsWith(expectation.expectedReasonPrefix)).toBe(true);
+      }
       expect(approvalItem.options).toEqual(BOT_HELD_APPROVAL_OPTIONS);
       expect(approvalItem.fullAccessOverride).toBeUndefined();
 
@@ -1877,6 +1904,17 @@ describe("bot provider conformance", () => {
         probeName: "pay-block",
         transcript: spec.probes.payBlock(),
         expectation: { kind: "block_pay" },
+        ...(threadId === undefined ? {} : { threadId }),
+      }),
+    );
+
+    it.live("holds pay tools with payment reason when bot payments is ask", () =>
+      runBotConformanceProbe({
+        spec,
+        probeName: "pay-ask",
+        transcript: spec.probes.payBlock({ expectBlockFeedback: false }),
+        expectation: { kind: "hold", expectedReasonPrefix: "Bots ask before paying" },
+        botPayments: "ask",
         ...(threadId === undefined ? {} : { threadId }),
       }),
     );

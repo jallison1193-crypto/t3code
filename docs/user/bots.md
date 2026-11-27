@@ -59,7 +59,7 @@ Bot threads always run through T3 Code's approval gate, even if a trigger or thr
 - **Ask before sending, deleting, or fetching URLs:** Actions that send messages, emails, posts, comments, pull requests, or non-GET HTTP requests, provider web-fetch tools (regardless of HTTP method), and commands or edits that delete files wait for your approval.
 - **Ask before changing agent settings:** Edits or commands that touch agent settings (`.claude`, `.codex`, `.gemini`, `.grok`, `antigravity-acp`, `.agents`, `.cursor`, `.mcp.json`) wait for your approval, because those files can pre-approve tools.
 - **Ask when unclear:** If T3 Code can't see what an action does, it waits for your approval.
-- **Paying is blocked:** Tools and commands for paying, purchasing, checkout, ordering, transferring money, subscribing, or tipping are declined automatically.
+- **Payments (blocked by default):** Tools and commands for paying, purchasing, checkout, ordering, transferring money, subscribing, or tipping are declined automatically by default. You can change an individual bot's **Payments** setting to **Ask me each time** to review payments one at a time instead.
 
 Held approvals trigger phone alerts and appear in **Needs you** when that section is on. They offer only **Approve once** and **Decline**.
 
@@ -73,9 +73,18 @@ Bots require a provider that routes every tool, MCP call, and web fetch through 
 
 On a bot's page, the **Approvals** setting defaults to **T3 safety gate (recommended)**. You can switch an individual bot to **Provider's own approvals (less safe)** after confirming a warning.
 
-- **What it does:** Lifts the supported-provider check for that bot so you can pick models from unsupported providers (such as Cursor). For supported providers, it changes nothing. T3 still runs the bot in approval-required mode, inspects every approval request that reaches T3, blocks paying, and enforces daily limits.
+- **What it does:** Lifts the supported-provider check for that bot so you can pick models from unsupported providers (such as Cursor). For supported providers, it changes nothing. T3 still runs the bot in approval-required mode, inspects every approval request that reaches T3, applies the bot's **Payments** setting (blocking paying by default), and enforces daily limits.
 - **Why it is less safe:** Unsupported providers can run tools, MCP calls, or commands under their own settings without asking T3 first, so the bot may send, delete, or change things without waiting for your approval in T3. Bots using this setting show a **Less safe** badge on the bot page and in **Settings -> Bots**.
 - **How to turn it off:** Open the bot's page, change **Approvals** back to **T3 safety gate (recommended)**, and click **Save changes**. If the bot still uses an unsupported model, it stops running until you pick a supported model.
+
+## Payments
+
+On a bot's page (or under **Settings -> Bots**), the **Payments** setting defaults to **Blocked (recommended)**. You can switch an individual bot to **Ask me each time** after confirming a warning.
+
+- **What Ask me each time does:** When the safety gate spots a payment action, it holds the request instead of declining it automatically. The held approval card says it is a payment, shows the amount and recipient when T3 Code can read them from the request, appears in **Needs you** (when that section is on), and triggers phone alerts. You can choose **Approve once** or **Decline**; payments are never approved for the session. This applies in both **T3 safety gate** and **Provider's own approvals** modes for requests that reach T3 Code. Bots with this setting show a **Can ask to pay** badge on the bot page and in **Settings -> Bots**.
+- **Wording-only limit:** T3 Code spots payments by tool name, command text, and request wording only. Browser checkouts, scripts, or tools without payment wording can slip past the payment check.
+- **Recommended setup:** Give the bot a clearly named payment tool (for example, a tool whose name includes `pay`, `payment`, `checkout`, or `purchase`) and back it with a card that has its own spending limit.
+- **How to turn it off:** Open the bot's page (or select the bot in **Settings -> Bots**), change **Payments** back to **Blocked (recommended)**, and click **Save changes**. Switching back needs no confirmation.
 
 ## Daily limits
 
