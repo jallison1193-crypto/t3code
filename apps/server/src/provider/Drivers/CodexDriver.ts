@@ -156,6 +156,7 @@ export const CodexDriver: ProviderDriver<
   metadata: {
     displayName: "Codex",
     supportsMultipleInstances: true,
+    botGate: { status: "supported" },
   },
   configSchema: CodexSettings,
   defaultConfig: (): CodexSettings => decodeCodexSettings({}),
@@ -204,6 +205,7 @@ export const CodexDriver: ProviderDriver<
       displayName,
       accentColor,
       continuationGroupKey: continuationIdentity.continuationKey,
+      botGate: CodexDriver.metadata.botGate,
     });
     yield* materializeCodexShadowHome(homeLayout).pipe(
       Effect.mapError(

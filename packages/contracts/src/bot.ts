@@ -15,19 +15,92 @@ export const BOTS_DISABLED_REASON = "Bots are turned off in Settings";
 export const BOT_PAUSED_REASON = "This bot is paused";
 export const BOT_DAILY_RUN_LIMIT_REASON = "Daily run limit reached";
 export const BOT_DAILY_TOKEN_LIMIT_REASON = "Daily token limit reached";
-export const BOT_UNSUPPORTED_PROVIDER_REASON =
-  "Bots can only use Claude or Codex models. Pick one of those.";
+export const BOT_UNSUPPORTED_PROVIDER_REASON = "This provider is not supported for bots.";
 
-/**
- * Providers that route every tool and MCP call through a T3 approval request in
- * `approval-required` mode. Bots fail closed on any other provider.
- */
-const BOT_SUPPORTED_GATE_DRIVER_SET: ReadonlySet<string> = new Set(["claudeAgent", "codex"]);
+export const BotGateUnsupportedReasonCode = Schema.Literals([
+  "no_approval_callback",
+  "ungated_mcp_or_tools",
+  "unisolated_user_rules",
+  "opaque_subagents_or_mcp",
+  "unverified_third_party_acp",
+  "provider_unavailable",
+]);
+export type BotGateUnsupportedReasonCode = typeof BotGateUnsupportedReasonCode.Type;
 
-export function providerSupportsBotGate(
-  driverKind: ProviderDriverKind | string | null | undefined,
-): boolean {
-  return typeof driverKind === "string" && BOT_SUPPORTED_GATE_DRIVER_SET.has(driverKind);
+export const BotGateCapability = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("supported"),
+  }),
+  Schema.Struct({
+    status: Schema.Literal("unsupported"),
+    reasonCode: BotGateUnsupportedReasonCode,
+  }),
+]);
+export type BotGateCapability = typeof BotGateCapability.Type;
+
+export const DEFAULT_UNSUPPORTED_BOT_GATE: BotGateCapability = {
+  status: "unsupported",
+  reasonCode: "unverified_third_party_acp",
+};
+
+export const BotBlockReasonCode = Schema.Literals([
+  "bots_disabled",
+  "paused",
+  "daily_run_limit",
+  "daily_token_limit",
+  ...BotGateUnsupportedReasonCode.literals,
+]);
+export type BotBlockReasonCode = typeof BotBlockReasonCode.Type;
+
+const BOT_GATE_UNSUPPORTED_FALLBACK_REASONS: Readonly<
+  Record<BotGateUnsupportedReasonCode, string>
+> = {
+  no_approval_callback:
+    "This provider does not support interactive tool approvals for T3's bot safety gate.",
+  ungated_mcp_or_tools:
+    "This provider can run some tools or MCP calls without T3's bot safety gate.",
+  unisolated_user_rules:
+    "This provider can apply user or workspace rules that bypass T3's bot safety gate.",
+  opaque_subagents_or_mcp:
+    "This provider runs subagents or profile MCP servers outside T3's bot safety gate.",
+  unverified_third_party_acp: "This provider has not been verified for T3's bot safety gate.",
+  provider_unavailable: "This bot's provider is not available.",
+};
+
+export function botGateUnsupportedFallbackReason(reasonCode: BotGateUnsupportedReasonCode): string {
+  return BOT_GATE_UNSUPPORTED_FALLBACK_REASONS[reasonCode];
+}
+
+// Legacy fallback when talking to an older server that omits `ServerProvider.botGate`.
+const LEGACY_BOT_SUPPORTED_DRIVERS: ReadonlySet<string> = new Set(["claudeAgent", "codex"]);
+
+export function resolveBotGateCapability(
+  snapshot:
+    | {
+        readonly driver?: ProviderDriverKind | string | null | undefined;
+        readonly botGate?: BotGateCapability | undefined;
+      }
+    | null
+    | undefined,
+): BotGateCapability {
+  if (snapshot == null) {
+    return { status: "unsupported", reasonCode: "provider_unavailable" };
+  }
+  if (snapshot.botGate !== undefined) {
+    return snapshot.botGate;
+  }
+  return typeof snapshot.driver === "string" && LEGACY_BOT_SUPPORTED_DRIVERS.has(snapshot.driver)
+    ? { status: "supported" }
+    : DEFAULT_UNSUPPORTED_BOT_GATE;
+}
+
+export const BotApprovalsMode = Schema.Literals(["t3_gate", "provider"]);
+export type BotApprovalsMode = typeof BotApprovalsMode.Type;
+
+export function resolveBotApprovalsMode(
+  profile: { readonly approvals?: BotApprovalsMode | undefined } | null | undefined,
+): BotApprovalsMode {
+  return profile?.approvals ?? "t3_gate";
 }
 
 export const BotLimitMode = Schema.Literals(["runs_and_tokens", "runs_only", "none"]);
@@ -82,6 +155,7 @@ export const BotUsageResult = Schema.Struct({
   usage: BotDailyUsage,
   /** Why Run now is refused right now. */
   blockedByPolicy: Schema.optionalKey(Schema.String),
+  blockedReasonCode: Schema.optionalKey(BotBlockReasonCode),
 });
 export type BotUsageResult = typeof BotUsageResult.Type;
 
@@ -94,6 +168,7 @@ const SingleLineBotName = TrimmedNonEmptyString.check(
 export const BotProfile = Schema.Struct({
   paused: Schema.optionalKey(Schema.Boolean),
   limits: Schema.optionalKey(BotLimits),
+  approvals: Schema.optionalKey(BotApprovalsMode),
 });
 export type BotProfile = typeof BotProfile.Type;
 
@@ -116,6 +191,7 @@ export const BotRecord = Schema.Struct({
   modelSelection: Schema.NullOr(ModelSelection),
   paused: Schema.Boolean,
   limits: Schema.optionalKey(BotLimits),
+  approvals: Schema.optionalKey(BotApprovalsMode),
   workspaceRoot: TrimmedNonEmptyString,
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -127,6 +203,7 @@ export const BotCreateInput = Schema.Struct({
   goal: Schema.optionalKey(TrimmedString),
   modelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   limits: Schema.optionalKey(BotLimits),
+  approvals: Schema.optionalKey(BotApprovalsMode),
 });
 export type BotCreateInput = typeof BotCreateInput.Type;
 
@@ -137,6 +214,7 @@ export const BotUpdateInput = Schema.Struct({
   modelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   paused: Schema.optionalKey(Schema.Boolean),
   limits: Schema.optionalKey(BotLimits),
+  approvals: Schema.optionalKey(BotApprovalsMode),
 });
 export type BotUpdateInput = typeof BotUpdateInput.Type;
 

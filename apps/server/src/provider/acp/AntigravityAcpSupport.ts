@@ -214,6 +214,7 @@ export function antigravityPermissionDisposition(
 ) {
   const disposition = acpPermissionDisposition(policy, request);
   if (disposition === "deny") return "deny";
+  if (policy.gateAllMcpTools === true) return disposition;
   // T3 authorizes its own MCP server, so Auto and Auto-accept edits run it unasked, as Claude does.
   if (
     (policy.runtimeMode === "auto" || policy.runtimeMode === "auto-accept-edits") &&

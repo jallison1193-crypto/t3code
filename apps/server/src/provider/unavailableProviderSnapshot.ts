@@ -51,5 +51,6 @@ export const buildUnavailableProviderSnapshot = Effect.fn(
         : input.driverKind,
     availability: "unavailable",
     unavailableReason: input.reason,
+    botGate: { status: "unsupported", reasonCode: "provider_unavailable" },
   };
 });

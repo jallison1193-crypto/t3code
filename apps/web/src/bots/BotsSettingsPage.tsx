@@ -7,6 +7,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import {
   AuthSettingsWriteScope,
+  type BotApprovalsMode,
   type BotLimitMode,
   type BotLimits,
   type EnvironmentId,
@@ -14,6 +15,7 @@ import {
   isBotProject,
   type ModelSelection,
   type ProjectId,
+  resolveBotApprovalsMode,
   resolveBotLimits,
   type ServerSettings,
 } from "@t3tools/contracts";
@@ -79,6 +81,7 @@ interface BotSettingsListEntry {
   readonly name: string;
   readonly settings: ServerSettings;
   readonly paused: boolean;
+  readonly approvals: BotApprovalsMode;
 }
 
 export function BotsSettingsPage({
@@ -175,6 +178,7 @@ export function BotsSettingsPage({
       name: project.title,
       settings: envSettings,
       paused: isBotPaused(envSettings, project.id),
+      approvals: resolveBotApprovalsMode(envSettings.projectSettingsOverrides[project.id]?.bot),
     });
   }
   botEntries.sort(
@@ -331,6 +335,11 @@ export function BotsSettingsPage({
               {selectedBot.paused ? (
                 <Badge variant="outline" size="sm">
                   <T>Paused</T>
+                </Badge>
+              ) : null}
+              {selectedBot.approvals === "provider" ? (
+                <Badge variant="warning" size="sm">
+                  <T>Less safe</T>
                 </Badge>
               ) : null}
             </div>
@@ -520,6 +529,7 @@ function BotSettingsListRow({
     botModelSelection: overrides?.defaultModelSelection ?? null,
     environmentDefaultModelSelection: settings.defaultModelSelection,
     instanceEntries,
+    approvals: entry.approvals,
   });
   const modelName = formatBotModelDisplayName(effectiveModel.selection, instanceEntries);
 
@@ -533,6 +543,7 @@ function BotSettingsListRow({
       botsEnabled,
       paused,
       blockedByPolicy: usageQuery.data?.blockedByPolicy,
+      blockedReasonCode: usageQuery.data?.blockedReasonCode,
     },
     messages,
   );
@@ -586,6 +597,11 @@ function BotSettingsListRow({
             <Badge variant={statusBadgeVariant} size="sm">
               {status.label}
             </Badge>
+            {entry.approvals === "provider" ? (
+              <Badge variant="warning" size="sm">
+                <T>Less safe</T>
+              </Badge>
+            ) : null}
             {showEnvironmentName ? (
               <Badge variant="secondary" size="sm">
                 {entry.environmentLabel}

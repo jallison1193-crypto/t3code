@@ -61,7 +61,11 @@ import * as SecretRequests from "../secrets/SecretRequests.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
-import { type BotTriggerBlock, resolveBotTriggerBlock } from "../bots/botUsage.ts";
+import {
+  type BotTriggerBlock,
+  makeBotGateResolver,
+  resolveBotTriggerBlock,
+} from "../bots/botUsage.ts";
 import * as DueHint from "../scheduling/DueHint.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import { latestRootProviderFailure } from "@t3tools/shared/orchestrationV2ThreadError";
@@ -508,11 +512,7 @@ export const layer = Layer.effect(
     const providerInstancesOption = yield* Effect.serviceOption(
       ProviderInstanceRegistry.ProviderInstanceRegistry,
     );
-    const resolveDriverKind = Option.match(providerInstancesOption, {
-      onNone: () => undefined,
-      onSome: (registry) => (instanceId: Parameters<typeof registry.getInstance>[0]) =>
-        registry.getInstance(instanceId).pipe(Effect.map((instance) => instance?.driverKind)),
-    });
+    const resolveBotGate = makeBotGateResolver(providerInstancesOption);
     const readServerSettings = (): Effect.Effect<ServerSettingsValue | undefined> =>
       Option.match(serverSettingsOption, {
         onNone: () => Effect.undefined,
@@ -538,7 +538,7 @@ export const layer = Layer.effect(
         modelSelection: task.modelSelection,
         sql,
         now,
-        resolveDriverKind,
+        resolveBotGate,
       });
     });
     const withPolicy = Effect.fnUntraced(function* (
@@ -1501,16 +1501,19 @@ export const layer = Layer.effect(
                 projectId,
                 sql,
                 now,
-                resolveDriverKind,
+                resolveBotGate,
               });
               const nextBlock = yield* resolveBotTriggerBlock({
                 settings: nextSettings,
                 projectId,
                 sql,
                 now,
-                resolveDriverKind,
+                resolveBotGate,
               });
-              if (prevBlock?.reason !== nextBlock?.reason) {
+              if (
+                prevBlock?.reason !== nextBlock?.reason ||
+                prevBlock?.reasonCode !== nextBlock?.reasonCode
+              ) {
                 blockStateChanged = true;
                 if (prevBlock !== undefined && nextBlock === undefined) {
                   unblockedProjects.add(projectId);

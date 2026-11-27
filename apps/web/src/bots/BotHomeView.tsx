@@ -7,7 +7,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { isBotPaused, type ModelSelection } from "@t3tools/contracts";
+import { isBotPaused, type ModelSelection, resolveBotApprovalsMode } from "@t3tools/contracts";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { T, useGT, useMessages } from "gt-react";
 import {
@@ -68,6 +68,7 @@ export function BotHomeView({
   const overrides = settings?.projectSettingsOverrides[projectId];
   const savedName = projectGroup.displayName;
   const savedModelSelection: ModelSelection | null = overrides?.defaultModelSelection ?? null;
+  const savedApprovals = resolveBotApprovalsMode(overrides?.bot);
   const paused = isBotPaused(settings, projectId);
 
   const canUpdateBot = useAtomValue(serverEnvironment.updateBot.permissionAtom(environmentId));
@@ -84,6 +85,7 @@ export function BotHomeView({
     botModelSelection: savedModelSelection,
     environmentDefaultModelSelection: settings?.defaultModelSelection,
     instanceEntries,
+    approvals: savedApprovals,
   });
   const canRunBot = useAtomValue(serverEnvironment.runBot.permissionAtom(environmentId));
 
@@ -185,7 +187,11 @@ export function BotHomeView({
             : runNowState.reason === "paused"
               ? gt("Bot is paused")
               : runNowState.reason === "blocked" && blockedByPolicy !== undefined
-                ? formatBotBlockReason(blockedByPolicy, messages)
+                ? formatBotBlockReason(
+                    blockedByPolicy,
+                    messages,
+                    usageQuery.data?.blockedReasonCode,
+                  )
                 : null;
 
         const handleRunNow = async () => {
@@ -243,6 +249,11 @@ export function BotHomeView({
                   {paused ? (
                     <Badge variant="outline" size="sm">
                       <T>Paused</T>
+                    </Badge>
+                  ) : null}
+                  {savedApprovals === "provider" ? (
+                    <Badge variant="warning" size="sm">
+                      <T>Less safe</T>
                     </Badge>
                   ) : null}
                 </div>

@@ -4,6 +4,7 @@ import {
   BOT_PAUSED_REASON,
   BOT_UNSUPPORTED_PROVIDER_REASON,
   BOTS_DISABLED_REASON,
+  botGateUnsupportedFallbackReason,
   EnvironmentId,
   ProjectId,
   ProviderDriverKind,
@@ -28,10 +29,13 @@ import {
   filterNonBotProjects,
   filterNonBotThreads,
   formatBotBlockReason,
+  formatBotGateUnsupportedReason,
   formatBotModelDisplayName,
   formatBotTodayUsage,
   formatBotTokenCount,
+  getBotModelDisabledReason,
   isAnyBotsEnabled,
+  isBotEntryGateSupported,
   isBotSidebarRoute,
   keepBotProjectsSeparate,
   parseBotPositiveInt,
@@ -253,11 +257,35 @@ describe("bots client logic", () => {
     expect(parseBotPositiveInt("abc")).toBeNull();
   });
 
-  it("resolves effective bot models, flags unsupported providers, seeds a supported model, and formats labels", () => {
+  it("resolves effective bot models from botGate capability, filters the model picker by approvals mode, seeds supported models, and formats labels", () => {
+    const cursorId = ProviderInstanceId.make("cursor");
     const antigravityId = ProviderInstanceId.make("antigravity");
     const claudeId = ProviderInstanceId.make("claudeAgent");
     const codexId = ProviderInstanceId.make("codex");
     const providers: ReadonlyArray<ServerProvider> = [
+      {
+        instanceId: cursorId,
+        driver: ProviderDriverKind.make("cursor"),
+        displayName: "Cursor",
+        enabled: true,
+        installed: true,
+        version: null,
+        status: "ready",
+        auth: { status: "authenticated" },
+        checkedAt: "2026-10-01T00:00:00.000Z",
+        slashCommands: [],
+        skills: [],
+        botGate: { status: "unsupported", reasonCode: "no_approval_callback" },
+        models: [
+          {
+            slug: "cursor-fast",
+            name: "Cursor Fast",
+            isDefault: true,
+            isCustom: false,
+            capabilities: null,
+          },
+        ],
+      },
       {
         instanceId: antigravityId,
         driver: ProviderDriverKind.make("antigravity"),
@@ -270,6 +298,7 @@ describe("bots client logic", () => {
         checkedAt: "2026-10-01T00:00:00.000Z",
         slashCommands: [],
         skills: [],
+        botGate: { status: "supported" },
         models: [
           {
             slug: "gemini-pro",
@@ -292,6 +321,7 @@ describe("bots client logic", () => {
         checkedAt: "2026-10-01T00:00:00.000Z",
         slashCommands: [],
         skills: [],
+        botGate: { status: "supported" },
         models: [
           {
             slug: "claude-haiku-4-5",
@@ -320,6 +350,7 @@ describe("bots client logic", () => {
         checkedAt: "2026-10-01T00:00:00.000Z",
         slashCommands: [],
         skills: [],
+        botGate: { status: "supported" },
         models: [
           {
             slug: "gpt-5.4",
@@ -332,17 +363,45 @@ describe("bots client logic", () => {
       },
     ];
     const entries = deriveProviderInstanceEntries(providers);
+    const cursorEntry = entries[0]!;
+    const antigravityEntry = entries[1]!;
 
-    // Bot inheriting an unsupported app default flags unsupported.
+    // Picker disables unsupported providers under t3_gate and enables them under provider approvals.
+    expect(isBotEntryGateSupported(cursorEntry)).toBe(false);
+    expect(isBotEntryGateSupported(antigravityEntry)).toBe(true);
+    expect(getBotModelDisabledReason(cursorEntry, "t3_gate")).toBe(
+      formatBotGateUnsupportedReason("no_approval_callback"),
+    );
+    expect(getBotModelDisabledReason(cursorEntry, "provider")).toBeNull();
+    expect(getBotModelDisabledReason(antigravityEntry, "t3_gate")).toBeNull();
+
+    // Old servers omitting botGate fall back to Claude/Codex only.
+    const { botGate: _omittedBotGate, ...legacyAntigravity } = providers[1]!;
+    const legacyAntigravityEntries = deriveProviderInstanceEntries([legacyAntigravity]);
+    expect(isBotEntryGateSupported(legacyAntigravityEntries[0]!)).toBe(false);
+
+    // Bot inheriting an unsupported app default flags unsupported under t3_gate, allowed under provider.
     const inheritedUnsupported = resolveBotEffectiveModelSelection({
       botModelSelection: null,
-      environmentDefaultModelSelection: { instanceId: antigravityId, model: "gemini-pro" },
+      environmentDefaultModelSelection: { instanceId: cursorId, model: "cursor-fast" },
       instanceEntries: entries,
     });
     expect(inheritedUnsupported).toMatchObject({
       source: "default",
       unsupported: true,
-      selection: { instanceId: antigravityId, model: "gemini-pro" },
+      gateCapability: { status: "unsupported", reasonCode: "no_approval_callback" },
+      selection: { instanceId: cursorId, model: "cursor-fast" },
+    });
+    const inheritedProviderMode = resolveBotEffectiveModelSelection({
+      botModelSelection: null,
+      environmentDefaultModelSelection: { instanceId: cursorId, model: "cursor-fast" },
+      instanceEntries: entries,
+      approvals: "provider",
+    });
+    expect(inheritedProviderMode).toMatchObject({
+      source: "default",
+      unsupported: false,
+      selection: { instanceId: cursorId, model: "cursor-fast" },
     });
 
     // Bot with no explicit model and no app default falls back to first selectable provider.
@@ -354,13 +413,13 @@ describe("bots client logic", () => {
     expect(fallbackUnsupported).toMatchObject({
       source: "fallback",
       unsupported: true,
-      selection: { instanceId: antigravityId, model: "gemini-pro" },
+      selection: { instanceId: cursorId, model: "cursor-fast" },
     });
 
     // Bot with an explicit Claude model is supported.
     const explicitClaude = resolveBotEffectiveModelSelection({
       botModelSelection: { instanceId: claudeId, model: "claude-haiku-4-5" },
-      environmentDefaultModelSelection: { instanceId: antigravityId, model: "gemini-pro" },
+      environmentDefaultModelSelection: { instanceId: cursorId, model: "cursor-fast" },
       instanceEntries: entries,
     });
     expect(explicitClaude).toMatchObject({
@@ -369,13 +428,13 @@ describe("bots client logic", () => {
       selection: { instanceId: claudeId, model: "claude-haiku-4-5" },
     });
 
-    // Seeding skips an unsupported app default and picks the first available Claude/Codex model.
+    // Seeding skips an unsupported app default and picks the first available supported model.
     expect(
       resolveFirstSupportedBotModelSelection(
-        { defaultModelSelection: { instanceId: antigravityId, model: "gemini-pro" } },
+        { defaultModelSelection: { instanceId: cursorId, model: "cursor-fast" } },
         entries,
       ),
-    ).toEqual({ instanceId: claudeId, model: "claude-sonnet-4-6" });
+    ).toEqual({ instanceId: antigravityId, model: "gemini-pro" });
 
     // Seeding keeps a supported app default when available.
     expect(
@@ -404,7 +463,7 @@ describe("bots client logic", () => {
         {
           defaultModelSelection: { instanceId: codexId, model: "gpt-5.4" },
           botDefaults: {
-            modelSelection: { instanceId: antigravityId, model: "gemini-pro" },
+            modelSelection: { instanceId: cursorId, model: "cursor-fast" },
           },
         },
         entries,
@@ -414,7 +473,7 @@ describe("bots client logic", () => {
     // Seeding returns null when only unsupported providers exist.
     expect(
       resolveFirstSupportedBotModelSelection(
-        { defaultModelSelection: { instanceId: antigravityId, model: "gemini-pro" } },
+        { defaultModelSelection: { instanceId: cursorId, model: "cursor-fast" } },
         entries.slice(0, 1),
       ),
     ).toBeNull();
@@ -528,14 +587,18 @@ describe("bots client logic", () => {
       BOT_DAILY_RUN_LIMIT_REASON,
       BOT_DAILY_TOKEN_LIMIT_REASON,
       BOT_UNSUPPORTED_PROVIDER_REASON,
+      botGateUnsupportedFallbackReason("no_approval_callback"),
     ]) {
       expect(formatBotBlockReason(reason, resolve)).toBe(`[de] ${reason}`);
     }
-    expect(resolved).toHaveLength(5);
+    expect(formatBotBlockReason("Fallback text", resolve, "ungated_mcp_or_tools")).toBe(
+      `[de] ${botGateUnsupportedFallbackReason("ungated_mcp_or_tools")}`,
+    );
+    expect(resolved).toHaveLength(7);
 
     expect(formatBotBlockReason("Future server limit", resolve)).toBe("Future server limit");
     expect(formatBotBlockReason("toString", resolve)).toBe("toString");
-    expect(resolved).toHaveLength(5);
+    expect(resolved).toHaveLength(7);
   });
 
   it("blocks bot navigation only when dirty and moving to another pathname", () => {

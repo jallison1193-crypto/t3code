@@ -80,6 +80,7 @@ function makeThread(threadId: ThreadId, projectId: ProjectId): OrchestrationV2Ap
 
 interface HarnessOptions {
   readonly botsEnabled?: boolean;
+  readonly botApprovals?: "t3_gate" | "provider";
   readonly threadId?: ThreadId;
   readonly projectId?: ProjectId;
   readonly requestKind?: ProviderRequestKind | "user_input";
@@ -197,7 +198,9 @@ const makeHarness = Effect.fn("BotActionGateReactorTest.makeHarness")(function* 
     ServerSettings.layerTest({
       botsEnabled: options.botsEnabled ?? true,
       projectSettingsOverrides: {
-        [BOT_PROJECT]: { bot: {} },
+        [BOT_PROJECT]: {
+          bot: options.botApprovals === undefined ? {} : { approvals: options.botApprovals },
+        },
       },
     }),
     Layer.mock(Orchestrator.OrchestratorV2)({
@@ -528,6 +531,79 @@ describe("BotActionGateReactor", () => {
       yield* disabled.reactor.handle(yield* disabled.runtimeRequestEvent());
       expect(yield* Ref.get(disabled.dispatchedRef)).toEqual([]);
       expect(yield* Ref.get(disabled.writtenEventsRef)).toEqual([]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("holds web_search sibling WebFetch requests as send approvals", () =>
+    Effect.gen(function* () {
+      const webFetchItem: OrchestrationV2TurnItem = {
+        id: TurnItemId.make("item:webfetch-1"),
+        threadId: BOT_THREAD,
+        runId: RUN_ID,
+        nodeId: PARENT_NODE_ID,
+        providerThreadId: PROVIDER_THREAD_ID,
+        providerTurnId: PROVIDER_TURN_ID,
+        nativeItemRef: { driver: CLAUDE_DRIVER, nativeId: "native-1", strength: "strong" },
+        parentItemId: null,
+        ordinal: 1,
+        status: "running",
+        title: "WebFetch",
+        startedAt: NOW,
+        completedAt: null,
+        updatedAt: NOW,
+        type: "web_search",
+      };
+      const h = yield* makeHarness({
+        requestKind: "command",
+        prompt: "WebFetch: https://example.com/api",
+        siblingItems: [webFetchItem],
+      });
+
+      yield* h.reactor.handle(yield* h.runtimeRequestEvent());
+
+      expect(yield* Ref.get(h.dispatchedRef)).toEqual([]);
+      const updated = yield* Ref.get(h.approvalItemRef);
+      expect(updated?.type).toBe("approval_request");
+      if (updated?.type === "approval_request") {
+        expect(updated.reason).toBe("Bots ask before sending");
+        expect(updated.options).toEqual(BOT_HELD_APPROVAL_OPTIONS);
+      }
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("still holds delete and blocks pay when a bot uses provider approvals mode", () =>
+    Effect.gen(function* () {
+      const del = yield* makeHarness({
+        botApprovals: "provider",
+        requestKind: "command",
+        prompt: "rm -f notes.txt",
+      });
+      yield* del.reactor.handle(yield* del.runtimeRequestEvent());
+      expect(yield* Ref.get(del.dispatchedRef)).toEqual([]);
+      const updated = yield* Ref.get(del.approvalItemRef);
+      expect(updated?.type).toBe("approval_request");
+      if (updated?.type === "approval_request") {
+        expect(updated.reason).toBe("Bots ask before deleting");
+        expect(updated.options).toEqual(BOT_HELD_APPROVAL_OPTIONS);
+      }
+
+      const pay = yield* makeHarness({
+        botApprovals: "provider",
+        requestKind: "command",
+        supportsFeedback: true,
+        prompt: "stripe charges create --amount=500",
+      });
+      yield* pay.reactor.handle(yield* pay.runtimeRequestEvent());
+      expect(yield* Ref.get(pay.dispatchedRef)).toEqual([
+        {
+          type: "runtime-request.respond",
+          commandId: CommandId.make(`server:bot-action-gate:${pay.threadId}:${pay.requestId}`),
+          threadId: pay.threadId,
+          requestId: pay.requestId,
+          decision: "decline",
+          feedback: BOT_PAY_BLOCKED_FEEDBACK,
+        },
+      ]);
     }).pipe(Effect.scoped),
   );
 });

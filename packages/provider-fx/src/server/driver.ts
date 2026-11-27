@@ -78,6 +78,7 @@ export const FxDriver: ProviderDriver<FxSettings, FxDriverEnv> = {
   metadata: {
     displayName: "fx",
     supportsMultipleInstances: true,
+    botGate: { status: "unsupported", reasonCode: "opaque_subagents_or_mcp" },
   },
   configSchema: FxSettings,
   defaultConfig: (): FxSettings => decodeFxSettings({}),
@@ -109,6 +110,7 @@ export const FxDriver: ProviderDriver<FxSettings, FxDriverEnv> = {
       displayName,
       accentColor,
       continuationGroupKey: continuationIdentity.continuationKey,
+      botGate: FxDriver.metadata.botGate,
     });
     const effectiveConfig = {
       ...config,

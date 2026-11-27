@@ -35,6 +35,7 @@ const toBotSummary = (bot: BotRecord) => ({
   modelSelection: bot.modelSelection,
   paused: bot.paused,
   ...(bot.limits === undefined ? {} : { limits: bot.limits }),
+  ...(bot.approvals === undefined ? {} : { approvals: bot.approvals }),
 });
 
 const mapBotError = (error: BotOperationError): OrchestratorMcpFailure => {
@@ -127,6 +128,7 @@ export const layer = McpToolAccess.toLayer(BotToolkit, {
                 ? {}
                 : { modelSelection: input.modelSelection }),
               ...(input.limits === undefined ? {} : { limits: input.limits }),
+              ...(input.approvals === undefined ? {} : { approvals: input.approvals }),
             })
             .pipe(Effect.mapError(mapBotError));
           return { bot: toBotSummary(bot) };
@@ -142,6 +144,7 @@ export const layer = McpToolAccess.toLayer(BotToolkit, {
                 ? {}
                 : { modelSelection: input.modelSelection }),
               ...(input.limits === undefined ? {} : { limits: input.limits }),
+              ...(input.approvals === undefined ? {} : { approvals: input.approvals }),
             })
             .pipe(Effect.mapError(mapBotError));
           return { bot: toBotSummary(bot) };

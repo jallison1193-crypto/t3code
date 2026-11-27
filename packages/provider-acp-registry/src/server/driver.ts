@@ -327,6 +327,7 @@ function baseSnapshot(
         }),
     slashCommands: input.probe?.slashCommands ?? [],
     skills: input.probe?.skills ?? [],
+    botGate: { status: "unsupported", reasonCode: "unverified_third_party_acp" },
   };
 }
 
@@ -619,6 +620,7 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
     snapshotOmitsDisplayName: true,
     supportsMultipleInstances: true,
     hasDefaultInstance: false,
+    botGate: { status: "unsupported", reasonCode: "unverified_third_party_acp" },
   },
   configSchema: AcpRegistrySettings,
   defaultConfig: () => decodeSettings({}),

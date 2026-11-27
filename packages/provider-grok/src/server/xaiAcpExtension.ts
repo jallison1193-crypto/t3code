@@ -566,7 +566,8 @@ function normalizeXAiMcpToolCall(toolCall: AcpToolCallState): AcpToolCallState {
   const toolName = nonEmptyString(rawInput?.tool_name) ?? "";
   const separator = toolName.indexOf("__");
   const isUseTool =
-    unknownRecord(meta?.["x.ai/tool"])?.name === "use_tool" &&
+    (unknownRecord(meta?.["x.ai/tool"])?.name === "use_tool" ||
+      titleKey(toolCall) === "use_tool") &&
     separator > 0 &&
     separator + 2 < toolName.length;
   const rawOutput = unknownRecord(toolCall.data.rawOutput);

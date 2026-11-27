@@ -1,4 +1,6 @@
 import {
+  DEFAULT_UNSUPPORTED_BOT_GATE,
+  type BotGateCapability,
   providerInstanceConfigEnabledFlag,
   ProviderInstanceId,
   type ProviderInstanceConfig,
@@ -86,10 +88,14 @@ const withLivePresentation = (
   instance: ProviderInstance,
   created: ProviderInstanceConfig,
   defaultSnapshotDisplayName: string | undefined,
+  defaultBotGate: BotGateCapability,
 ) => {
   let current = created;
   const restamp = <S extends ServerProvider>(snapshot: S): S => {
     const next: { -readonly [K in keyof S]: S[K] } = { ...snapshot };
+    if (next.botGate === undefined) {
+      next.botGate = defaultBotGate;
+    }
     for (const key of ["displayName", "accentColor"] as const) {
       const value = current[key];
       if (value === created[key]) continue;
@@ -409,6 +415,7 @@ const buildEntry = Effect.fn("ProviderInstanceRegistry.buildEntry")(function* <R
     createResult.success,
     entry,
     driver.metadata.snapshotOmitsDisplayName ? undefined : driver.metadata.displayName,
+    driver.metadata.botGate ?? DEFAULT_UNSUPPORTED_BOT_GATE,
   );
   return {
     kind: "live" as const,

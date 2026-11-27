@@ -264,6 +264,7 @@ export const OpenCodeDriver: ProviderDriver<
   metadata: {
     displayName: "OpenCode",
     supportsMultipleInstances: true,
+    botGate: { status: "unsupported", reasonCode: "ungated_mcp_or_tools" },
   },
   configSchema: OpenCodeSettings,
   defaultConfig: (): OpenCodeSettings => decodeOpenCodeSettings({}),
@@ -296,6 +297,7 @@ export const OpenCodeDriver: ProviderDriver<
       displayName,
       accentColor,
       continuationGroupKey: continuationIdentity.continuationKey,
+      botGate: OpenCodeDriver.metadata.botGate,
     });
     const effectiveConfig = {
       ...config,

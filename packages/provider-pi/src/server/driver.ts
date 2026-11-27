@@ -58,6 +58,11 @@ export type PiDriverEnv =
   | ProviderLatestVersions.ProviderLatestVersions
   | Path.Path;
 
+const PI_BOT_GATE = {
+  status: "unsupported",
+  reasonCode: "ungated_mcp_or_tools",
+} as const;
+
 const withInstanceIdentity =
   (input: {
     readonly instanceId: ProviderInstance["instanceId"];
@@ -72,6 +77,7 @@ const withInstanceIdentity =
     ...(input.displayName ? { displayName: input.displayName } : {}),
     ...(input.accentColor ? { accentColor: input.accentColor } : {}),
     continuation: { groupKey: input.continuationGroupKey },
+    botGate: PI_BOT_GATE,
   });
 
 export const PiDriver: ProviderDriver<PiSettings, PiDriverEnv, Path.Path> = {
@@ -79,6 +85,7 @@ export const PiDriver: ProviderDriver<PiSettings, PiDriverEnv, Path.Path> = {
   metadata: {
     displayName: "Pi",
     supportsMultipleInstances: true,
+    botGate: PI_BOT_GATE,
   },
   usage: piUsageReader,
   configSchema: PiSettings,

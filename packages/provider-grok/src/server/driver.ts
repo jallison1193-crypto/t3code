@@ -144,6 +144,7 @@ export const GrokDriver: ProviderDriver<GrokSettings, GrokDriverEnv, Path.Path> 
   metadata: {
     displayName: "Grok",
     supportsMultipleInstances: true,
+    botGate: { status: "supported" },
   },
   configSchema: GrokSettings,
   defaultConfig: (): GrokSettings => decodeGrokSettings({}),
@@ -175,6 +176,7 @@ export const GrokDriver: ProviderDriver<GrokSettings, GrokDriverEnv, Path.Path> 
       displayName,
       accentColor,
       continuationGroupKey: continuationIdentity.continuationKey,
+      botGate: GrokDriver.metadata.botGate,
     });
     const effectiveConfig = { ...config, enabled } satisfies GrokSettings;
     const resolveMaintenance = yield* makeCachedProviderMaintenanceResolution(

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "@effect/vitest";
 import {
-  BOT_UNSUPPORTED_PROVIDER_REASON,
+  type BotGateCapability,
+  type BotGateUnsupportedReasonCode,
+  botGateUnsupportedFallbackReason,
+  ClaudeSettings,
   EnvironmentId,
   type OrchestrationV2AppThread,
   ProjectId,
@@ -10,23 +13,49 @@ import {
   type ServerProvider,
   ThreadId,
 } from "@t3tools/contracts";
+import {
+  acpMcpToolApprovalElicitationDisposition,
+  acpPermissionDisposition,
+  type AcpRuntimePolicy,
+} from "@t3tools/provider-acp/server/clientPolicy";
+import {
+  extractMcpToolCallIdentity,
+  parsePermissionRequest,
+  withTrackedPermissionToolCall,
+} from "@t3tools/provider-acp/server/runtimeModel";
+import { normalizeXAiAcpToolCallState } from "@t3tools/provider-grok/testing";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import type { ProviderInstance } from "@t3tools/provider-core/server/driver";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import { claudeMcpQueryOverrides } from "../orchestration-v2/Adapters/ClaudeAdapterV2.ts";
+import {
+  claudeMcpQueryOverrides,
+  makeClaudeQueryOptions,
+} from "../orchestration-v2/Adapters/ClaudeAdapterV2.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as RuntimePolicy from "../orchestration-v2/RuntimePolicy.ts";
+import { BUILT_IN_DRIVERS } from "../provider/builtInDrivers.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
+import { antigravityPermissionDisposition } from "../provider/acp/AntigravityAcpSupport.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as WorkspaceFolders from "../workspace/WorkspaceFolders.ts";
+
+const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
 
 const NOW = DateTime.makeUnsafe("2026-10-01T12:00:00.000Z");
 const BOT_PROJECT = ProjectId.make("project:bot-runtime");
 const ORDINARY_PROJECT = ProjectId.make("project:ordinary-runtime");
+
+const BUILT_IN_BOT_GATE_BY_DRIVER: ReadonlyMap<ProviderDriverKind, BotGateCapability> = new Map(
+  BUILT_IN_DRIVERS.map((driver) => [
+    driver.driverKind,
+    driver.metadata.botGate ?? { status: "unsupported", reasonCode: "unverified_third_party_acp" },
+  ]),
+);
 
 const makeTestProviderInstance = Effect.fn("BotRuntimeGateTest.makeTestProviderInstance")(
   function* (instanceId: ProviderInstanceId, driverKind: ProviderDriverKind) {
@@ -38,6 +67,7 @@ const makeTestProviderInstance = Effect.fn("BotRuntimeGateTest.makeTestProviderI
         }),
       ),
     );
+    const botGate = BUILT_IN_BOT_GATE_BY_DRIVER.get(driverKind);
     const snapshotValue: ServerProvider = {
       instanceId,
       driver: driverKind,
@@ -51,6 +81,7 @@ const makeTestProviderInstance = Effect.fn("BotRuntimeGateTest.makeTestProviderI
       slashCommands: [],
       skills: [],
       supportedRuntimeModes: ["approval-required", "auto-accept-edits", "auto", "full-access"],
+      ...(botGate === undefined ? {} : { botGate }),
     };
     const instance: ProviderInstance = {
       instanceId,
@@ -117,11 +148,14 @@ function makeThread(
 
 const makeHarness = Effect.fn("BotRuntimeGateTest.makeHarness")(function* (
   driversByInstance: Readonly<Record<string, ProviderDriverKind>>,
+  options?: { readonly botApprovals?: "t3_gate" | "provider" },
 ) {
   const settingsLayer = ServerSettings.layerTest({
     botsEnabled: true,
     projectSettingsOverrides: {
-      [BOT_PROJECT]: { bot: {} },
+      [BOT_PROJECT]: {
+        bot: options?.botApprovals === undefined ? {} : { approvals: options.botApprovals },
+      },
     },
   });
 
@@ -176,6 +210,8 @@ describe("bot runtime mode clamp and provider gate", () => {
         const { policy, settings } = yield* makeHarness({
           claude: ProviderDriverKind.make("claudeAgent"),
           codex: ProviderDriverKind.make("codex"),
+          antigravity: ProviderDriverKind.make("antigravity"),
+          grok: ProviderDriverKind.make("grok"),
         });
 
         const botThread = makeThread(BOT_PROJECT, "full-access");
@@ -189,23 +225,22 @@ describe("bot runtime mode clamp and provider gate", () => {
           model: "gpt-5",
         };
 
-        const botClaudePolicy = yield* policy.resolve({
-          thread: botThread,
-          modelSelection: claudeSelection,
-        });
-        expect(botClaudePolicy.runtimeMode).toBe("approval-required");
-        expect(botClaudePolicy.maxRuntimeMode).toBe("approval-required");
-        expect(botClaudePolicy.gateAllMcpTools).toBe(true);
+        for (const selection of [
+          claudeSelection,
+          codexSelection,
+          { instanceId: ProviderInstanceId.make("antigravity"), model: "gemini-2.5-pro" },
+          { instanceId: ProviderInstanceId.make("grok"), model: "grok-4" },
+        ]) {
+          const resolved = yield* policy.resolve({
+            thread: botThread,
+            modelSelection: selection,
+          });
+          expect(resolved.runtimeMode).toBe("approval-required");
+          expect(resolved.maxRuntimeMode).toBe("approval-required");
+          expect(resolved.gateAllMcpTools).toBe(true);
+        }
         // Stored thread field stays untouched.
         expect(botThread.runtimeMode).toBe("full-access");
-
-        const botCodexPolicy = yield* policy.resolve({
-          thread: botThread,
-          modelSelection: codexSelection,
-        });
-        expect(botCodexPolicy.runtimeMode).toBe("approval-required");
-        expect(botCodexPolicy.maxRuntimeMode).toBe("approval-required");
-        expect(botCodexPolicy.gateAllMcpTools).toBe(true);
 
         const ordinaryPolicy = yield* policy.resolve({
           thread: ordinaryThread,
@@ -230,27 +265,27 @@ describe("bot runtime mode clamp and provider gate", () => {
       }).pipe(Effect.scoped),
   );
 
-  it.effect("refuses bot turns on unsupported providers with a clear message", () =>
+  it.effect("refuses bot turns on unsupported providers with their structured reason codes", () =>
     Effect.gen(function* () {
-      const unsupportedDrivers: ReadonlyArray<ProviderDriverKind> = [
-        ProviderDriverKind.make("cursor"),
-        ProviderDriverKind.make("opencode"),
-        ProviderDriverKind.make("pi"),
-        ProviderDriverKind.make("antigravity"),
-        ProviderDriverKind.make("grok"),
-        ProviderDriverKind.make("kiro"),
-        ProviderDriverKind.make("fx"),
-        ProviderDriverKind.make("muse"),
-        ProviderDriverKind.make("acpRegistry"),
+      const unsupportedDrivers: ReadonlyArray<
+        readonly [ProviderDriverKind, BotGateUnsupportedReasonCode]
+      > = [
+        [ProviderDriverKind.make("cursor"), "no_approval_callback"],
+        [ProviderDriverKind.make("opencode"), "ungated_mcp_or_tools"],
+        [ProviderDriverKind.make("pi"), "ungated_mcp_or_tools"],
+        [ProviderDriverKind.make("kiro"), "unisolated_user_rules"],
+        [ProviderDriverKind.make("muse"), "unisolated_user_rules"],
+        [ProviderDriverKind.make("fx"), "opaque_subagents_or_mcp"],
+        [ProviderDriverKind.make("acpRegistry"), "unverified_third_party_acp"],
       ];
       const driversByInstance = Object.fromEntries(
-        unsupportedDrivers.map((driver) => [`inst-${driver}`, driver]),
+        unsupportedDrivers.map(([driver]) => [`inst-${driver}`, driver]),
       );
       const { policy } = yield* makeHarness(driversByInstance);
       const botThread = makeThread(BOT_PROJECT, "full-access");
       const ordinaryThread = makeThread(ORDINARY_PROJECT, "full-access");
 
-      for (const driver of unsupportedDrivers) {
+      for (const [driver, expectedReasonCode] of unsupportedDrivers) {
         const selection = {
           instanceId: ProviderInstanceId.make(`inst-${driver}`),
           model: "test-model",
@@ -259,7 +294,10 @@ describe("bot runtime mode clamp and provider gate", () => {
           .resolve({ thread: botThread, modelSelection: selection })
           .pipe(Effect.flip);
         expect(failure._tag).toBe("RuntimePolicyBotProviderUnsupportedError");
-        expect(failure.message).toBe(BOT_UNSUPPORTED_PROVIDER_REASON);
+        if (failure._tag === "RuntimePolicyBotProviderUnsupportedError") {
+          expect(failure.reasonCode).toBe(expectedReasonCode);
+        }
+        expect(failure.message).toBe(botGateUnsupportedFallbackReason(expectedReasonCode));
 
         // Ordinary projects still run on those providers without error.
         const ordinaryResolved = yield* policy.resolve({
@@ -276,7 +314,57 @@ describe("bot runtime mode clamp and provider gate", () => {
         })
         .pipe(Effect.flip);
       expect(missing._tag).toBe("RuntimePolicyBotProviderUnsupportedError");
+      if (missing._tag === "RuntimePolicyBotProviderUnsupportedError") {
+        expect(missing.reasonCode).toBe("provider_unavailable");
+      }
     }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "allows unsupported providers like Cursor when bot approvals is provider, while keeping approval-required clamp and rejecting missing instances",
+    () =>
+      Effect.gen(function* () {
+        const cursorSelection = {
+          instanceId: ProviderInstanceId.make("cursor"),
+          model: "cursor-fast",
+        };
+        const botThread = makeThread(BOT_PROJECT, "full-access");
+
+        const t3GateHarness = yield* makeHarness(
+          { cursor: ProviderDriverKind.make("cursor") },
+          { botApprovals: "t3_gate" },
+        );
+        const refused = yield* t3GateHarness.policy
+          .resolve({ thread: botThread, modelSelection: cursorSelection })
+          .pipe(Effect.flip);
+        expect(refused._tag).toBe("RuntimePolicyBotProviderUnsupportedError");
+        if (refused._tag === "RuntimePolicyBotProviderUnsupportedError") {
+          expect(refused.reasonCode).toBe("no_approval_callback");
+        }
+
+        const providerHarness = yield* makeHarness(
+          { cursor: ProviderDriverKind.make("cursor") },
+          { botApprovals: "provider" },
+        );
+        const allowed = yield* providerHarness.policy.resolve({
+          thread: botThread,
+          modelSelection: cursorSelection,
+        });
+        expect(allowed.runtimeMode).toBe("approval-required");
+        expect(allowed.maxRuntimeMode).toBe("approval-required");
+        expect(allowed.gateAllMcpTools).toBe(true);
+
+        const missing = yield* providerHarness.policy
+          .resolve({
+            thread: botThread,
+            modelSelection: { instanceId: ProviderInstanceId.make("removed"), model: "test" },
+          })
+          .pipe(Effect.flip);
+        expect(missing._tag).toBe("RuntimePolicyBotProviderUnsupportedError");
+        if (missing._tag === "RuntimePolicyBotProviderUnsupportedError") {
+          expect(missing.reasonCode).toBe("provider_unavailable");
+        }
+      }).pipe(Effect.scoped),
   );
 
   it("omits mcp__t3-code__* pre-approval for Claude when gateAllMcpTools is true", () => {
@@ -296,5 +384,126 @@ describe("bot runtime mode clamp and provider gate", () => {
     });
     expect(overrides.allowedTools).toEqual([]);
     expect(overrides.mcpServers?.["t3-code"]).toBeDefined();
+  });
+
+  it("ignores permission launch args and drops user settingSources on Claude bot runs while keeping non-bot threads unchanged", () => {
+    const settings = decodeClaudeSettings({
+      launchArgs:
+        "--dangerously-skip-permissions --permission-mode bypassPermissions --setting-sources user,project",
+    });
+    const baseInput = {
+      modelSelection: {
+        instanceId: ProviderInstanceId.make("claudeAgent"),
+        model: "claude-sonnet-4-6",
+      },
+      nativeThreadId: "native-thread-1",
+      resume: false,
+      cwd: "/tmp/workspace",
+      settings,
+      permissionMode: "default" as const,
+      allowDangerouslySkipPermissions: true,
+    };
+
+    const botOptions = makeClaudeQueryOptions({ ...baseInput, gateAllMcpTools: true });
+    expect(botOptions.permissionMode).toBe("default");
+    expect(botOptions.allowDangerouslySkipPermissions).toBeUndefined();
+    expect(botOptions.settingSources).toEqual(["project", "local"]);
+    expect(botOptions.extraArgs?.["setting-sources"]).toBeUndefined();
+    expect(botOptions.extraArgs?.["dangerously-skip-permissions"]).toBeUndefined();
+    expect(botOptions.extraArgs?.["permission-mode"]).toBeUndefined();
+
+    const ordinaryOptions = makeClaudeQueryOptions(baseInput);
+    expect(ordinaryOptions.permissionMode).toBe("bypassPermissions");
+    expect(ordinaryOptions.allowDangerouslySkipPermissions).toBe(true);
+    expect(ordinaryOptions.settingSources).toBeUndefined();
+    expect(ordinaryOptions.extraArgs?.["setting-sources"]).toBe("user,project");
+  });
+
+  it("does not auto-allow ACP read/search/think, MCP elicitations, or Antigravity T3 MCP calls on bot runs", () => {
+    const basePolicy: AcpRuntimePolicy = {
+      runtimeMode: "approval-required",
+      cwd: "/tmp/workspace",
+    };
+    const botPolicy: AcpRuntimePolicy = {
+      ...basePolicy,
+      gateAllMcpTools: true,
+    };
+
+    for (const kind of ["read", "search", "think"] as const) {
+      const request = {
+        options: [],
+        sessionId: "s-1",
+        toolCall: { kind, toolCallId: `tc-${kind}` },
+      };
+      expect(acpPermissionDisposition(basePolicy, request)).toBe("allow");
+      expect(acpPermissionDisposition(botPolicy, request)).toBe("ask");
+    }
+
+    const mcpElicitation = {
+      sessionId: "s-1",
+      message: "Approve MCP tool?",
+      mode: "form" as const,
+      requestedSchema: { type: "object", properties: {} },
+      _meta: { codex_approval_kind: "mcp_tool_call" },
+    };
+    expect(
+      acpMcpToolApprovalElicitationDisposition(
+        { runtimeMode: "full-access", cwd: "/tmp/workspace", gateAllMcpTools: true },
+        mcpElicitation,
+      ),
+    ).toBe("ask");
+
+    const t3McpRequest = {
+      options: [],
+      sessionId: "s-1",
+      toolCall: {
+        kind: "other" as const,
+        toolCallId: "tc-t3-mcp",
+        title: "MCP Tool t3_thread_send",
+        rawInput: { ServerName: "t3-code", ToolName: "t3_thread_send" },
+      },
+    };
+    const autoEditsPolicy: AcpRuntimePolicy = {
+      runtimeMode: "auto-accept-edits",
+      cwd: "/tmp/workspace",
+    };
+    expect(antigravityPermissionDisposition(autoEditsPolicy, t3McpRequest)).toBe("allow");
+    expect(
+      antigravityPermissionDisposition({ ...autoEditsPolicy, gateAllMcpTools: true }, t3McpRequest),
+    ).toBe("ask");
+    expect(antigravityPermissionDisposition(botPolicy, t3McpRequest)).toBe("ask");
+  });
+
+  it("normalizes Grok use_tool permission requests to <server>.<tool> before the bot gate", () => {
+    const merged = withTrackedPermissionToolCall(
+      {
+        sessionId: "s-grok",
+        options: [{ optionId: "allow-once", name: "Allow once", kind: "allow_once" }],
+        toolCall: {
+          toolCallId: "tc-grok-mcp",
+          title: "use_tool",
+          kind: "other",
+        },
+      },
+      {
+        toolCallId: "tc-grok-mcp",
+        kind: "other",
+        data: {
+          toolCallId: "tc-grok-mcp",
+          title: "use_tool",
+          rawInput: { tool_name: "gmail__send_email", args: { to: "a@b.com" } },
+          meta: { "x.ai/tool": { name: "use_tool" } },
+        },
+      },
+    );
+
+    const parsed = parsePermissionRequest(merged, normalizeXAiAcpToolCallState);
+    expect(parsed.detail).toBe("gmail.send_email");
+    expect(
+      parsed.toolCall === undefined ? undefined : extractMcpToolCallIdentity(parsed.toolCall),
+    ).toEqual({
+      server: "gmail",
+      tool: "send_email",
+    });
   });
 });

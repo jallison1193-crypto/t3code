@@ -65,7 +65,11 @@ export const MuseDriver: ProviderDriver<
   Path.Path | MuseUsageHome.MuseUsageHome
 > = {
   driverKind: DRIVER_KIND,
-  metadata: { displayName: "Muse Code", supportsMultipleInstances: true },
+  metadata: {
+    displayName: "Muse Code",
+    supportsMultipleInstances: true,
+    botGate: { status: "unsupported", reasonCode: "unisolated_user_rules" },
+  },
   usage: museUsageReader,
   configSchema: MuseSettings,
   defaultConfig: () => decodeMuseSettings({}),
@@ -107,6 +111,7 @@ export const MuseDriver: ProviderDriver<
       displayName,
       accentColor,
       continuationGroupKey: continuationIdentity.continuationKey,
+      botGate: MuseDriver.metadata.botGate,
     });
     // Only a running CLI reports usage; status probes cannot fetch it.
     const latestUsage = yield* Ref.make<ProviderUsageLimitsReport | undefined>(undefined);

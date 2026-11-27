@@ -4,8 +4,8 @@ import {
   BOT_DAILY_RUN_LIMIT_REASON,
   BOT_DAILY_TOKEN_LIMIT_REASON,
   BOT_PAUSED_REASON,
-  BOT_UNSUPPORTED_PROVIDER_REASON,
   BOTS_DISABLED_REASON,
+  botGateUnsupportedFallbackReason,
   DEFAULT_SERVER_SETTINGS,
   ProjectId,
   ProviderDriverKind,
@@ -34,6 +34,7 @@ import * as ThreadManagementService from "../orchestration-v2/ThreadManagementSe
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
+import { BUILT_IN_DRIVERS } from "../provider/builtInDrivers.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
@@ -111,6 +112,8 @@ const makeHarness = Effect.fn("ScheduledTaskServiceBotsTest.makeHarness")(functi
                   }),
                 ),
               );
+              const botGate = BUILT_IN_DRIVERS.find((driver) => driver.driverKind === driverKind)
+                ?.metadata.botGate;
               const snapshotValue: ServerProvider = {
                 instanceId,
                 driver: driverKind,
@@ -123,6 +126,7 @@ const makeHarness = Effect.fn("ScheduledTaskServiceBotsTest.makeHarness")(functi
                 models: [],
                 slashCommands: [],
                 skills: [],
+                ...(botGate === undefined ? {} : { botGate }),
               };
               const instance: ProviderInstance = {
                 instanceId,
@@ -508,13 +512,14 @@ describe("ScheduledTaskService bot trigger blocking", () => {
         expect((yield* Ref.get(launchedProjects)).length).toBe(launchesBeforeMidnight + 1);
 
         // Unsupported provider shows in blockedByPolicy and refuses runNow & webhooks.
+        const cursorReason = botGateUnsupportedFallbackReason("no_approval_callback");
         const { task: unsupportedTask } = yield* tasks.upsert({
           ...intervalTaskInput(BOT_PROJECT, "Unsupported model task"),
           modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "cursor-fast" },
         });
-        expect(unsupportedTask.blockedByPolicy).toBe(BOT_UNSUPPORTED_PROVIDER_REASON);
+        expect(unsupportedTask.blockedByPolicy).toBe(cursorReason);
         const unsupportedRunNow = yield* tasks.runNow({ id: unsupportedTask.id }).pipe(Effect.flip);
-        expect(unsupportedRunNow.message).toBe(BOT_UNSUPPORTED_PROVIDER_REASON);
+        expect(unsupportedRunNow.message).toBe(cursorReason);
       }).pipe(Effect.scoped),
   );
 });

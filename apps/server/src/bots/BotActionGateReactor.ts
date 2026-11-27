@@ -63,6 +63,8 @@ function extractSiblingActionDetails(input: {
   for (const sibling of siblings) {
     if (sibling.type === "dynamic_tool" && sibling.toolName !== null) {
       toolName = sibling.toolName;
+    } else if (sibling.type === "web_search" && sibling.title !== null) {
+      toolName ??= sibling.title;
     } else if (sibling.type === "command_execution" && sibling.input.trim().length > 0) {
       command = sibling.input;
     } else if (sibling.type === "file_change" && sibling.changes !== undefined) {

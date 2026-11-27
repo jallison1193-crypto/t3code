@@ -654,8 +654,41 @@ function isShellToolName(toolName: string | null | undefined): boolean {
   return SHELL_TOOL_NAMES.has(toolName.trim().toLowerCase());
 }
 
-// Claude and Codex settings can pre-approve tools or add hooks, which would switch this gate off.
-const AGENT_SETTINGS_PATH = /(?:^|[\\/\s"'=~])\.(?:claude|codex)(?:[\\/\s"'.]|$)|\.mcp\.json/i;
+// Agent settings files can pre-approve tools or add hooks, which would switch this gate off.
+const AGENT_SETTINGS_PATH =
+  /(?:^|[\\/\s"'=~])(?:\.(?:claude|codex|gemini|grok|agents|cursor)|antigravity-acp)(?:[\\/\s"'.]|$)|\.mcp\.json/i;
+
+const WEB_FETCH_TOOL_PHRASES: ReadonlyArray<ReadonlyArray<string>> = [
+  ["web", "fetch"],
+  ["read", "url", "content"],
+  ["fetch", "url"],
+  ["fetch", "webpage"],
+  ["fetch", "web", "page"],
+];
+
+const EXPLICIT_WEB_FETCH_PROMPT =
+  /^(?:run(?:ning)?\s+)?(?:web[_\s-]?fetch|read[_\s-]?url[_\s-]?content)(?:\s|:|\?|$)/i;
+const WEB_FETCH_PROMPT =
+  /^(?:run(?:ning)?\s+)?(?:web[_\s-]?fetch|read[_\s-]?url[_\s-]?content|fetch)(?:\s|:|\?|$)/i;
+
+function isWebFetchToolWords(words: ReadonlyArray<string>): boolean {
+  if (WEB_FETCH_TOOL_PHRASES.some((phrase) => containsPhrase(words, phrase))) return true;
+  if (words.at(-1) === "fetch") {
+    return words.length === 1 || words.at(-2) === "fetch" || words.at(-2) === "web";
+  }
+  return false;
+}
+
+function isWebFetchPrompt(
+  prompt: string | null | undefined,
+  requireExplicitToolName = false,
+): boolean {
+  const trimmed = prompt?.trim();
+  if (!trimmed) return false;
+  return requireExplicitToolName
+    ? EXPLICIT_WEB_FETCH_PROMPT.test(trimmed)
+    : WEB_FETCH_PROMPT.test(trimmed);
+}
 
 function touchesAgentSettings(request: BotActionRequest): boolean {
   if (request.fileChanges?.some((change) => AGENT_SETTINGS_PATH.test(change.path))) return true;
@@ -691,11 +724,18 @@ export function classifyBotAction(request: BotActionRequest): BotActionClassific
   let result: BotActionClassification = ALLOW;
 
   if (request.toolName) {
-    result = stricterClassification(result, classifyWords(tokenizeActionWords(request.toolName)));
+    const toolWords = tokenizeActionWords(request.toolName);
+    result = stricterClassification(result, classifyWords(toolWords));
     if (result.decision === "block") return result;
+    if (isWebFetchToolWords(toolWords)) {
+      result = stricterClassification(result, ASK_SEND);
+    }
   }
 
   if (request.kind === "file-read") {
+    if (isWebFetchPrompt(request.prompt, true)) {
+      result = stricterClassification(result, ASK_SEND);
+    }
     return result;
   }
 
@@ -714,6 +754,9 @@ export function classifyBotAction(request: BotActionRequest): BotActionClassific
   }
 
   if (request.kind === "command") {
+    if (!request.command?.trim() && isWebFetchPrompt(request.prompt)) {
+      result = stricterClassification(result, ASK_SEND);
+    }
     const commandText =
       request.command?.trim() || (isShellToolName(request.toolName) ? request.prompt?.trim() : "");
     if (commandText) {
@@ -743,6 +786,9 @@ export function classifyBotAction(request: BotActionRequest): BotActionClassific
     if (result.decision === "block") return result;
   }
   if (request.prompt?.trim()) {
+    if (isWebFetchPrompt(request.prompt)) {
+      result = stricterClassification(result, ASK_SEND);
+    }
     result = stricterClassification(result, classifyCommand(request.prompt));
     if (result.decision === "block") return result;
     result = stricterClassification(result, classifyWords(tokenizeActionWords(request.prompt)));

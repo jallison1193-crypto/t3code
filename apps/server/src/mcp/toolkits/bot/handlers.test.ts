@@ -162,6 +162,7 @@ const makeHarness = Effect.fn("BotToolkitTest.makeHarness")(function* (initial?:
               runsPerDay: resolved.runsPerDay,
               tokensPerDay: resolved.tokensPerDay,
             },
+            approvals: input.approvals ?? "t3_gate",
             workspaceRoot: "/tmp/bots/digest",
             createdAt: DateTime.formatIso(EPOCH),
             updatedAt: DateTime.formatIso(EPOCH),
@@ -183,6 +184,7 @@ const makeHarness = Effect.fn("BotToolkitTest.makeHarness")(function* (initial?:
             ...(input.modelSelection === undefined ? {} : { modelSelection: input.modelSelection }),
             ...(input.paused === undefined ? {} : { paused: input.paused }),
             ...(nextLimits === undefined ? {} : { limits: nextLimits }),
+            ...(input.approvals === undefined ? {} : { approvals: input.approvals }),
           };
           botsMap.set(input.projectId, next);
           return next;
@@ -235,6 +237,7 @@ describe("bot MCP toolkit handlers", () => {
             modelSelection: null,
             paused: false,
             limits: DEFAULT_BOT_LIMITS,
+            approvals: "t3_gate",
           },
         });
 
@@ -247,6 +250,7 @@ describe("bot MCP toolkit handlers", () => {
               modelSelection: null,
               paused: false,
               limits: DEFAULT_BOT_LIMITS,
+              approvals: "t3_gate",
             },
           ],
         });
@@ -282,6 +286,7 @@ describe("bot MCP toolkit handlers", () => {
             name: "Evening Digest",
             goal: "Summarize closed PRs",
             limits: { mode: "runs_only", runsPerDay: 10 },
+            approvals: "provider",
           }),
         ).toMatchObject({
           bot: {
@@ -289,6 +294,7 @@ describe("bot MCP toolkit handlers", () => {
             name: "Evening Digest",
             goal: "Summarize closed PRs",
             limits: { mode: "runs_only", runsPerDay: 10 },
+            approvals: "provider",
           },
         });
 

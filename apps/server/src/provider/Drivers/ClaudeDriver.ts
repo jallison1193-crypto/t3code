@@ -97,6 +97,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
   metadata: {
     displayName: "Claude",
     supportsMultipleInstances: true,
+    botGate: { status: "supported" },
   },
   configSchema: ClaudeSettings,
   defaultConfig: (): ClaudeSettings => decodeClaudeSettings({}),
@@ -157,6 +158,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeSettings, ClaudeDriverEnv, Path.
       displayName,
       accentColor,
       continuationGroupKey,
+      botGate: ClaudeDriver.metadata.botGate,
     });
 
     const scopedLimitNames = yield* makeClaudeScopedLimitNames;

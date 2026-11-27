@@ -2609,6 +2609,7 @@ export function makeClaudeQueryOptions(input: {
   readonly allowedTools?: ReadonlyArray<string>;
   readonly disallowedTools?: ReadonlyArray<string>;
   readonly permissionMode?: PermissionMode;
+  readonly gateAllMcpTools?: boolean;
   readonly canUseTool?: CanUseTool;
   readonly onUserDialog?: ClaudeQueryOptions["onUserDialog"];
   readonly onElicitation?: ClaudeQueryOptions["onElicitation"];
@@ -2629,6 +2630,7 @@ export function makeClaudeQueryOptions(input: {
     "plugin-dir": launchArgPluginDir,
     "permission-mode": launchArgPermissionMode,
     "dangerously-skip-permissions": launchArgSkipPermissions,
+    "setting-sources": launchArgSettingSources,
     "append-system-prompt": launchArgAppendSystemPrompt,
     "append-system-prompt-file": _launchArgAppendSystemPromptFile,
     // The SDK replaces this flag with options.settings, so it arrives read as sdkSettings.
@@ -2637,6 +2639,9 @@ export function makeClaudeQueryOptions(input: {
   } = input.settings === undefined
     ? {}
     : parseCliArgs(input.settings.launchArgs, claudeLaunchArgParseOptions).flags;
+  if (input.gateAllMcpTools !== true && launchArgSettingSources !== undefined) {
+    extraArgs["setting-sources"] = launchArgSettingSources;
+  }
   // Claude Code overwrites its CLI append text with the SDK's initialize
   // appendSystemPrompt, so launch-argument text has to travel in that value.
   // The CLI puts file text before inline text and trims one trailing newline.
@@ -2732,10 +2737,13 @@ export function makeClaudeQueryOptions(input: {
     ...(input.title === undefined ? {} : { title: input.title }),
     tools: claudeAgentSdkQueryToolsForSdk(selectedTools),
     permissionMode:
-      (launchArgPermissionMode as PermissionMode | null | undefined) ??
-      (launchArgSkipPermissions === null || launchArgSkipPermissions === "true"
-        ? "bypassPermissions"
-        : (input.permissionMode ?? "default")),
+      input.gateAllMcpTools === true
+        ? (input.permissionMode ?? "default")
+        : ((launchArgPermissionMode as PermissionMode | null | undefined) ??
+          (launchArgSkipPermissions === null || launchArgSkipPermissions === "true"
+            ? "bypassPermissions"
+            : (input.permissionMode ?? "default"))),
+    ...(input.gateAllMcpTools === true ? { settingSources: ["project", "local"] } : {}),
     includePartialMessages: true,
     promptSuggestions: input.promptSuggestions === true,
     ...(compiledSelection.effort === undefined
@@ -2748,7 +2756,7 @@ export function makeClaudeQueryOptions(input: {
     ...(input.allowedTools === undefined ? {} : { allowedTools: [...input.allowedTools] }),
     ...(input.disallowedTools === undefined ? {} : { disallowedTools: [...input.disallowedTools] }),
     ...(input.canUseTool === undefined ? {} : { canUseTool: input.canUseTool }),
-    ...(input.allowDangerouslySkipPermissions === true
+    ...(input.gateAllMcpTools !== true && input.allowDangerouslySkipPermissions === true
       ? { allowDangerouslySkipPermissions: true }
       : {}),
     ...(requestThinkingSummaries
@@ -4157,6 +4165,7 @@ export function claudeEffectiveQueryPolicyKey(
   },
   // Folders are fixed when a query starts, so a changed list needs a new one.
   workspace?: ProviderAdapter.ProviderAdapterV2RuntimePolicy["workspace"],
+  gateAllMcpTools?: boolean,
 ): string {
   return JSON.stringify({
     workspace,
@@ -4167,6 +4176,7 @@ export function claudeEffectiveQueryPolicyKey(
         : { allowedTools: mcpOverrides.allowedTools }),
     }),
     mcpServers: mcpOverrides.mcpServers,
+    ...(gateAllMcpTools === true ? { gateAllMcpTools: true } : {}),
   });
 }
 
@@ -6292,7 +6302,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
   // Claude Code's own subagent TTL setting, in its precedence order. Unset or unreadable means
   // Anthropic's default applies.
   const resolveSubagentPromptCacheTtl = Effect.fn("ClaudeAdapterV2.resolveSubagentPromptCacheTtl")(
-    function* (cwd: string | null) {
+    function* (cwd: string | null, skipUserSettings = false) {
       const fromEnvironment = decodeClaudePromptCacheTtl(
         adapterOptions.environment.CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL,
       );
@@ -6301,7 +6311,8 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
         try: () =>
           resolveClaudeSettings({
             ...(cwd === null ? {} : { cwd }),
-            settingSources: customHome ? ["project", "local"] : ["user", "project", "local"],
+            settingSources:
+              customHome || skipUserSettings ? ["project", "local"] : ["user", "project", "local"],
           }),
         catch: (cause) => queryRunnerError(cause, "resolveSettings"),
       }).pipe(Effect.orElseSucceed(() => undefined));
@@ -13537,12 +13548,17 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           const requestKind = providerRequestKindFromClaudeTool(toolName);
           // The user approves the command itself; Claude's title and description only summarize it.
           const command = inputRecordValue(nativeToolInput, "command");
-          const prompt =
+          const rawPrompt =
             (typeof command === "string" && command.trim() !== "" ? command : undefined) ??
             callbackOptions.title ??
             callbackOptions.description ??
             callbackOptions.decisionReason ??
             summarizeClaudeToolRequest(toolName, nativeToolInput);
+          const prompt =
+            normalizedClaudeToolName(toolName) === "webfetch" &&
+            !/^(?:web[_\s-]?fetch|fetch)(?:\s|:|$)/i.test(rawPrompt.trim())
+              ? `WebFetch: ${rawPrompt}`
+              : rawPrompt;
           const artifacts = yield* buildApprovalRequestArtifacts({
             context,
             nativeItemId: nativeRequestId,
@@ -14021,6 +14037,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             queryPolicy,
             mcpOverrides,
             turnInput.runtimePolicy.workspace,
+            turnInput.runtimePolicy.gateAllMcpTools,
           );
           const resumeSessionAt = yield* getNativeConversationHeadId(turnInput.providerThread);
           const existing = yield* Ref.get(queryContext);
@@ -14215,7 +14232,10 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               adapterOptions.environment,
               turnInput.appThread,
               turnInput.appThread.lineage.relationshipToParent === "subagent"
-                ? yield* resolveSubagentPromptCacheTtl(turnInput.runtimePolicy.cwd)
+                ? yield* resolveSubagentPromptCacheTtl(
+                    turnInput.runtimePolicy.cwd,
+                    turnInput.runtimePolicy.gateAllMcpTools === true,
+                  )
                 : undefined,
               shouldResume,
             ),
@@ -14228,6 +14248,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               : { mcpServers: mcpOverrides.mcpServers }),
             deviceToolsAvailable: mcpSession?.capabilities?.has("device") === true,
             permissionMode: queryPolicy.permissionMode,
+            ...(turnInput.runtimePolicy.gateAllMcpTools === true ? { gateAllMcpTools: true } : {}),
             ...(queryPolicy.allowDangerouslySkipPermissions === undefined
               ? {}
               : {

@@ -1,4 +1,5 @@
 import {
+  BotApprovalsMode,
   BotDailyUsage,
   BotLimits,
   IsoDateTime,
@@ -26,6 +27,7 @@ const BotSummary = Schema.Struct({
   modelSelection: Schema.NullOr(ModelSelection),
   paused: Schema.Boolean,
   limits: Schema.optionalKey(BotLimits),
+  approvals: Schema.optionalKey(BotApprovalsMode),
 });
 
 const BotTriggerSummary = Schema.Struct({
@@ -88,7 +90,7 @@ const BotReadTool = Tool.make("t3_bot_read", {
 const BotUpdateTool = Tool.make("t3_bot_update", {
   ...shared,
   description:
-    "Create, update, pause, or resume a bot, or set its daily limits. Omit modelSelection to keep or inherit the default model; pass null to clear it.",
+    "Create, update, pause, or resume a bot, or set its daily limits or approvals mode. Omit modelSelection to keep or inherit the default model; pass null to clear it.",
   parameters: Schema.Struct({
     action: Schema.Literals(["create", "update", "pause", "resume"]),
     botId: Schema.optional(ProjectId),
@@ -96,6 +98,7 @@ const BotUpdateTool = Tool.make("t3_bot_update", {
     goal: Schema.optional(TrimmedString),
     modelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
     limits: Schema.optional(BotLimits),
+    approvals: Schema.optional(BotApprovalsMode),
   }),
   success: Schema.Struct({
     bot: BotSummary,

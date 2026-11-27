@@ -29,6 +29,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 // Modes were removed from ACP v2, so the v1 wire schema is the source of truth.
 const isSessionModelState = Schema.is(EffectAcpSchema.SessionModelState);
 const isSessionModeState = Schema.is(EffectAcpSchemaV1.SessionModeState);
+const isAcpMeta = Schema.is(Schema.Record(Schema.String, Schema.Json));
 
 export interface AcpSessionMode {
   readonly id: string;
@@ -1292,7 +1293,7 @@ export function withTrackedPermissionToolCall(
   tracked: AcpToolCallState | undefined,
 ): EffectAcpSchema.RequestPermissionRequest {
   if (tracked === undefined) return params;
-  const { title, kind, rawInput } = params.toolCall;
+  const { title, kind, rawInput, _meta } = params.toolCall;
   return {
     ...params,
     toolCall: {
@@ -1305,6 +1306,7 @@ export function withTrackedPermissionToolCall(
       ...(rawInput === undefined && tracked.data.rawInput !== undefined
         ? { rawInput: tracked.data.rawInput }
         : {}),
+      ...(_meta === undefined && isAcpMeta(tracked.data.meta) ? { _meta: tracked.data.meta } : {}),
     },
   };
 }
@@ -1409,8 +1411,9 @@ export function withUnknownChangedPaths(
 
 export function parsePermissionRequest(
   params: EffectAcpSchema.RequestPermissionRequest,
+  normalizeToolCall?: (toolCall: AcpToolCallState) => AcpToolCallState,
 ): AcpPermissionRequest {
-  const toolCall = makeToolCallState(
+  const rawToolCall = makeToolCallState(
     {
       toolCallId: params.toolCall.toolCallId,
       title: params.toolCall.title,
@@ -1420,14 +1423,28 @@ export function parsePermissionRequest(
       rawOutput: params.toolCall.rawOutput,
       content: params.toolCall.content,
       locations: params.toolCall.locations,
+      _meta: params.toolCall._meta,
     },
     { fallbackStatus: "pending" },
   );
+  const toolCall =
+    rawToolCall === undefined ? undefined : (normalizeToolCall?.(rawToolCall) ?? rawToolCall);
   const kind = normalizeToolKind(params.toolCall.kind) ?? "unknown";
   // The person approves the command or title as the agent sent it, so the card gets its edges too:
   // a trailing carriage return is part of what would run.
   const sentTitle = params.toolCall.title ?? undefined;
+  const mcpIdentity = toolCall === undefined ? undefined : extractMcpToolCallIdentity(toolCall);
+  const normalizedMcpDetail =
+    toolCall !== undefined &&
+    toolCall.command === undefined &&
+    mcpIdentity !== undefined &&
+    (sentTitle === undefined ||
+      sentTitle.trim().toLowerCase() === "use_tool" ||
+      toolCall.title !== rawToolCall?.title)
+      ? `${mcpIdentity.server}.${mcpIdentity.tool}`
+      : undefined;
   const detail =
+    normalizedMcpDetail ??
     (toolCall?.command === undefined
       ? undefined
       : (extractToolCallCommand(params.toolCall.rawInput, sentTitle, toolCall.kind, true) ??

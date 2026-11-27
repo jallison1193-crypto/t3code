@@ -2,28 +2,60 @@ import {
   BOT_DAILY_RUN_LIMIT_REASON,
   BOT_DAILY_TOKEN_LIMIT_REASON,
   BOT_PAUSED_REASON,
-  BOT_UNSUPPORTED_PROVIDER_REASON,
   BOTS_DISABLED_REASON,
+  DEFAULT_UNSUPPORTED_BOT_GATE,
+  type BotBlockReasonCode,
   type BotDailyUsage,
+  type BotGateCapability,
   type ModelSelection,
   type ProjectId,
-  type ProviderDriverKind,
   type ProviderInstanceId,
   type ServerSettings,
+  botGateUnsupportedFallbackReason,
   isBotPaused,
   isBotProject,
-  providerSupportsBotGate,
+  resolveBotApprovalsMode,
   resolveBotLimits,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as SqlClient from "effect/sql/SqlClient";
 
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+import type * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 
 export interface BotTriggerBlock {
   readonly reason: string;
+  readonly reasonCode?: BotBlockReasonCode | undefined;
   readonly allowManualRun: boolean;
+}
+
+export type BotGateResolver = (
+  instanceId: ProviderInstanceId,
+) => Effect.Effect<BotGateCapability | undefined>;
+
+export function makeBotGateResolver(
+  providerInstancesOption: Option.Option<
+    ProviderInstanceRegistry.ProviderInstanceRegistry["Service"]
+  >,
+): BotGateResolver | undefined {
+  return Option.match(providerInstancesOption, {
+    onNone: () => undefined,
+    onSome: (registry) => (instanceId) =>
+      registry.getInstance(instanceId).pipe(
+        Effect.flatMap((instance) =>
+          instance === undefined
+            ? Effect.succeed<BotGateCapability>({
+                status: "unsupported",
+                reasonCode: "provider_unavailable",
+              })
+            : instance.snapshot.getSnapshot.pipe(
+                Effect.map((snapshot) => snapshot.botGate ?? DEFAULT_UNSUPPORTED_BOT_GATE),
+              ),
+        ),
+      ),
+  });
 }
 
 /** Local midnight on the server for the given instant, converted to UTC for SQLite ISO comparisons. */
@@ -108,37 +140,52 @@ export const resolveBotTriggerBlock = Effect.fn("BotUsage.resolveTriggerBlock")(
   readonly modelSelection?: ModelSelection | null | undefined;
   readonly sql?: SqlClient.SqlClient | undefined;
   readonly now: DateTime.DateTime;
-  readonly resolveDriverKind?:
-    | ((instanceId: ProviderInstanceId) => Effect.Effect<ProviderDriverKind | undefined>)
-    | undefined;
+  readonly resolveBotGate?: BotGateResolver | undefined;
 }): Effect.fn.Return<BotTriggerBlock | undefined, never> {
   const { settings, projectId } = input;
   if (!isBotProject(settings, projectId)) return undefined;
   if (settings?.botsEnabled === false) {
-    return { reason: BOTS_DISABLED_REASON, allowManualRun: false };
+    return { reason: BOTS_DISABLED_REASON, reasonCode: "bots_disabled", allowManualRun: false };
   }
   if (isBotPaused(settings, projectId)) {
-    return { reason: BOT_PAUSED_REASON, allowManualRun: false };
+    return { reason: BOT_PAUSED_REASON, reasonCode: "paused", allowManualRun: false };
   }
 
+  const botProfile = settings?.projectSettingsOverrides[projectId]?.bot;
+  const approvals = resolveBotApprovalsMode(botProfile);
   const effectiveModel =
     input.modelSelection ?? settings?.projectSettingsOverrides[projectId]?.defaultModelSelection;
-  if (effectiveModel !== undefined && effectiveModel !== null && input.resolveDriverKind) {
-    const driverKind = yield* input.resolveDriverKind(effectiveModel.instanceId);
-    if (driverKind !== undefined && !providerSupportsBotGate(driverKind)) {
-      return { reason: BOT_UNSUPPORTED_PROVIDER_REASON, allowManualRun: false };
+  if (effectiveModel !== undefined && effectiveModel !== null && input.resolveBotGate) {
+    const capability = yield* input.resolveBotGate(effectiveModel.instanceId);
+    if (
+      capability?.status === "unsupported" &&
+      (capability.reasonCode === "provider_unavailable" || approvals !== "provider")
+    ) {
+      return {
+        reason: botGateUnsupportedFallbackReason(capability.reasonCode),
+        reasonCode: capability.reasonCode,
+        allowManualRun: false,
+      };
     }
   }
 
-  const limits = resolveBotLimits(settings?.projectSettingsOverrides[projectId]?.bot);
+  const limits = resolveBotLimits(botProfile);
   if (limits.mode === "none" || input.sql === undefined) return undefined;
 
   const usage = yield* queryBotDailyUsage(input.sql, projectId, input.now);
   if (usage.runs >= limits.runsPerDay) {
-    return { reason: BOT_DAILY_RUN_LIMIT_REASON, allowManualRun: true };
+    return {
+      reason: BOT_DAILY_RUN_LIMIT_REASON,
+      reasonCode: "daily_run_limit",
+      allowManualRun: true,
+    };
   }
   if (limits.mode === "runs_and_tokens" && usage.tokens >= limits.tokensPerDay) {
-    return { reason: BOT_DAILY_TOKEN_LIMIT_REASON, allowManualRun: true };
+    return {
+      reason: BOT_DAILY_TOKEN_LIMIT_REASON,
+      reasonCode: "daily_token_limit",
+      allowManualRun: true,
+    };
   }
   return undefined;
 });

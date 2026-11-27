@@ -68,6 +68,7 @@ export const CursorDriver: ProviderDriver<
   metadata: {
     displayName: "Cursor",
     supportsMultipleInstances: true,
+    botGate: { status: "unsupported", reasonCode: "no_approval_callback" },
   },
   configSchema: CursorSettings,
   defaultConfig: (): CursorSettings => decodeCursorSettings({}),
@@ -111,6 +112,7 @@ export const CursorDriver: ProviderDriver<
       displayName: displayName ?? "Cursor",
       accentColor,
       continuationGroupKey: continuationIdentity.continuationKey,
+      botGate: CursorDriver.metadata.botGate,
     });
     const effectiveConfig = { ...config, enabled } satisfies CursorSettings;
     const credentials = yield* CursorCredentialStore.makeCursorCredentialStore(

@@ -125,7 +125,11 @@ export const AntigravityDriver: ProviderDriver<
   AntigravityUsage.AntigravityUsage
 > = {
   driverKind: DRIVER,
-  metadata: { displayName: "Antigravity", supportsMultipleInstances: true },
+  metadata: {
+    displayName: "Antigravity",
+    supportsMultipleInstances: true,
+    botGate: { status: "supported" },
+  },
   configSchema: AntigravitySettings,
   defaultConfig: () => decodeSettings({}),
   usage: AntigravityUsage.antigravityUsageReader,
@@ -214,6 +218,7 @@ export const AntigravityDriver: ProviderDriver<
       displayName,
       accentColor,
       continuationGroupKey: continuationIdentity.continuationKey,
+      botGate: AntigravityDriver.metadata.botGate,
     });
     const classifyModels = (draft: ServerProviderDraft) =>
       currentCatalog.pipe(

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "@effect/vitest";
-import { ProviderDriverKind, providerSupportsBotGate } from "@t3tools/contracts";
+import {
+  ProviderDriverKind,
+  type BotGateCapability,
+  resolveBotGateCapability,
+} from "@t3tools/contracts";
 
 import {
   type BotActionClassification,
@@ -343,6 +347,130 @@ describe("classifyBotAction", () => {
       expected: { decision: "allow" },
     },
     {
+      name: "asks before a file change deletes via ACP prompt without structured fileChanges",
+      request: { kind: "file-change", prompt: "delete /repo/secret.txt" },
+      expected: { decision: "ask", category: "delete" },
+    },
+    {
+      name: "asks before Claude WebFetch runs",
+      request: {
+        kind: "command",
+        toolName: "WebFetch",
+        prompt: "WebFetch: https://example.com/docs",
+      },
+      expected: { decision: "ask", category: "send" },
+    },
+    {
+      name: "asks before Claude WebFetch runs even when sibling toolName is absent",
+      request: {
+        kind: "command",
+        prompt: "WebFetch: https://example.com/docs",
+      },
+      expected: { decision: "ask", category: "send" },
+    },
+    {
+      name: "asks before ACP fetch permission runs",
+      request: {
+        kind: "permission",
+        prompt: "Fetch https://example.com/docs",
+      },
+      expected: { decision: "ask", category: "send" },
+    },
+    {
+      name: "asks before Antigravity read_url_content runs",
+      request: {
+        kind: "permission",
+        toolName: "read_url_content",
+        prompt: "Read https://example.com/docs",
+      },
+      expected: { decision: "ask", category: "send" },
+    },
+    {
+      name: "asks before Grok WebFetch permission runs",
+      request: {
+        kind: "permission",
+        toolName: "WebFetch",
+        prompt: "https://example.com/docs",
+      },
+      expected: { decision: "ask", category: "send" },
+    },
+    {
+      name: "keeps pay blocking above web fetch",
+      request: {
+        kind: "permission",
+        toolName: "WebFetch",
+        prompt: "Fetch https://stripe.com/checkout",
+      },
+      expected: { decision: "block", category: "pay" },
+    },
+    {
+      name: "allows web search tools that reach the gate",
+      request: {
+        kind: "command",
+        toolName: "WebSearch",
+        prompt: "WebSearch: effect vitest docs",
+      },
+      expected: { decision: "allow" },
+    },
+    {
+      name: "allows Antigravity search_web and Grok x_search",
+      request: {
+        kind: "permission",
+        toolName: "search_web",
+        prompt: "effect vitest docs",
+      },
+      expected: { decision: "allow" },
+    },
+    {
+      name: "keeps curl GET shell command allowed",
+      request: { kind: "command", command: "curl -s https://example.com/status" },
+      expected: { decision: "allow" },
+    },
+    {
+      name: "asks before editing .gemini, .grok, antigravity-acp, .agents, or .cursor settings",
+      request: {
+        kind: "file-change",
+        toolName: "Edit",
+        fileChanges: [{ operation: "modify", path: "/home/user/.gemini/settings.json" }],
+      },
+      expected: { decision: "ask", category: "agent-settings" },
+    },
+    {
+      name: "asks before writing .grok config",
+      request: {
+        kind: "file-change",
+        toolName: "Edit",
+        fileChanges: [{ operation: "modify", path: "/home/user/.grok/settings.json" }],
+      },
+      expected: { decision: "ask", category: "agent-settings" },
+    },
+    {
+      name: "asks before writing antigravity-acp config",
+      request: {
+        kind: "command",
+        command: "cp custom.json ~/.t3/userdata/providers/antigravity/antigravity-acp/config.json",
+      },
+      expected: { decision: "ask", category: "agent-settings" },
+    },
+    {
+      name: "asks before writing .agents rules",
+      request: {
+        kind: "file-change",
+        toolName: "Edit",
+        fileChanges: [{ operation: "modify", path: "/repo/.agents/rules.md" }],
+      },
+      expected: { decision: "ask", category: "agent-settings" },
+    },
+    {
+      name: "asks before writing .cursor config",
+      request: {
+        kind: "file-change",
+        toolName: "Edit",
+        fileChanges: [{ operation: "modify", path: "/repo/.cursor/cli-config.json" }],
+      },
+      expected: { decision: "ask", category: "agent-settings" },
+    },
+    {
       name: "asks when a command request carries no command or tool name",
       request: { kind: "command" },
       expected: { decision: "ask", category: "unknown" },
@@ -378,8 +506,28 @@ describe("classifyBotAction", () => {
     expect(botHeldApprovalReason("agent-settings")).toBe("Bots ask before changing agent settings");
   });
 
-  it("fails closed on provider gate support across all 11 adapters", () => {
-    const expectations: ReadonlyArray<readonly [ProviderDriverKind, boolean]> = [
+  it("resolves explicit botGate capability and fails closed on legacy fallback or missing snapshots", () => {
+    const supported: BotGateCapability = { status: "supported" };
+    const noCallback: BotGateCapability = {
+      status: "unsupported",
+      reasonCode: "no_approval_callback",
+    };
+
+    expect(
+      resolveBotGateCapability({
+        driver: ProviderDriverKind.make("antigravity"),
+        botGate: supported,
+      }),
+    ).toEqual(supported);
+    expect(
+      resolveBotGateCapability({
+        driver: ProviderDriverKind.make("cursor"),
+        botGate: noCallback,
+      }),
+    ).toEqual(noCallback);
+
+    // Old servers omitting `botGate` fall back to the legacy Claude/Codex rule.
+    const legacyExpectations: ReadonlyArray<readonly [ProviderDriverKind, boolean]> = [
       [ProviderDriverKind.make("claudeAgent"), true],
       [ProviderDriverKind.make("codex"), true],
       [ProviderDriverKind.make("cursor"), false],
@@ -392,10 +540,24 @@ describe("classifyBotAction", () => {
       [ProviderDriverKind.make("muse"), false],
       [ProviderDriverKind.make("acpRegistry"), false],
     ];
-    for (const [driver, expected] of expectations) {
-      expect(providerSupportsBotGate(driver)).toBe(expected);
+    for (const [driver, expected] of legacyExpectations) {
+      const capability = resolveBotGateCapability({ driver });
+      expect(capability.status === "supported").toBe(expected);
+      if (!expected) {
+        expect(capability).toEqual({
+          status: "unsupported",
+          reasonCode: "unverified_third_party_acp",
+        });
+      }
     }
-    expect(providerSupportsBotGate(undefined)).toBe(false);
-    expect(providerSupportsBotGate(null)).toBe(false);
+
+    expect(resolveBotGateCapability(undefined)).toEqual({
+      status: "unsupported",
+      reasonCode: "provider_unavailable",
+    });
+    expect(resolveBotGateCapability(null)).toEqual({
+      status: "unsupported",
+      reasonCode: "provider_unavailable",
+    });
   });
 });

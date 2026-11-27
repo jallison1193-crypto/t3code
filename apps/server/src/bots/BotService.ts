@@ -17,7 +17,8 @@ import {
   type ServerSettings,
   isBotPaused,
   isBotProject,
-  providerSupportsBotGate,
+  resolveBotApprovalsMode,
+  resolveBotGateCapability,
   resolveBotLimits,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -36,7 +37,12 @@ import * as ProjectService from "../project/ProjectService.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as ServerSettingsService from "../serverSettings.ts";
-import { localDayStartUtc, queryBotDailyUsage, resolveBotTriggerBlock } from "./botUsage.ts";
+import {
+  localDayStartUtc,
+  makeBotGateResolver,
+  queryBotDailyUsage,
+  resolveBotTriggerBlock,
+} from "./botUsage.ts";
 
 const SINGLE_LINE_BOT_NAME = /^[^\r\n\v\f\u0085\u2028\u2029]+$/u;
 const MAX_BOT_NAME_LENGTH = 120;
@@ -92,6 +98,7 @@ function toBotRecord(project: Project, settings: ServerSettings): BotRecord {
       runsPerDay: resolvedLimits.runsPerDay,
       tokensPerDay: resolvedLimits.tokensPerDay,
     },
+    approvals: resolveBotApprovalsMode(overrides?.bot),
     workspaceRoot: project.workspaceRoot,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
@@ -127,11 +134,7 @@ const make = Effect.gen(function* () {
   );
   const localNow = DateTime.withCurrentZoneLocal(DateTime.nowInCurrentZone);
 
-  const resolveDriverKind = Option.match(providerInstancesOption, {
-    onNone: () => undefined,
-    onSome: (registry) => (instanceId: Parameters<typeof registry.getInstance>[0]) =>
-      registry.getInstance(instanceId).pipe(Effect.map((instance) => instance?.driverKind)),
-  });
+  const resolveBotGate = makeBotGateResolver(providerInstancesOption);
 
   const readSettings = (
     operation: "list" | "get" | "getUsage" | "create" | "update" | "delete" | "run",
@@ -220,21 +223,20 @@ const make = Effect.gen(function* () {
     return toBotRecord(project, settings);
   });
 
-  const resolveBlockReason = Effect.fn("BotService.resolveBlockReason")(function* (
+  const resolveBlock = Effect.fn("BotService.resolveBlock")(function* (
     projectId: ProjectId,
     settings: ServerSettings | undefined,
     modelSelection?: ModelSelection,
   ) {
     const now = yield* localNow;
-    const block = yield* resolveBotTriggerBlock({
+    return yield* resolveBotTriggerBlock({
       settings,
       projectId,
       modelSelection,
       sql: Option.getOrUndefined(sqlOption),
       now,
-      resolveDriverKind,
+      resolveBotGate,
     });
-    return block?.reason;
   });
 
   const triggerBlock: BotService["Service"]["triggerBlock"] = Effect.fn("BotService.triggerBlock")(
@@ -242,7 +244,7 @@ const make = Effect.gen(function* () {
       const settings = yield* serverSettings.getSettings.pipe(
         Effect.orElseSucceed(() => undefined),
       );
-      return yield* resolveBlockReason(projectId, settings);
+      return (yield* resolveBlock(projectId, settings))?.reason;
     },
   );
 
@@ -259,7 +261,7 @@ const make = Effect.gen(function* () {
             tokens: 0,
             dayStartAt: DateTime.formatIso(localDayStartUtc(now)),
           };
-      const blockedByPolicy = yield* resolveBlockReason(projectId, settings);
+      const block = yield* resolveBlock(projectId, settings);
       return {
         projectId,
         limits: {
@@ -268,7 +270,12 @@ const make = Effect.gen(function* () {
           tokensPerDay: resolvedLimits.tokensPerDay,
         },
         usage,
-        ...(blockedByPolicy === undefined ? {} : { blockedByPolicy }),
+        ...(block === undefined
+          ? {}
+          : {
+              blockedByPolicy: block.reason,
+              ...(block.reasonCode === undefined ? {} : { blockedReasonCode: block.reasonCode }),
+            }),
       };
     },
   );
@@ -339,23 +346,32 @@ const make = Effect.gen(function* () {
       .pipe(Effect.orElseSucceed(() => createdProject));
 
     const effectiveLimits = input.limits ?? settings.botDefaults?.limits;
-    const botProfile: BotProfile =
-      effectiveLimits === undefined ? {} : { limits: normalizeBotLimits(effectiveLimits) };
+    const effectiveApprovals = input.approvals ?? "t3_gate";
+    const botProfile: BotProfile = {
+      ...(effectiveLimits === undefined ? {} : { limits: normalizeBotLimits(effectiveLimits) }),
+      ...(effectiveApprovals === "provider" ? { approvals: "provider" } : {}),
+    };
 
     let effectiveModelSelection: ModelSelection | null = null;
     if (input.modelSelection !== undefined) {
       effectiveModelSelection = input.modelSelection;
     } else if (settings.botDefaults?.modelSelection !== undefined) {
       const defaultModel = settings.botDefaults.modelSelection;
-      const registryDriver =
-        resolveDriverKind !== undefined
-          ? yield* resolveDriverKind(defaultModel.instanceId)
-          : undefined;
-      const driverKind =
-        registryDriver ??
-        settings.providerInstances[defaultModel.instanceId]?.driver ??
-        defaultModel.instanceId;
-      if (providerSupportsBotGate(driverKind)) {
+      const capability =
+        resolveBotGate !== undefined
+          ? yield* resolveBotGate(defaultModel.instanceId)
+          : resolveBotGateCapability({
+              driver:
+                settings.providerInstances[defaultModel.instanceId]?.driver ??
+                defaultModel.instanceId,
+            });
+      if (
+        capability?.status === "supported" ||
+        (effectiveApprovals === "provider" &&
+          (capability === undefined ||
+            capability.status !== "unsupported" ||
+            capability.reasonCode !== "provider_unavailable"))
+      ) {
         effectiveModelSelection = defaultModel;
       }
     }
@@ -434,7 +450,8 @@ const make = Effect.gen(function* () {
       input.goal !== undefined ||
       input.modelSelection !== undefined ||
       input.paused !== undefined ||
-      input.limits !== undefined
+      input.limits !== undefined ||
+      input.approvals !== undefined
     ) {
       const latest = yield* readSettings("update", input.projectId);
       const currentOverride = latest.projectSettingsOverrides[input.projectId] ?? { bot: {} };
@@ -450,9 +467,11 @@ const make = Effect.gen(function* () {
       const nextPaused = input.paused === undefined ? currentBot?.paused : input.paused;
       const nextLimits =
         input.limits === undefined ? currentBot?.limits : normalizeBotLimits(input.limits);
+      const nextApprovals = input.approvals === undefined ? currentBot?.approvals : input.approvals;
       const nextBot: BotProfile = {
         ...(nextPaused === true ? { paused: true } : {}),
         ...(nextLimits === undefined ? {} : { limits: nextLimits }),
+        ...(nextApprovals === "provider" ? { approvals: "provider" } : {}),
       };
 
       const nextOverride: ProjectSettingsOverrides = {
@@ -619,7 +638,7 @@ const make = Effect.gen(function* () {
       settings.projectSettingsOverrides[projectId]?.defaultModelSelection ??
       settings.defaultModelSelection ??
       input.fallbackModelSelection;
-    const blockedReason = yield* resolveBlockReason(projectId, settings, modelSelection);
+    const blockedReason = (yield* resolveBlock(projectId, settings, modelSelection))?.reason;
     if (blockedReason !== undefined) {
       return yield* new BotOperationError({
         operation: "run",

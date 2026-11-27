@@ -1614,21 +1614,91 @@ function trimCitationUrl(raw: string): string {
   }
 }
 
-function providerRequestKind(kind: string | "unknown"): ProviderRequestKind {
+function providerRequestKind(
+  kind: string | "unknown",
+  toolCall?: AcpToolCallState,
+): ProviderRequestKind {
+  if (toolCall !== undefined && extractMcpToolCallIdentity(toolCall) !== undefined) {
+    return "permission";
+  }
   switch (kind) {
     case "execute":
       return "command";
     case "read":
     case "search":
-    case "fetch":
       return "file-read";
+    case "fetch":
+      return "permission";
     case "edit":
     case "delete":
     case "move":
       return "file-change";
     default:
-      return "command";
+      return toolCall?.command !== undefined ? "command" : "permission";
   }
+}
+
+const ACP_DELETE_PROMPT_PREFIX = /^(?:delete|remove)\s+\S/i;
+const ACP_WEB_FETCH_PROMPT_PREFIX =
+  /^(?:run(?:ning)?\s+)?(?:web[_\s-]?fetch|read[_\s-]?url[_\s-]?content|fetch)(?:\s|:|\?|$)/i;
+
+function acpApprovalPrompt(
+  parsed: ReturnType<typeof parsePermissionRequest>,
+  params: EffectAcpSchema.RequestPermissionRequest,
+): string | undefined {
+  if (parsed.kind === "delete") {
+    const changed = acpChangedPathsOfToolCall(params.toolCall);
+    const paths =
+      Array.isArray(changed) && changed.length > 0
+        ? changed
+        : parsed.toolCall !== undefined
+          ? [pathFromToolCall(parsed.toolCall)].filter(
+              (candidate): candidate is string => candidate !== undefined,
+            )
+          : [];
+    const detail = parsed.detail?.trim();
+    if (paths.length > 0) {
+      if (
+        detail !== undefined &&
+        ACP_DELETE_PROMPT_PREFIX.test(detail) &&
+        paths.every((target) => detail.includes(target))
+      ) {
+        return parsed.detail;
+      }
+      return paths.map((target) => `delete ${target}`).join("\n");
+    }
+    if (detail !== undefined && detail.length > 0) {
+      return ACP_DELETE_PROMPT_PREFIX.test(detail) ? parsed.detail : `delete ${detail}`;
+    }
+    return "delete file";
+  }
+  if (parsed.kind === "edit" || parsed.kind === "move") {
+    const changed = acpChangedPathsOfToolCall(params.toolCall);
+    const paths =
+      Array.isArray(changed) && changed.length > 0
+        ? changed
+        : parsed.toolCall !== undefined
+          ? [pathFromToolCall(parsed.toolCall)].filter(
+              (candidate): candidate is string => candidate !== undefined,
+            )
+          : [];
+    const detail = parsed.detail?.trim();
+    if (paths.length > 0) {
+      if (detail !== undefined && paths.every((target) => detail.includes(target))) {
+        return parsed.detail;
+      }
+      return paths.join("\n");
+    }
+  }
+  if (parsed.kind === "fetch") {
+    const detail = parsed.detail?.trim();
+    if (detail !== undefined && detail.length > 0) {
+      return ACP_WEB_FETCH_PROMPT_PREFIX.test(detail) ? parsed.detail : `Fetch ${detail}`;
+    }
+    const target = parsed.toolCall === undefined ? undefined : pathFromToolCall(parsed.toolCall);
+    return target !== undefined ? `Fetch ${target}` : "Fetch URL";
+  }
+  return parsed.detail;
 }
 
 function toolStatus(
@@ -6653,7 +6723,8 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
           transportRequestId: string,
         ) {
           yield* closeTextStreams(context);
-          const parsed = parsePermissionRequest(params);
+          const parsed = parsePermissionRequest(params, flavor.normalizeToolCall);
+          const approvalPrompt = acpApprovalPrompt(parsed, params);
           const approvalOptions = flavor.approvalOptions?.(params);
           const nativeRequestId = params.toolCall.toolCallId;
           const requestId = yield* idAllocator.allocate.runtimeRequest({
@@ -6673,7 +6744,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
           );
           const now = yield* DateTime.now;
           const nodeId = idAllocator.derive.approvalNode({ requestId });
-          const requestKind = providerRequestKind(parsed.kind);
+          const requestKind = providerRequestKind(parsed.kind, parsed.toolCall);
           const nativeItemRef = { driver, nativeId: nativeRequestId, strength: "weak" as const };
           const ordinal = yield* resolveItemOrdinal(
             context,
@@ -6728,7 +6799,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
             type: "approval_request",
             requestId,
             requestKind,
-            ...(parsed.detail === undefined ? {} : { prompt: parsed.detail }),
+            ...(approvalPrompt === undefined ? {} : { prompt: approvalPrompt }),
             ...(approvalOptions === undefined ? {} : { options: approvalOptions }),
           };
           yield* Ref.update(pendingRuntimeRequests, (current) => {
@@ -7771,7 +7842,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
                 requestId,
                 transportRequestId: pendingTransportRequestId,
               } = admitted.value.pending;
-              const parsedPermission = parsePermissionRequest(params);
+              const parsedPermission = parsePermissionRequest(params, flavor.normalizeToolCall);
               const answered = yield* Deferred.await(pendingDecision).pipe(
                 Effect.ensuring(
                   runRuntimeCallbackAtGeneration(

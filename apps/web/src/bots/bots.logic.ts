@@ -5,12 +5,17 @@ import {
   BOT_UNSUPPORTED_PROVIDER_REASON,
   BOTS_DISABLED_REASON,
   DEFAULT_MODEL_BY_PROVIDER,
+  botGateUnsupportedFallbackReason,
   isBotPaused,
   isBotProject,
   isListedThreadLineage,
-  providerSupportsBotGate,
+  resolveBotGateCapability,
   resolveSidebarModeFilter,
+  type BotApprovalsMode,
+  type BotBlockReasonCode,
   type BotDailyUsage,
+  type BotGateCapability,
+  type BotGateUnsupportedReasonCode,
   type EnvironmentId,
   type ModelSelection,
   type ProjectId,
@@ -211,13 +216,31 @@ export interface BotEffectiveModelResolution {
   readonly selection: ModelSelection | null;
   readonly source: "bot" | "default" | "fallback" | "none";
   readonly driverKind: ProviderDriverKind | null;
+  readonly gateCapability: BotGateCapability;
   readonly unsupported: boolean;
+}
+
+export function isBotEntryGateSupported(entry: ProviderInstanceEntry): boolean {
+  return resolveBotGateCapability(entry.snapshot).status === "supported";
+}
+
+export function getBotModelDisabledReason(
+  entry: ProviderInstanceEntry | undefined,
+  approvals: BotApprovalsMode = "t3_gate",
+  resolve: (message: string) => string = m,
+): string | null {
+  if (approvals === "provider" || entry === undefined) return null;
+  const capability = resolveBotGateCapability(entry.snapshot);
+  return capability.status === "unsupported"
+    ? formatBotGateUnsupportedReason(capability.reasonCode, resolve)
+    : null;
 }
 
 export function resolveBotEffectiveModelSelection(input: {
   readonly botModelSelection: ModelSelection | null | undefined;
   readonly environmentDefaultModelSelection: ModelSelection | null | undefined;
   readonly instanceEntries: ReadonlyArray<ProviderInstanceEntry>;
+  readonly approvals?: BotApprovalsMode | undefined;
 }): BotEffectiveModelResolution {
   let selection: ModelSelection | null = null;
   let source: BotEffectiveModelResolution["source"] = "none";
@@ -249,9 +272,12 @@ export function resolveBotEffectiveModelSelection(input: {
       ? input.instanceEntries.find((candidate) => candidate.instanceId === selection.instanceId)
       : undefined;
   const driverKind = entry?.driverKind ?? null;
-  const unsupported = entry !== undefined && !providerSupportsBotGate(entry.driverKind);
+  const gateCapability = resolveBotGateCapability(entry?.snapshot);
+  const approvals = input.approvals ?? "t3_gate";
+  const unsupported =
+    entry !== undefined && approvals !== "provider" && gateCapability.status === "unsupported";
 
-  return { selection, source, driverKind, unsupported };
+  return { selection, source, driverKind, gateCapability, unsupported };
 }
 
 export function resolveFirstSupportedBotModelSelection(
@@ -269,10 +295,10 @@ export function resolveFirstSupportedBotModelSelection(
       entry.installed &&
       entry.isAvailable &&
       entry.snapshot.auth.status !== "unauthenticated" &&
-      providerSupportsBotGate(entry.driverKind),
+      isBotEntryGateSupported(entry),
   );
   const fallbackSupported = instanceEntries.filter(
-    (entry) => entry.enabled && entry.isAvailable && providerSupportsBotGate(entry.driverKind),
+    (entry) => entry.enabled && entry.isAvailable && isBotEntryGateSupported(entry),
   );
   const pool = readySupported.length > 0 ? readySupported : fallbackSupported;
   if (pool.length === 0) return null;
@@ -385,20 +411,66 @@ export function resolveBotRouteSidebarMode(input: {
   return resolveSidebarModeFilter(input.savedMode, input.botsEnabled);
 }
 
-const BOT_BLOCK_REASON_LABELS: Readonly<Record<string, string>> = {
-  [BOTS_DISABLED_REASON]: msg("Bots are turned off in Settings"),
-  [BOT_PAUSED_REASON]: msg("This bot is paused"),
-  [BOT_DAILY_RUN_LIMIT_REASON]: msg("Daily run limit reached"),
-  [BOT_DAILY_TOKEN_LIMIT_REASON]: msg("Daily token limit reached"),
-  [BOT_UNSUPPORTED_PROVIDER_REASON]: msg(
-    "Bots can only use Claude or Codex models. Pick one of those.",
+const BOT_GATE_UNSUPPORTED_REASON_LABELS: Readonly<Record<BotGateUnsupportedReasonCode, string>> = {
+  no_approval_callback: msg(
+    "This provider does not support interactive tool approvals for T3's bot safety gate.",
   ),
+  ungated_mcp_or_tools: msg(
+    "This provider can run some tools or MCP calls without T3's bot safety gate.",
+  ),
+  unisolated_user_rules: msg(
+    "This provider can apply user or workspace rules that bypass T3's bot safety gate.",
+  ),
+  opaque_subagents_or_mcp: msg(
+    "This provider runs subagents or profile MCP servers outside T3's bot safety gate.",
+  ),
+  unverified_third_party_acp: msg("This provider has not been verified for T3's bot safety gate."),
+  provider_unavailable: msg("This bot's provider is not available."),
+};
+
+export function formatBotGateUnsupportedReason(
+  reasonCode: BotGateUnsupportedReasonCode,
+  resolve: (message: string) => string = m,
+): string {
+  return resolve(BOT_GATE_UNSUPPORTED_REASON_LABELS[reasonCode]);
+}
+
+const BOT_BLOCK_REASON_CODE_LABELS: Readonly<Record<BotBlockReasonCode, string>> = {
+  bots_disabled: msg("Bots are turned off in Settings"),
+  paused: msg("This bot is paused"),
+  daily_run_limit: msg("Daily run limit reached"),
+  daily_token_limit: msg("Daily token limit reached"),
+  ...BOT_GATE_UNSUPPORTED_REASON_LABELS,
+};
+
+const BOT_BLOCK_REASON_LABELS: Readonly<Record<string, string>> = {
+  [BOTS_DISABLED_REASON]: BOT_BLOCK_REASON_CODE_LABELS.bots_disabled,
+  [BOT_PAUSED_REASON]: BOT_BLOCK_REASON_CODE_LABELS.paused,
+  [BOT_DAILY_RUN_LIMIT_REASON]: BOT_BLOCK_REASON_CODE_LABELS.daily_run_limit,
+  [BOT_DAILY_TOKEN_LIMIT_REASON]: BOT_BLOCK_REASON_CODE_LABELS.daily_token_limit,
+  [BOT_UNSUPPORTED_PROVIDER_REASON]: msg("This provider is not supported for bots."),
+  [botGateUnsupportedFallbackReason("no_approval_callback")]:
+    BOT_GATE_UNSUPPORTED_REASON_LABELS.no_approval_callback,
+  [botGateUnsupportedFallbackReason("ungated_mcp_or_tools")]:
+    BOT_GATE_UNSUPPORTED_REASON_LABELS.ungated_mcp_or_tools,
+  [botGateUnsupportedFallbackReason("unisolated_user_rules")]:
+    BOT_GATE_UNSUPPORTED_REASON_LABELS.unisolated_user_rules,
+  [botGateUnsupportedFallbackReason("opaque_subagents_or_mcp")]:
+    BOT_GATE_UNSUPPORTED_REASON_LABELS.opaque_subagents_or_mcp,
+  [botGateUnsupportedFallbackReason("unverified_third_party_acp")]:
+    BOT_GATE_UNSUPPORTED_REASON_LABELS.unverified_third_party_acp,
+  [botGateUnsupportedFallbackReason("provider_unavailable")]:
+    BOT_GATE_UNSUPPORTED_REASON_LABELS.provider_unavailable,
 };
 
 export function formatBotBlockReason(
   reason: string,
   resolve: (message: string) => string = m,
+  reasonCode?: BotBlockReasonCode | undefined,
 ): string {
+  if (reasonCode !== undefined && Object.hasOwn(BOT_BLOCK_REASON_CODE_LABELS, reasonCode)) {
+    return resolve(BOT_BLOCK_REASON_CODE_LABELS[reasonCode]);
+  }
   if (!Object.hasOwn(BOT_BLOCK_REASON_LABELS, reason)) return reason;
   const label = BOT_BLOCK_REASON_LABELS[reason];
   return label === undefined ? reason : resolve(label);
@@ -419,13 +491,14 @@ export function resolveBotListStatus(
     readonly botsEnabled: boolean;
     readonly paused: boolean;
     readonly blockedByPolicy: string | undefined;
+    readonly blockedReasonCode?: BotBlockReasonCode | undefined;
   },
   resolve: (message: string) => string = m,
 ): BotListStatus {
   if (!input.botsEnabled) {
     return {
       kind: "blocked",
-      label: formatBotBlockReason(BOTS_DISABLED_REASON, resolve),
+      label: formatBotBlockReason(BOTS_DISABLED_REASON, resolve, "bots_disabled"),
     };
   }
   if (input.paused) {
@@ -441,7 +514,7 @@ export function resolveBotListStatus(
   ) {
     return {
       kind: "blocked",
-      label: formatBotBlockReason(input.blockedByPolicy, resolve),
+      label: formatBotBlockReason(input.blockedByPolicy, resolve, input.blockedReasonCode),
     };
   }
   return {

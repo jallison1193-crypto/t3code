@@ -9,6 +9,7 @@ export interface AcpRuntimePolicy {
   readonly cwd: string | null;
   readonly approvalPolicy?: unknown;
   readonly sandboxPolicy?: unknown;
+  readonly gateAllMcpTools?: boolean | undefined;
   readonly workspace?: { readonly extraRoots: ReadonlyArray<string> } | undefined;
 }
 
@@ -259,10 +260,10 @@ function acpOperationDisposition(
   operation: AcpPolicyOperation,
 ): AcpPermissionDisposition {
   const toolKind = operation.kind ?? "other";
-  if (isAcpReadKind(toolKind)) {
+  if (runtimePolicy.gateAllMcpTools !== true && isAcpReadKind(toolKind)) {
     return acpReadDisposition(runtimePolicy);
   }
-  if (acpPolicyRequiresApproval(runtimePolicy)) {
+  if (acpPolicyRequiresApproval(runtimePolicy) || runtimePolicy.gateAllMcpTools === true) {
     return "ask";
   }
 
@@ -328,8 +329,10 @@ export function acpMcpToolApprovalElicitationDisposition(
   ) {
     return undefined;
   }
-  // T3's authenticated MCP endpoint enforces scope; only explicit approval mode needs a user prompt.
-  return acpPolicyRequiresApproval(runtimePolicy) ? "ask" : "allow";
+  // T3's authenticated MCP endpoint enforces scope; only explicit approval mode or bot gating needs a prompt.
+  return acpPolicyRequiresApproval(runtimePolicy) || runtimePolicy.gateAllMcpTools === true
+    ? "ask"
+    : "allow";
 }
 
 export function acpClientExecuteDisposition(

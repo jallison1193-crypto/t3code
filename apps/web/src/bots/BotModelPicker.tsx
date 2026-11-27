@@ -1,14 +1,14 @@
 import { useAtomValue } from "@effect/atom-react";
 import {
+  type BotApprovalsMode,
   type EnvironmentId,
   type ModelSelection,
   type ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
-  providerSupportsBotGate,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
-import { T, useGT } from "gt-react";
+import { T, useGT, useMessages } from "gt-react";
 
 import { ProviderModelPicker } from "~/components/chat/ProviderModelPicker";
 import { TraitsPicker } from "~/components/chat/TraitsPicker";
@@ -18,12 +18,18 @@ import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { getCustomModelOptionsByInstance } from "~/modelSelection";
 import { providerInstanceEntriesFor } from "~/providerInstances";
 import { EMPTY_SERVER_PROVIDERS, serverEnvironment } from "~/state/server";
-import { resolveBotEffectiveModelSelection } from "./bots.logic";
+import {
+  formatBotGateUnsupportedReason,
+  getBotModelDisabledReason,
+  isBotEntryGateSupported,
+  resolveBotEffectiveModelSelection,
+} from "./bots.logic";
 
 export function BotModelPicker({
   environmentId,
   projectId,
   value,
+  approvals = "t3_gate",
   disabled = false,
   emptyLabel,
   showClearButton = true,
@@ -33,6 +39,7 @@ export function BotModelPicker({
   readonly environmentId: EnvironmentId;
   readonly projectId: ProjectId | null;
   readonly value: ModelSelection | null;
+  readonly approvals?: BotApprovalsMode;
   readonly disabled?: boolean;
   readonly emptyLabel?: string;
   readonly showClearButton?: boolean;
@@ -40,15 +47,17 @@ export function BotModelPicker({
   readonly onChange: (next: ModelSelection | null) => void;
 }) {
   const gt = useGT();
+  const messages = useMessages();
   const settings = useEnvironmentSettings(environmentId);
   const providers =
     useAtomValue(serverEnvironment.providersValueAtom(environmentId)) ?? EMPTY_SERVER_PROVIDERS;
   const instanceEntries = providerInstanceEntriesFor(providers, settings, projectId);
   const defaultFallbackEntry =
-    instanceEntries.find(
-      (entry) => entry.enabled && entry.isAvailable && providerSupportsBotGate(entry.driverKind),
-    ) ??
-    instanceEntries.find((entry) => entry.enabled && providerSupportsBotGate(entry.driverKind)) ??
+    (approvals === "provider"
+      ? instanceEntries.find((entry) => entry.enabled && entry.isAvailable)
+      : (instanceEntries.find(
+          (entry) => entry.enabled && entry.isAvailable && isBotEntryGateSupported(entry),
+        ) ?? instanceEntries.find((entry) => entry.enabled && isBotEntryGateSupported(entry)))) ??
     instanceEntries.find((entry) => entry.enabled) ??
     instanceEntries[0];
   const activeInstanceId =
@@ -67,16 +76,20 @@ export function BotModelPicker({
     botModelSelection: value,
     environmentDefaultModelSelection: settings.defaultModelSelection,
     instanceEntries,
+    approvals,
   });
   const showUnsupportedWarning =
     effectiveModel.unsupported && (value !== null || warnOnInheritedUnsupported);
-  const unsupportedReason = gt("Not supported for bots yet. Pick Claude or Codex.");
+  const unsupportedWarningText =
+    effectiveModel.gateCapability.status === "unsupported"
+      ? formatBotGateUnsupportedReason(effectiveModel.gateCapability.reasonCode, messages)
+      : null;
 
   return (
     <div className="space-y-1.5">
-      {showUnsupportedWarning ? (
+      {showUnsupportedWarning && unsupportedWarningText !== null ? (
         <p className="text-xs text-warning" role="status">
-          <T>Bots run only on Claude or Codex. Pick a model below.</T>
+          {unsupportedWarningText}
         </p>
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
@@ -91,9 +104,7 @@ export function BotModelPicker({
           isComposerOwned={false}
           getModelDisabledReason={(instanceId) => {
             const entry = instanceEntries.find((candidate) => candidate.instanceId === instanceId);
-            return entry !== undefined && !providerSupportsBotGate(entry.driverKind)
-              ? unsupportedReason
-              : null;
+            return getBotModelDisabledReason(entry, approvals, messages);
           }}
           {...(value === null ? { triggerLabel: emptyLabel ?? gt("Default model") } : {})}
           triggerAriaLabel={gt("Bot model")}

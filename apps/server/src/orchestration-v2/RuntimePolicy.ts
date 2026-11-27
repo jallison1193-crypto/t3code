@@ -1,5 +1,7 @@
 import {
-  BOT_UNSUPPORTED_PROVIDER_REASON,
+  BotGateUnsupportedReasonCode,
+  botGateUnsupportedFallbackReason,
+  DEFAULT_UNSUPPORTED_BOT_GATE,
   isBotProject,
   isRuntimeModeAbove,
   managedRuntimeModeCeilingMessage,
@@ -8,7 +10,7 @@ import {
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
-  providerSupportsBotGate,
+  resolveBotApprovalsMode,
   RuntimeMode,
   ThreadId,
 } from "@t3tools/contracts";
@@ -69,10 +71,11 @@ export class RuntimePolicyBotProviderUnsupportedError extends Schema.TaggedError
     projectId: ProjectId,
     providerInstanceId: ProviderInstanceId,
     driverKind: Schema.optionalKey(ProviderDriverKind),
+    reasonCode: BotGateUnsupportedReasonCode,
   },
 ) {
   override get message(): string {
-    return BOT_UNSUPPORTED_PROVIDER_REASON;
+    return botGateUnsupportedFallbackReason(this.reasonCode);
   }
 }
 
@@ -179,19 +182,34 @@ export const layerFromProjectStore: Layer.Layer<
           Effect.orElseSucceed(() => undefined),
         );
         const isBot = isBotProject(settings, input.thread.projectId);
+        const botApprovals = resolveBotApprovalsMode(
+          settings?.projectSettingsOverrides[input.thread.projectId]?.bot,
+        );
         const instance = yield* providerInstances.getInstance(input.modelSelection.instanceId);
-        if (isBot && (instance === undefined || !providerSupportsBotGate(instance.driverKind))) {
-          return yield* new RuntimePolicyBotProviderUnsupportedError({
-            threadId: input.thread.id,
-            projectId: input.thread.projectId,
-            providerInstanceId: input.modelSelection.instanceId,
-            ...(instance === undefined ? {} : { driverKind: instance.driverKind }),
-          });
+        const snapshot = instance === undefined ? undefined : yield* instance.snapshot.getSnapshot;
+        if (isBot) {
+          if (instance === undefined) {
+            return yield* new RuntimePolicyBotProviderUnsupportedError({
+              threadId: input.thread.id,
+              projectId: input.thread.projectId,
+              providerInstanceId: input.modelSelection.instanceId,
+              reasonCode: "provider_unavailable",
+            });
+          }
+          if (botApprovals !== "provider") {
+            const botGate = snapshot?.botGate ?? DEFAULT_UNSUPPORTED_BOT_GATE;
+            if (botGate.status === "unsupported") {
+              return yield* new RuntimePolicyBotProviderUnsupportedError({
+                threadId: input.thread.id,
+                projectId: input.thread.projectId,
+                providerInstanceId: input.modelSelection.instanceId,
+                driverKind: instance.driverKind,
+                reasonCode: botGate.reasonCode,
+              });
+            }
+          }
         }
-        const supportedRuntimeModes =
-          instance === undefined
-            ? undefined
-            : (yield* instance.snapshot.getSnapshot).supportedRuntimeModes;
+        const supportedRuntimeModes = snapshot?.supportedRuntimeModes;
         const cwd =
           input.thread.worktreePath ??
           (yield* projects.get(input.thread.projectId).pipe(

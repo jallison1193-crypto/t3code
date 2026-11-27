@@ -69,6 +69,7 @@ export const KiroDriver: ProviderDriver<KiroSettings, KiroDriverEnv> = {
   metadata: {
     displayName: "Kiro",
     supportsMultipleInstances: true,
+    botGate: { status: "unsupported", reasonCode: "unisolated_user_rules" },
   },
   configSchema: KiroSettings,
   defaultConfig: (): KiroSettings => decodeKiroSettings({}),
@@ -96,6 +97,7 @@ export const KiroDriver: ProviderDriver<KiroSettings, KiroDriverEnv> = {
       displayName,
       accentColor,
       continuationGroupKey: continuationIdentity.continuationKey,
+      botGate: KiroDriver.metadata.botGate,
     });
     const effectiveConfig = {
       ...config,

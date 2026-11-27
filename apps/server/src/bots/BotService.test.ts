@@ -5,12 +5,11 @@ import {
   BOT_DAILY_RUN_LIMIT_REASON,
   BOT_DAILY_TOKEN_LIMIT_REASON,
   BOT_PAUSED_REASON,
-  BOT_UNSUPPORTED_PROVIDER_REASON,
   BOTS_DISABLED_REASON,
+  botGateUnsupportedFallbackReason,
   BotProfile,
   DEFAULT_BOT_LIMITS,
   ProjectId,
-  ProviderDriverKind,
   ProviderInstanceId,
   resolveBotLimits,
   ScheduledTaskId,
@@ -492,7 +491,7 @@ describe("BotService", () => {
         yield* settings.updateSettings({ botsEnabled: true });
         expect(launches).toHaveLength(2);
 
-        // Unsupported provider blocks triggers before limits.
+        // Unsupported provider blocks triggers before limits with structured reasonCode.
         const currentSettings = yield* settings.getSettings;
         const unsupportedBlock = yield* resolveBotTriggerBlock({
           settings: currentSettings,
@@ -500,10 +499,76 @@ describe("BotService", () => {
           modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "cursor-fast" },
           sql,
           now,
-          resolveDriverKind: () => Effect.succeed(ProviderDriverKind.make("cursor")),
+          resolveBotGate: () =>
+            Effect.succeed({ status: "unsupported", reasonCode: "no_approval_callback" }),
         });
         expect(unsupportedBlock).toEqual({
-          reason: BOT_UNSUPPORTED_PROVIDER_REASON,
+          reason: botGateUnsupportedFallbackReason("no_approval_callback"),
+          reasonCode: "no_approval_callback",
+          allowManualRun: false,
+        });
+
+        // Round-trips per-bot approvals mode and lifts only the provider-support block.
+        expect(created.approvals).toBe("t3_gate");
+        const cursorModel = {
+          instanceId: ProviderInstanceId.make("cursor"),
+          model: "cursor-fast",
+        };
+        const updatedToProvider = yield* service.update({
+          projectId: created.projectId,
+          modelSelection: cursorModel,
+          approvals: "provider",
+        });
+        expect(updatedToProvider.approvals).toBe("provider");
+        expect((yield* service.get(created.projectId)).approvals).toBe("provider");
+
+        const providerSettings = yield* settings.getSettings;
+        const unblockedWithProvider = yield* resolveBotTriggerBlock({
+          settings: providerSettings,
+          projectId: created.projectId,
+          modelSelection: cursorModel,
+          sql,
+          now,
+          resolveBotGate: () =>
+            Effect.succeed({ status: "unsupported", reasonCode: "no_approval_callback" }),
+        });
+        expect(unblockedWithProvider).toBeUndefined();
+
+        // Missing provider instance still fails closed even in provider approvals mode.
+        const missingWithProvider = yield* resolveBotTriggerBlock({
+          settings: providerSettings,
+          projectId: created.projectId,
+          modelSelection: cursorModel,
+          sql,
+          now,
+          resolveBotGate: () =>
+            Effect.succeed({ status: "unsupported", reasonCode: "provider_unavailable" }),
+        });
+        expect(missingWithProvider).toEqual({
+          reason: botGateUnsupportedFallbackReason("provider_unavailable"),
+          reasonCode: "provider_unavailable",
+          allowManualRun: false,
+        });
+
+        // Switching back to t3_gate keeps Cursor stored and blocks running until a supported model is picked.
+        const switchedBack = yield* service.update({
+          projectId: created.projectId,
+          approvals: "t3_gate",
+        });
+        expect(switchedBack.approvals).toBe("t3_gate");
+        expect(switchedBack.modelSelection).toEqual(cursorModel);
+        const reblocked = yield* resolveBotTriggerBlock({
+          settings: yield* settings.getSettings,
+          projectId: created.projectId,
+          modelSelection: cursorModel,
+          sql,
+          now,
+          resolveBotGate: () =>
+            Effect.succeed({ status: "unsupported", reasonCode: "no_approval_callback" }),
+        });
+        expect(reblocked).toEqual({
+          reason: botGateUnsupportedFallbackReason("no_approval_callback"),
+          reasonCode: "no_approval_callback",
           allowManualRun: false,
         });
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

@@ -54,6 +54,7 @@ export const makeManagedCodexProvider = Effect.fn("makeManagedCodexProvider")(fu
     displayName,
     accentColor,
     continuationGroupKey: continuationIdentity.continuationKey,
+    botGate: { status: "supported" },
   });
   const setup = { canAuthenticate: true, canInstall: true };
   const runtimePaths = {

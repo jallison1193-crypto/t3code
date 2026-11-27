@@ -1,5 +1,6 @@
 // Context tags are runtime singletons; drivers need multiple instances.
 import type {
+  BotGateCapability,
   ProviderConsumeResetCreditOutcome,
   AcpRegistryListSessionsResult,
   AcpRegistryListProvidersResult,
@@ -31,6 +32,8 @@ export interface ProviderDriverMetadata {
   /** Defaults to true; false rejects multiple instances of a global resource. */
   readonly supportsMultipleInstances?: boolean;
   readonly hasDefaultInstance?: boolean;
+  /** Whether bots may run on this driver under T3's safety gate. Omitted fails closed. */
+  readonly botGate?: BotGateCapability;
 }
 
 export type ProviderWorkspaceSnapshot = ServerProvider &
