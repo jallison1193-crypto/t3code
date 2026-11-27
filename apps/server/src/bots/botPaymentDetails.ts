@@ -436,10 +436,11 @@ function extractPayUrlHost(text: string): string | undefined {
  * prompt, tool input, and tool name. Deterministic for the same input.
  */
 export function extractBotPaymentDetails(input: BotPaymentDetailsInput): BotPaymentDetails {
+  // What will actually run (tool arguments, then the command) outranks the agent's own description.
   const texts = [
+    stringifyToolInput(input.toolInput),
     input.command,
     input.prompt,
-    stringifyToolInput(input.toolInput),
     input.toolName,
   ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
 
@@ -447,10 +448,9 @@ export function extractBotPaymentDetails(input: BotPaymentDetailsInput): BotPaym
 
   let amount: string | undefined;
   for (const text of texts) {
-    amount = extractExplicitAmount(text);
+    amount = extractStructuredAmount([text]) ?? extractExplicitAmount(text);
     if (amount !== undefined) break;
   }
-  amount ??= extractStructuredAmount(texts);
 
   let recipient: string | undefined;
   for (const text of texts) {

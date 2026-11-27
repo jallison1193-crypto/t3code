@@ -80,6 +80,16 @@ describe("botPaymentDetails", () => {
       expectedReason: "Bots ask before paying: amount 5000 (usd) to acct_1234",
     },
     {
+      name: "prefers tool arguments over a prompt that describes a different amount",
+      input: {
+        toolName: "mcp__stripe__stripe_checkout",
+        prompt: "Pay $1 to Acme",
+        toolInput: { amount: 50000, currency: "usd", merchant: "Other Co" },
+      },
+      expectedDetails: { amount: "amount 50000 (usd)", recipient: "Other Co" },
+      expectedReason: "Bots ask before paying: amount 50000 (usd) to Other Co",
+    },
+    {
       name: "extracts recipient key over pay URL host",
       input: {
         command:

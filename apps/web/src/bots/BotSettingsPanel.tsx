@@ -549,7 +549,7 @@ export function BotSettingsPanel({
               <T>
                 The provider's own settings decide what runs without asking, so this bot may send,
                 delete, or change things without T3 asking first. T3 still checks approvals that
-                reach it and blocks paying.
+                reach it and applies this bot's Payments setting.
               </T>
             </AlertDialogDescription>
           </AlertDialogHeader>

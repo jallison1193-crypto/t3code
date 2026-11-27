@@ -1630,7 +1630,7 @@
   "15d95f52d13edfe4": "Your changes to this bot have not been saved.",
   "abac141768d80661": "Keep editing",
   "0beb217f1c07bc47": "Use provider's own approvals?",
-  "4ee369f2f27f9943": "The provider's own settings decide what runs without asking, so this bot may send, delete, or change things without T3 asking first. T3 still checks approvals that reach it and blocks paying.",
+  "a386825d3e01650b": "The provider's own settings decide what runs without asking, so this bot may send, delete, or change things without T3 asking first. T3 still checks approvals that reach it and applies this bot's Payments setting.",
   "d15d4ce9981708e9": "Cancel",
   "8a115baa6b6319b7": "Use provider's own approvals",
   "7e2692da83327e54": "Let this bot ask to pay?",

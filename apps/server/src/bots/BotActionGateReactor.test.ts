@@ -674,7 +674,8 @@ describe("BotActionGateReactor", () => {
         const heldPay = yield* Ref.get(ask.approvalItemRef);
         expect(heldPay?.type).toBe("approval_request");
         if (heldPay?.type === "approval_request") {
-          expect(heldPay.reason).toBe("Bots ask before paying: $25.00 to Acme");
+          // The tool's own arguments outrank the prompt's description of the amount.
+          expect(heldPay.reason).toBe("Bots ask before paying: amount 2500 (usd) to Acme");
           expect(heldPay.options).toEqual(BOT_HELD_APPROVAL_OPTIONS);
           expect(heldPay.fullAccessOverride).toBeUndefined();
         }
