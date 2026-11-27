@@ -395,6 +395,30 @@ describe("classifyBotAction", () => {
       expected: { decision: "ask", category: "send" },
     },
     {
+      name: "asks before a bot opens a URL in T3's preview browser",
+      request: {
+        kind: "permission",
+        toolName: "mcp_t3-code_preview_open",
+        prompt: "Run mcp_t3-code_preview_open",
+      },
+      expected: { decision: "ask", category: "send" },
+    },
+    {
+      name: "asks before preview_evaluate even when only the prompt names it",
+      request: { kind: "permission", prompt: "Run mcp_t3-code_preview_evaluate" },
+      expected: { decision: "ask", category: "send" },
+    },
+    {
+      name: "asks before a browser MCP navigates",
+      request: { kind: "mcp-elicitation", toolName: "browser_navigate", prompt: "Navigate" },
+      expected: { decision: "ask", category: "send" },
+    },
+    {
+      name: "allows reading the preview page that is already open",
+      request: { kind: "permission", toolName: "preview_snapshot", prompt: "Run preview_snapshot" },
+      expected: { decision: "allow" },
+    },
+    {
       name: "keeps pay blocking above web fetch",
       request: {
         kind: "permission",

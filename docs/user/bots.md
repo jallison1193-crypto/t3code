@@ -56,7 +56,7 @@ Open **Settings -> Bots** (or choose **Open bot settings** in the command palett
 Bot threads always run through T3 Code's approval gate, even if a trigger or thread is set to a more permissive mode. The composer shows **Bot safety gate** instead of the permissions picker. T3 Code inspects each action before allowing it:
 
 - **Allowed automatically:** Reads, file edits, read-only tools, web search tools, and commands that don't look like sending or deleting.
-- **Ask before sending, deleting, or fetching URLs:** Actions that send messages, emails, posts, comments, pull requests, or non-GET HTTP requests, provider web-fetch tools (regardless of HTTP method), and commands or edits that delete files wait for your approval.
+- **Ask before sending, deleting, or fetching URLs:** Actions that send messages, emails, posts, comments, pull requests, or non-GET HTTP requests, provider web-fetch tools (regardless of HTTP method), tools that open or script a browser page, and commands or edits that delete files wait for your approval.
 - **Ask before changing agent settings:** Edits or commands that touch agent settings (`.claude`, `.codex`, `.gemini`, `.grok`, `antigravity-acp`, `.agents`, `.cursor`, `.mcp.json`) wait for your approval, because those files can pre-approve tools.
 - **Ask when unclear:** If T3 Code can't see what an action does, it waits for your approval.
 - **Payments (blocked by default):** Tools and commands for paying, purchasing, checkout, ordering, transferring money, subscribing, or tipping are declined automatically by default. You can change an individual bot's **Payments** setting to **Ask me each time** to review payments one at a time instead.

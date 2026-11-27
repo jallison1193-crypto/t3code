@@ -675,8 +675,25 @@ const EXPLICIT_WEB_FETCH_PROMPT =
 const WEB_FETCH_PROMPT =
   /^(?:run(?:ning)?\s+)?(?:web[_\s-]?fetch|read[_\s-]?url[_\s-]?content|fetch)(?:\s|:|\?|$)/i;
 
+// Opening or scripting a browser page reaches the URL just like a fetch (live probe: agy used
+// T3's preview_open and preview_evaluate when asked to fetch a URL).
+const BROWSER_NAVIGATION_TOOL_PHRASES: ReadonlyArray<ReadonlyArray<string>> = [
+  ["preview", "open"],
+  ["preview", "navigate"],
+  ["preview", "evaluate"],
+  ["preview", "act"],
+  ["browser", "navigate"],
+  ["browser", "open"],
+  ["navigate", "page"],
+];
+
+function isBrowserNavigationWords(words: ReadonlyArray<string>): boolean {
+  return BROWSER_NAVIGATION_TOOL_PHRASES.some((phrase) => containsPhrase(words, phrase));
+}
+
 function isWebFetchToolWords(words: ReadonlyArray<string>): boolean {
   if (WEB_FETCH_TOOL_PHRASES.some((phrase) => containsPhrase(words, phrase))) return true;
+  if (isBrowserNavigationWords(words)) return true;
   if (words.at(-1) === "fetch") {
     return words.length === 1 || words.at(-2) === "fetch" || words.at(-2) === "web";
   }
@@ -790,7 +807,10 @@ export function classifyBotAction(request: BotActionRequest): BotActionClassific
     if (result.decision === "block") return result;
   }
   if (request.prompt?.trim()) {
-    if (isWebFetchPrompt(request.prompt)) {
+    if (
+      isWebFetchPrompt(request.prompt) ||
+      isBrowserNavigationWords(tokenizeActionWords(request.prompt))
+    ) {
       result = stricterClassification(result, ASK_SEND);
     }
     result = stricterClassification(result, classifyCommand(request.prompt));
